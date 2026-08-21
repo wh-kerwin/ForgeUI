@@ -1,0 +1,4 @@
+import { ModelEditor } from "./ModelEditor";
+import { ModelRouter } from "./ModelRouter";
+import { PageLayout } from "../openapi/OpenApiPage";
+export function ModelsPage({ models, active, selectedId, onSelect, onEdit, onAdd, onDuplicate, onMakeDefault, onDelete, editor, editorModel, onClose, onSave, onTest, testing }: any) { return <PageLayout eyebrow="MODEL SERVICES" title="模型配置" intro="管理多个 OpenAI Compatible 或 Anthropic Compatible 模型服务。"><div className="models-toolbar"><span className="muted">已配置 {models.length} 个模型服务 · 当前使用：{active?.name || "未配置"}</span><button className="primary" onClick={onAdd}>+ 新增模型</button></div><ModelRouter models={models} active={active} selectedId={selectedId} onSelect={onSelect} onOpenSettings={onEdit} onDuplicate={onDuplicate} onMakeDefault={onMakeDefault} onDelete={onDelete}/>{editor && <ModelEditor initial={editorModel} onClose={onClose} onSave={onSave} onTest={onTest} testing={testing}/>}</PageLayout>; }
