@@ -10,7 +10,7 @@ export function useBusinessConnection(onNotice: (message: string) => void) {
   const [auth, setAuth] = useState<BusinessAuth>(defaultAuth);
   const [secret, setSecret] = useState("");
 
-  useEffect(() => { loadBusinessConnection().then((value) => value && setAuth(value)).catch(() => undefined); }, []);
+  useEffect(() => { loadBusinessConnection().then((value) => { if (!value) return; setAuth(value); if (value.openApiSpec) setSpec(value.openApiSpec); }).catch(() => undefined); }, []);
 
   async function importSwaggerUrl() {
     const url = window.prompt("输入 Swagger/OpenAPI URL");
@@ -24,7 +24,7 @@ export function useBusinessConnection(onNotice: (message: string) => void) {
       if (!selectedUrl) return onNotice("选择的 OpenAPI 规范编号无效");
       const imported = await invoke<OpenApiSummary>("import_openapi_url", { url: selectedUrl });
       setSpec(imported);
-      setAuth((current) => ({ ...current, apiBaseUrl: imported.api_base_url }));
+      setAuth((current) => ({ ...current, apiBaseUrl: imported.api_base_url, openApiSpec: imported }));
       onNotice(`已导入 ${imported.title}，发现 ${imported.operation_count} 个接口`);
     } catch (error) { onNotice(String(error)); }
   }
@@ -34,7 +34,7 @@ export function useBusinessConnection(onNotice: (message: string) => void) {
       const content = await file.text();
       const imported = await invoke<OpenApiSummary>("parse_openapi_file", { content });
       setSpec(imported);
-      setAuth((current) => ({ ...current, apiBaseUrl: imported.api_base_url === "local-file" ? current.apiBaseUrl || "" : imported.api_base_url }));
+      setAuth((current) => ({ ...current, apiBaseUrl: imported.api_base_url === "local-file" ? current.apiBaseUrl || "" : imported.api_base_url, openApiSpec: imported }));
       onNotice(`已从本地文件导入 ${imported.title}，发现 ${imported.operation_count} 个接口`);
     } catch (error) { onNotice(String(error)); }
   }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { GenerationSession, PageSpec, TemplateRecord, TemplateVersion } from "../../types/domain";
-import { deleteTemplate, listGenerationSessions, listTemplateVersions, listTemplates, restoreTemplateVersion, saveGenerationSession } from "../../lib/tauri/storage";
+import { deleteTemplate, listGenerationSessions, listTemplateVersions, listTemplates, renameTemplate, restoreTemplateVersion, saveGenerationSession } from "../../lib/tauri/storage";
 
 type Args = { onNotice: (message: string) => void };
 
@@ -64,5 +64,12 @@ export function useWorkbenchPersistence({ onNotice }: Args) {
     } catch (error) { onNotice(String(error)); }
   }
 
-  return { templates, versions, versionTemplateId, sessions, refreshTemplates, refreshSessions, saveSession, showVersions, restoreVersion, exportTemplate, importTemplate, removeTemplate };
+  async function renameSavedTemplate(id: string, currentName: string) {
+    const name = window.prompt("Rename template", currentName)?.trim();
+    if (!name || name === currentName) return;
+    try { await renameTemplate(id, name); await refreshTemplates(); onNotice("Template renamed"); }
+    catch (error) { onNotice(String(error)); }
+  }
+
+  return { templates, versions, versionTemplateId, sessions, refreshTemplates, refreshSessions, saveSession, showVersions, restoreVersion, exportTemplate, importTemplate, removeTemplate, renameSavedTemplate };
 }

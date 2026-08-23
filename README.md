@@ -1,6 +1,8 @@
 # Forge UI
 
-Forge UI 是一个本地优先的 Tauri 2 桌面客户端。它导入 Swagger 2.0 / OpenAPI 3.x 文档，通过自定义大模型配置生成受控 `PageSpec`，并在用户主动操作后查询或修改业务 API 数据。
+Forge UI 是一个本地优先的 Tauri 2 桌面客户端：连接已有的后台 API，用自然语言生成可运行的 Dashboard、查询、详情和 CRUD 页面，不需要为每个后台服务重复编写固定前端。
+
+产品从总览页开始，用户可以查看模型/API/模板就绪状态，进入生成工作台，用对话定义页面交互，并把满意的页面保存为可搜索、可固定、可重命名和可版本回滚的模板。后续生成时，已保存模板可以作为安全的结构上下文复用。
 
 ## 已实现
 
@@ -8,18 +10,21 @@ Forge UI 是一个本地优先的 Tauri 2 桌面客户端。它导入 Swagger 2.
 - OpenAI Compatible 和 Anthropic Compatible 模型配置、连接测试及结构化页面生成。
 - Swagger/OpenAPI 规范 URL、Swagger UI 静态发现与本地规范解析。
 - 查询、筛选、分页、详情、新增、编辑、删除确认、统计柱状图、CSV 和 XLSX 导出。
+- 总览、生成工作台和独立模板库；模板搜索、固定、重命名、版本恢复、导入导出与模板上下文复用。
 - SQLite 保存模型元数据、业务连接、模板、模板版本与回滚记录；启动时自动备份，并可在客户端列出、校验和恢复本地备份。
+- OpenAPI 摘要和授权 operation 随业务连接恢复；应用重启后无需重复导入规范。
 - Windows Credential Manager / macOS Keychain 保存模型和业务 API 密钥。
 - Bearer Token、API Key、企业 CA PEM；不会关闭 TLS 校验。
 - 模型自定义 Header 值仅保存到系统钥匙串，SQLite 只保存 secretRef。
-- 模板保存、版本历史、恢复、导入和导出。
+- 受控 `PageSpec` 校验、模板保存、版本历史、恢复、搜索、固定、重命名、导入和导出。
 
 ## 本地开发
 
 ```powershell
 npm install
 npm run build
-C:\Users\goodk\.cargo\bin\cargo.exe test --manifest-path src-tauri\Cargo.toml
+C:\Users\admin\.cargo\bin\cargo.exe fmt --manifest-path src-tauri\Cargo.toml -- --check
+C:\Users\admin\.cargo\bin\cargo.exe test --manifest-path src-tauri\Cargo.toml
 npm run tauri:dev
 ```
 
@@ -30,8 +35,8 @@ npm run tauri:dev
 ```powershell
 npm audit --audit-level=high
 npm run build
-C:\Users\goodk\.cargo\bin\cargo.exe check --manifest-path src-tauri\Cargo.toml
-C:\Users\goodk\.cargo\bin\cargo.exe test --manifest-path src-tauri\Cargo.toml --lib
+C:\Users\admin\.cargo\bin\cargo.exe check --manifest-path src-tauri\Cargo.toml
+C:\Users\admin\.cargo\bin\cargo.exe test --manifest-path src-tauri\Cargo.toml --lib
 npm run tauri:build -- --debug
 ```
 

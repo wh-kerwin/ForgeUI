@@ -177,6 +177,24 @@ pub fn save_template(
     transaction.commit().map_err(|e| e.to_string())
 }
 
+pub fn rename_template(id: String, name: String) -> Result<(), String> {
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > 120 {
+        return Err("模板名称不能为空且不能超过 120 个字符".into());
+    }
+    let db = database::open()?;
+    let affected = db
+        .execute(
+            "UPDATE templates SET name=?2,updated_at=datetime('now') WHERE id=?1",
+            params![id, name],
+        )
+        .map_err(|e| e.to_string())?;
+    if affected == 0 {
+        return Err("模板不存在".into());
+    }
+    Ok(())
+}
+
 pub fn load_templates() -> Result<Vec<String>, String> {
     let db = database::open()?;
     let mut statement = db.prepare("SELECT json_object('id',id,'name',name,'payload',payload,'modelId',model_id,'version',version,'updatedAt',updated_at) FROM templates ORDER BY updated_at DESC").map_err(|e| e.to_string())?;

@@ -49,6 +49,7 @@ export type BusinessAuth = {
   caPem: string;
   apiBaseUrl?: string;
   authorizedOperations?: string[];
+  openApiSpec?: OpenApiSummary;
 };
 
 export type TemplateRecord = {

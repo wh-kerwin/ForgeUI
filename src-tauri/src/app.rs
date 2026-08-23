@@ -115,6 +115,11 @@ fn save_template(
 }
 
 #[tauri::command]
+fn rename_template(id: String, name: String) -> Result<(), String> {
+    storage::rename_template(id, name)
+}
+
+#[tauri::command]
 fn load_templates() -> Result<Vec<String>, String> {
     storage::load_templates()
 }
@@ -234,6 +239,7 @@ pub fn run() {
             save_business_connection,
             load_business_connection,
             save_template,
+            rename_template,
             load_templates,
             delete_template,
             load_template_versions,

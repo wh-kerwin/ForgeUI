@@ -1,0 +1,43 @@
+/* Keep route content fluid on wide screens. The sidebar owns the fixed width. */
+.app > main {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  max-width: none;
+}
+
+.route-main,
+.route-main .page-content {
+  width: 100%;
+  max-width: none;
+}
+
+.route-main > .generated-page,
+.route-main > .template-strip,
+.generated-page,
+.template-strip {
+  width: auto;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.route-panel {
+  width: 100%;
+  max-width: none;
+}
+
+.overview-main .overview-grid,
+.overview-main .overview-lower,
+.overview-main .readiness-rail {
+  max-width: none;
+}
+
+@media (max-width: 640px) {
+  .route-main > .generated-page,
+  .route-main > .template-strip,
+  .generated-page,
+  .template-strip {
+    margin-left: 0;
+    margin-right: 0;
+  }
+}

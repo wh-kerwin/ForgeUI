@@ -25,6 +25,7 @@ export async function saveSecret(secretRef: string, value: string) { await invok
 export async function loadSecret(secretRef: string) { return invoke<string>("load_secret", { secret_ref: secretRef }); }
 export async function listTemplates() { return (await invoke<string[]>("load_templates")).map((row) => JSON.parse(row) as TemplateRecord); }
 export async function deleteTemplate(id: string) { await invoke("delete_template", { id }); }
+export async function renameTemplate(id: string, name: string) { await invoke("rename_template", { id, name }); }
 export async function listTemplateVersions(id: string) { return (await invoke<string[]>("load_template_versions", { id })).map((row) => JSON.parse(row) as TemplateVersion); }
 export async function restoreTemplateVersion(id: string, version: number) { await invoke("restore_template_version", { id, version }); }
 export async function listGenerationSessions() { return (await invoke<string[]>("load_generation_sessions")).map((row) => JSON.parse(row) as GenerationSession); }

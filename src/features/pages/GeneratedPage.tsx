@@ -5,6 +5,7 @@ import { PageExportActions } from "./PageExportActions";
 import { StatChart } from "./StatChart";
 import { PageRefineBox } from "./PageRefineBox";
 import { operationForRole, pageOperations } from "./pageOperations";
+import { useLanguage } from "../../i18n/LanguageProvider";
 
 export function GeneratedPage({
   page,
@@ -17,6 +18,8 @@ export function GeneratedPage({
   onDelete,
   querying,
   modelId,
+  templateId,
+  templateName,
   onRefine,
   refining,
 }: {
@@ -30,9 +33,13 @@ export function GeneratedPage({
   onDelete: (path: string, id: string, operationKey: string) => void;
   querying: boolean;
   modelId?: string;
+  templateId?: string;
+  templateName?: string;
   onRefine: (instruction: string) => Promise<void>;
   refining: boolean;
 }) {
+  const { language } = useLanguage();
+  const zh = language === "zh";
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [pageNumber, setPageNumber] = useState(1);
   const [form, setForm] = useState("{\n  \n}");
@@ -54,7 +61,7 @@ export function GeneratedPage({
           <h3>{page.title}</h3>
           <p className="muted">{page.description}</p>
         </div>
-        <PageExportActions page={page} modelId={modelId} onSaved={onSaved} />
+        <PageExportActions page={page} modelId={modelId} templateId={templateId} templateName={templateName} onSaved={onSaved} />
       </div>
       <div className="filter-row">
         {page.filters.map((filter) => (
@@ -77,7 +84,7 @@ export function GeneratedPage({
             onQuery({ ...filters, page: "1", pageSize: "100" }, listOperation);
           }}
         >
-          {querying ? "加载中…" : "查询"}
+          {querying ? (zh ? "加载中…" : "Loading…") : (zh ? "查询" : "Query")}
         </button>
       </div>
       <div className="stats-row">
@@ -101,9 +108,9 @@ export function GeneratedPage({
             onQuery({ ...filters, page: String(next), pageSize: "100" }, listOperation);
           }}
         >
-          上一页
+          {zh ? "上一页" : "Previous"}
         </button>
-        <span>第 {pageNumber} 页</span>
+        <span>{zh ? `第 ${pageNumber} 页` : `Page ${pageNumber}`}</span>
         <button
           className="secondary"
           disabled={querying}
@@ -113,16 +120,16 @@ export function GeneratedPage({
             onQuery({ ...filters, page: String(next), pageSize: "100" }, listOperation);
           }}
         >
-          下一页
+          {zh ? "下一页" : "Next"}
         </button>
       </div>
       {detailOperation && (
         <div className="mutation-box">
           <span className="eyebrow">DETAIL PANEL</span>
-          <h4>查看详情</h4>
+          <h4>{zh ? "查看详情" : "View details"}</h4>
           <div className="delete-row">
             <input
-              placeholder="记录 ID"
+              placeholder={zh ? "记录 ID" : "Record ID"}
               value={detailId}
               onChange={(event) => setDetailId(event.target.value)}
             />
@@ -136,7 +143,7 @@ export function GeneratedPage({
                 )
               }
             >
-              加载详情
+              {zh ? "加载详情" : "Load details"}
             </button>
           </div>
           {detail && (
@@ -159,7 +166,7 @@ export function GeneratedPage({
         <div className="mutation-box">
           <div>
             <span className="eyebrow">CREATE FORM · USER ACTION REQUIRED</span>
-            <h4>新增记录</h4>
+            <h4>{zh ? "新增记录" : "Create record"}</h4>
           </div>
           <textarea
             value={form}
@@ -177,7 +184,7 @@ export function GeneratedPage({
               )
             }
           >
-            提交新增
+            {zh ? "提交新增" : "Create"}
           </button>
         </div>
       )}
@@ -185,7 +192,7 @@ export function GeneratedPage({
         <div className="mutation-box">
           <div>
             <span className="eyebrow">EDIT FORM · USER ACTION REQUIRED</span>
-            <h4>编辑记录</h4>
+            <h4>{zh ? "编辑记录" : "Edit record"}</h4>
           </div>
           <textarea
             value={editForm}
@@ -203,7 +210,7 @@ export function GeneratedPage({
               )
             }
           >
-            提交编辑
+            {zh ? "提交编辑" : "Save changes"}
           </button>
         </div>
       )}
@@ -211,11 +218,11 @@ export function GeneratedPage({
         <div className="mutation-box">
           <div>
             <span className="eyebrow">DELETE · CONFIRMATION REQUIRED</span>
-            <h4>删除记录</h4>
+            <h4>{zh ? "删除记录" : "Delete record"}</h4>
           </div>
           <div className="delete-row">
             <input
-              placeholder="记录 ID"
+              placeholder={zh ? "记录 ID" : "Record ID"}
               value={deleteId}
               onChange={(event) => setDeleteId(event.target.value)}
             />
@@ -229,7 +236,7 @@ export function GeneratedPage({
                 )
               }
             >
-              删除
+              {zh ? "删除" : "Delete"}
             </button>
           </div>
         </div>
