@@ -2,7 +2,7 @@
 
 ## Rust/Cargo
 
-当前项目使用 Tauri 2 与 Rust stable 工具链。只要以下命令在 `src-tauri` 目录通过，就不需要为了本项目单独升级 Rust：
+当前项目使用 Tauri 2 与 Rust stable 工具链，最低支持版本为 `1.88.0`（当前依赖中的 `time 0.3.55` 要求至少 Rust 1.88）。本地开发和 CI 均读取这一基线。只要以下命令在 `src-tauri` 目录通过，就不需要单独升级 Rust：
 
 ```powershell
 cargo fmt --check
