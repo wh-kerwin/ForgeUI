@@ -2,6 +2,11 @@ name: Build desktop installers
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Optional existing Release tag to receive the installers (for example v0.1.1)
+        required: false
+        type: string
   release:
     types: [published]
 
@@ -54,7 +59,7 @@ jobs:
 
   attach-to-release:
     name: Attach installers to Release
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || inputs.release_tag != ''
     needs: package
     runs-on: ubuntu-latest
     permissions:
@@ -71,5 +76,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
         run: gh release upload "$RELEASE_TAG" release-assets/* --repo "$GH_REPO" --clobber
