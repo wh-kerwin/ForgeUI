@@ -143,7 +143,9 @@ pub fn delete_generation_session(id: String) -> Result<(), String> {
     let affected = db
         .execute("DELETE FROM generation_sessions WHERE id=?1", params![id])
         .map_err(|e| e.to_string())?;
-    if affected == 0 { return Err("生成历史不存在或已删除".into()); }
+    if affected == 0 {
+        return Err("生成历史不存在或已删除".into());
+    }
     Ok(())
 }
 
