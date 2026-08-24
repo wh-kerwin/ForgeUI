@@ -5,6 +5,7 @@ import {
   deleteSecret,
   isTauri,
   loadDefaultModel,
+  loadSecret,
   loadModelMetadata,
   saveModelMetadata,
   saveSecret,
@@ -14,12 +15,39 @@ import type { ModelConfig } from "../../types/domain";
 
 const BROWSER_STORAGE_KEY = "forge-models";
 
+function normalizeModel(model: Partial<ModelConfig>): ModelConfig {
+  return {
+    id: model.id || crypto.randomUUID(),
+    name: model.name || "Unnamed model",
+    protocol: model.protocol === "anthropic" ? "anthropic" : "openai",
+    baseUrl: model.baseUrl || "",
+    model: model.model || "",
+    apiKey: model.apiKey || "",
+    secretRef: model.secretRef,
+    temperature: model.temperature ?? 0.2,
+    maxTokens: model.maxTokens ?? 4096,
+    streaming: model.streaming ?? true,
+    enabled: model.enabled ?? true,
+    timeoutSeconds: model.timeoutSeconds ?? 60,
+    structuredOutput: model.structuredOutput || "jsonObject",
+    customHeaders: model.customHeaders || {},
+    customHeaderSecretRefs: model.customHeaderSecretRefs,
+    notes: model.notes || "",
+  };
+}
+
+function loadBrowserModels(): ModelConfig[] {
+  try {
+    const stored = JSON.parse(localStorage.getItem(BROWSER_STORAGE_KEY) || "null");
+    const source = Array.isArray(stored) && stored.length ? stored : DEFAULT_MODELS;
+    return source.map(normalizeModel);
+  } catch {
+    return DEFAULT_MODELS.map(normalizeModel);
+  }
+}
+
 export function useModelConfigurations() {
-  const [models, setModels] = useState<ModelConfig[]>(
-    () =>
-      JSON.parse(localStorage.getItem(BROWSER_STORAGE_KEY) || "null") ||
-      DEFAULT_MODELS,
-  );
+  const [models, setModels] = useState<ModelConfig[]>(loadBrowserModels);
   const [selectedId, setSelectedId] = useState("default");
 
   const activeModel = useMemo(
@@ -40,11 +68,12 @@ export function useModelConfigurations() {
     Promise.all([loadModelMetadata(), loadDefaultModel()])
       .then(([loaded, defaultId]) => {
         if (loaded.length) {
-          setModels(loaded);
+          const normalized = loaded.map(normalizeModel);
+          setModels(normalized);
           setSelectedId(
-            defaultId && loaded.some((model) => model.id === defaultId)
+            defaultId && normalized.some((model) => model.id === defaultId)
               ? defaultId
-              : loaded[0].id,
+              : normalized[0].id,
           );
         }
       })
@@ -54,7 +83,11 @@ export function useModelConfigurations() {
   async function saveModel(model: ModelConfig) {
     const previous = models.find((item) => item.id === model.id);
     const secretRef = model.secretRef || `model-${model.id}`;
-    if (model.apiKey) await saveSecret(secretRef, model.apiKey);
+    if (model.apiKey) {
+      await saveSecret(secretRef, model.apiKey);
+      const saved = await loadSecret(secretRef);
+      if (saved !== model.apiKey) throw new Error("模型 API Key 未能写入系统钥匙串");
+    }
     const customHeaderSecretRefs: Record<string, string> = {};
     if (isTauri()) {
       for (const [name, value] of Object.entries(model.customHeaders || {})) {

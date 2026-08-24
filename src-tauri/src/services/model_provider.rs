@@ -186,7 +186,7 @@ pub async fn generate_page(input: GenerateInput) -> Result<PageSpec, String> {
     validate_transport(&input.base_url, &input.protocol, &input.model)?;
     let key = resolve_api_key(input.api_key, input.secret_ref)?;
     let schema = page_schema::schema();
-    let system = format!("You generate ONLY valid JSON matching this PageSpec schema: {schema}. Never include markdown or code. Do not invent credentials or execute actions. Limit rows to 8. The UI is read-only preview.");
+    let system = format!("You generate ONLY valid JSON matching this PageSpec schema: {schema}. filters and columns MUST be arrays of strings, never objects. rows MUST be arrays of arrays of strings, never objects. stats values MUST be strings. When an existing PageSpec is provided, preserve its operation bindings exactly; never invent an operation_id, method, or path. If no authorized operation exists for a requested action, represent it as local UI state only. Never include markdown or code. Do not invent credentials or execute actions. Limit rows to 8. The UI is read-only preview.");
     let context = input
         .openapi_context
         .unwrap_or_else(|| "No OpenAPI context provided".into());
@@ -247,24 +247,51 @@ pub async fn generate_page(input: GenerateInput) -> Result<PageSpec, String> {
     } else {
         let raw: serde_json::Value =
             serde_json::from_str(&raw_body).map_err(|e| format!("模型响应不是 JSON：{e}"))?;
-        if input.protocol == "anthropic" {
-            raw.pointer("/content/0/text")
-                .and_then(|value| value.as_str())
-                .unwrap_or("")
-                .to_string()
-        } else {
-            raw.pointer("/choices/0/message/content")
-                .and_then(|value| value.as_str())
-                .unwrap_or("")
-                .to_string()
-        }
+        extract_response_text(&raw, &input.protocol)
     };
-    let value = page_schema::decode_json(&content)?;
+    let value = page_schema::normalize_page_spec(page_schema::decode_json(&content)?);
     let spec: PageSpec =
         serde_json::from_value(value).map_err(|e| format!("模型输出不符合 PageSpec：{e}"))?;
     validate(&spec)?;
     validate_operation_bindings(&spec.operations, input.allowed_operations.as_deref())?;
     Ok(spec)
+}
+
+fn extract_response_text(raw: &serde_json::Value, protocol: &str) -> String {
+    let candidates = if protocol == "anthropic" {
+        vec![raw.pointer("/content"), raw.pointer("/message/content")]
+    } else {
+        vec![
+            raw.pointer("/choices/0/message/content"),
+            raw.pointer("/choices/0/text"),
+            raw.pointer("/output_text"),
+        ]
+    };
+    candidates
+        .into_iter()
+        .flatten()
+        .map(value_text)
+        .find(|text| !text.trim().is_empty())
+        .unwrap_or_default()
+}
+
+fn value_text(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(text) => text.clone(),
+        serde_json::Value::Array(items) => items
+            .iter()
+            .map(value_text)
+            .filter(|text| !text.is_empty())
+            .collect::<Vec<_>>()
+            .join(""),
+        serde_json::Value::Object(object) => object
+            .get("text")
+            .or_else(|| object.get("content"))
+            .or_else(|| object.get("value"))
+            .map(value_text)
+            .unwrap_or_default(),
+        _ => String::new(),
+    }
 }
 
 fn resolve_api_key(

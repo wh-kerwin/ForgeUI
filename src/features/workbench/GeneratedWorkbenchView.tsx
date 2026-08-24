@@ -1,7 +1,6 @@
 import type { PageSpec, GenerationSession, TemplateRecord, TemplateVersion } from "../../types/domain";
 import { GeneratedPage } from "../pages/GeneratedPage";
 import { GenerationHistory } from "../sessions/GenerationHistory";
-import { TemplateLibrary } from "../templates/TemplateLibrary";
 
 type Props = {
   page: PageSpec | null;
@@ -23,6 +22,7 @@ type Props = {
   versions: TemplateVersion[];
   selectedTemplateId: string;
   onOpenSession: (page: PageSpec) => void;
+  onDeleteSession: (id: string) => void;
   onUseTemplate: (template: TemplateRecord) => void;
   onShowVersions: (id: string) => void;
   onRestore: (version: number) => void;
@@ -33,6 +33,6 @@ type Props = {
   onRenameTemplate: (id: string, name: string) => void;
 };
 
-export function GeneratedWorkbenchView({ page, modelId, templateId, templateName, operations, detail, onDetail, onSaved, onQuery, onMutation, onDelete, querying, onRefine, refining, sessions, templates, versions, selectedTemplateId, onOpenSession, onUseTemplate, onShowVersions, onRestore, onInvalid, onExport, onImport, onDeleteTemplate, onRenameTemplate }: Props) {
-  return <>{page && <GeneratedPage page={page} modelId={modelId} templateId={templateId} templateName={templateName} operations={operations} detail={detail} onDetail={onDetail} onSaved={onSaved} onQuery={onQuery} onMutation={onMutation} onDelete={onDelete} querying={querying} onRefine={onRefine} refining={refining} />}<GenerationHistory sessions={sessions} onOpen={onOpenSession} onInvalid={() => onInvalid("Generation history is invalid")} /><TemplateLibrary templates={templates} versions={versions} selectedTemplateId={selectedTemplateId} onOpen={onOpenSession} onUse={onUseTemplate} onShowVersions={onShowVersions} onRestore={onRestore} onInvalidTemplate={() => onInvalid("Template content is invalid")} onExport={onExport} onImport={onImport} onDelete={onDeleteTemplate} onRename={onRenameTemplate} /></>;
+export function GeneratedWorkbenchView({ page, modelId, templateId, templateName, operations, detail, onDetail, onSaved, onQuery, onMutation, onDelete, querying, onRefine, refining, sessions, templates, versions, selectedTemplateId, onOpenSession, onDeleteSession, onUseTemplate, onShowVersions, onRestore, onInvalid, onExport, onImport, onDeleteTemplate, onRenameTemplate }: Props) {
+  return <>{page && <GeneratedPage page={page} modelId={modelId} templateId={templateId} templateName={templateName} operations={operations} detail={detail} onDetail={onDetail} onSaved={onSaved} onQuery={onQuery} onMutation={onMutation} onDelete={onDelete} querying={querying} onRefine={onRefine} refining={refining} />}<GenerationHistory sessions={sessions} onOpen={onOpenSession} onDelete={onDeleteSession} onInvalid={() => onInvalid("Generation history is invalid")} /></>;
 }

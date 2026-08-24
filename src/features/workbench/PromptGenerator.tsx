@@ -26,15 +26,19 @@ export function PromptGenerator({ prompt, onPromptChange, onGenerate, onOpenSett
       <button className="ghost" onClick={onOpenSettings}><Settings2 size={16} />{zh ? "模型设置" : "Model settings"}</button>
     </header>
     <section className="hero" id="generate">
-      <div className="hero-copy">
+      <div className="hero-intro">
+        <div className="hero-copy">
         <span className="pill"><Bot size={14} />{zh ? "AI 页面生成器" : "AI PAGE GENERATOR"}</span>
         <h2>{zh ? <>你的后端，<em>即时成 UI。</em></> : <>Your backend,<br /><em>instantly made useful.</em></>}</h2>
         <p>{zh ? "连接 Swagger / OpenAPI，描述你要做的事。Forge 会基于真实接口结构生成可运行、可复用的业务页面。" : "Connect Swagger / OpenAPI and describe the task. Forge turns real operations into a reusable business page."}</p>
         <TemplatePicker templates={templates} selectedId={selectedTemplateId} onSelect={onTemplateSelect} onClear={onTemplateClear} />
+        </div>
+        <HeroVisual />
+      </div>
+      <div className="hero-controls">
         <PromptBox prompt={prompt} onPromptChange={onPromptChange} onGenerate={onGenerate} />
         <div className="prompt-examples"><span className="eyebrow">{zh ? "试试这样说" : "TRY A STARTER"}</span>{examples.map((example) => <button key={example} className="example-chip" onClick={() => onPromptChange(example)}>{example}</button>)}</div>
       </div>
-      <HeroVisual />
     </section>
   </>;
 }

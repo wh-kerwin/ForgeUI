@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { GenerationSession, PageSpec, TemplateRecord, TemplateVersion } from "../../types/domain";
-import { deleteTemplate, listGenerationSessions, listTemplateVersions, listTemplates, renameTemplate, restoreTemplateVersion, saveGenerationSession } from "../../lib/tauri/storage";
+import { deleteGenerationSession, deleteTemplate, listGenerationSessions, listTemplateVersions, listTemplates, renameTemplate, restoreTemplateVersion, saveGenerationSession } from "../../lib/tauri/storage";
 
 type Args = { onNotice: (message: string) => void };
 
@@ -24,6 +24,12 @@ export function useWorkbenchPersistence({ onNotice }: Args) {
   async function saveSession(modelId: string, prompt: string, page: PageSpec) {
     await saveGenerationSession(modelId, prompt, JSON.stringify(page));
     await refreshSessions();
+  }
+
+  async function removeSession(id: string) {
+    if (!window.confirm("删除这条生成历史？")) return;
+    try { await deleteGenerationSession(id); await refreshSessions(); onNotice("生成历史已删除"); }
+    catch (error) { onNotice(String(error)); }
   }
 
   async function showVersions(id: string) {
@@ -71,5 +77,5 @@ export function useWorkbenchPersistence({ onNotice }: Args) {
     catch (error) { onNotice(String(error)); }
   }
 
-  return { templates, versions, versionTemplateId, sessions, refreshTemplates, refreshSessions, saveSession, showVersions, restoreVersion, exportTemplate, importTemplate, removeTemplate, renameSavedTemplate };
+  return { templates, versions, versionTemplateId, sessions, refreshTemplates, refreshSessions, saveSession, removeSession, showVersions, restoreVersion, exportTemplate, importTemplate, removeTemplate, renameSavedTemplate };
 }

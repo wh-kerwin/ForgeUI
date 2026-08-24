@@ -5,3 +5,4 @@ src-tauri/target/
 .env
 *.local
 src-tauri/tauri.updater.release.json
+.codegraph

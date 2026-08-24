@@ -10,11 +10,13 @@ export function parsePageSpec(value: unknown): PageSpec | null {
   if (!Array.isArray(value.columns) || !value.columns.every((item) => typeof item === "string")) return null;
   const columns = value.columns;
   if (!Array.isArray(value.rows) || !value.rows.every((row) => Array.isArray(row) && row.every((item) => typeof item === "string"))) return null;
-  const rows = value.rows;
+  // Older model responses and templates can contain short/long rows. Keep the
+  // page usable at the client boundary by applying the same bounded repair as
+  // the Rust validator: truncate extra cells and fill missing cells.
+  const rows = value.rows.map((row) => row.slice(0, columns.length).concat(Array(Math.max(0, columns.length - row.length)).fill("")));
   if (!Array.isArray(value.stats) || !value.stats.every((stat) => isRecord(stat) && typeof stat.label === "string" && typeof stat.value === "string")) return null;
-  if (rows.some((row) => row.length !== columns.length)) return null;
   if (value.operations !== undefined && (!Array.isArray(value.operations) || !value.operations.every((operation) => isRecord(operation) && typeof operation.operation_id === "string" && typeof operation.method === "string" && typeof operation.path === "string" && typeof operation.role === "string"))) return null;
-  return value as unknown as PageSpec;
+  return { ...value, columns, rows } as unknown as PageSpec;
 }
 
 export function parsePageSpecJson(payload: string): PageSpec | null {

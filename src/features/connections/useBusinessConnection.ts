@@ -42,10 +42,10 @@ export function useBusinessConnection(onNotice: (message: string) => void) {
   async function saveAuth() {
     try {
       if (auth.type !== "none" && secret) {
-        await invoke("save_secret", { secret_ref: auth.secretRef, value: secret });
+        await invoke("save_secret", { secretRef: auth.secretRef, value: secret });
       } else if (auth.type === "none") {
         // Switching to no-auth must not leave the previous credential in the keychain.
-        await invoke("delete_secret", { secret_ref: auth.secretRef }).catch(() => undefined);
+        await invoke("delete_secret", { secretRef: auth.secretRef }).catch(() => undefined);
       }
       setSecret("");
       await invoke("save_business_connection", { payload: JSON.stringify({ ...auth, apiBaseUrl: auth.apiBaseUrl || spec?.api_base_url || "", authorizedOperations: auth.authorizedOperations || [] }) });

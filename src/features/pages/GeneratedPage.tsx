@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { PageSpec } from "../../types/domain";
 import { DataTable } from "./DataTable";
 import { PageExportActions } from "./PageExportActions";
@@ -46,6 +46,11 @@ export function GeneratedPage({
   const [deleteId, setDeleteId] = useState("");
   const [editForm, setEditForm] = useState('{\n  "id": ""\n}');
   const [detailId, setDetailId] = useState("");
+  const [localDetail, setLocalDetail] = useState<Record<string, string> | null>(null);
+  const [editingRow, setEditingRow] = useState<string[] | null>(null);
+  const [localRows, setLocalRows] = useState(page.rows);
+  const [deletingRow, setDeletingRow] = useState<string[] | null>(null);
+  useEffect(() => setLocalRows(page.rows), [page.rows]);
   const boundOperations = pageOperations(page, operations);
   const listOperation = operationForRole(page, boundOperations, "list", "GET");
   const createOperation = operationForRole(page, boundOperations, "create", "POST");
@@ -53,6 +58,8 @@ export function GeneratedPage({
   const detailOperation = operationForRole(page, boundOperations, "detail", "GET", true);
   const editOperation = operationForRole(page, boundOperations, "update", "PUT", true) || operationForRole(page, boundOperations, "update", "PATCH", true);
   const editMethod = editOperation?.startsWith("PATCH ") ? "PATCH" : "PUT";
+  const rowRecord = (row: string[]) => Object.fromEntries(page.columns.map((column, index) => [column, row[index] || ""]));
+  const rowId = (row: string[]) => row[0] || "";
   return (
     <section className="generated-page">
       <div className="panel-head">
@@ -96,7 +103,7 @@ export function GeneratedPage({
         ))}
       </div>
       <StatChart stats={page.stats} />
-      <DataTable columns={page.columns} rows={page.rows} />
+      <DataTable columns={page.columns} rows={localRows} onView={(row) => { if (detailOperation && rowId(row)) { setDetailId(rowId(row)); onDetail(detailOperation.split(" · ")[0].replace(/^GET\s+/, ""), rowId(row), detailOperation); } else { setLocalDetail(rowRecord(row)); } }} onEdit={(row) => { setEditingRow(row); setEditForm(JSON.stringify(rowRecord(row), null, 2)); }} onDelete={deleteOperation ? (row) => setDeletingRow(row) : undefined} />
       <PageRefineBox onRefine={onRefine} refining={refining} />
       <div className="pagination">
         <button
@@ -162,6 +169,9 @@ export function GeneratedPage({
           )}
         </div>
       )}
+      {localDetail && !detailOperation && <div className="detail-grid local-detail">{Object.entries(localDetail).map(([key, value]) => <React.Fragment key={key}><dt>{key}</dt><dd>{value}</dd></React.Fragment>)}</div>}
+      {editingRow && <div className="edit-dialog-backdrop" role="presentation" onClick={() => setEditingRow(null)}><div className="edit-dialog" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="panel-head"><div><span className="eyebrow">EDIT RECORD</span><h4>{zh ? "编辑记录" : "Edit record"}</h4></div><button type="button" className="icon-btn" onClick={() => setEditingRow(null)}>×</button></div><textarea value={editForm} onChange={(event) => setEditForm(event.target.value)} spellCheck={false}/><div className="modal-actions"><button className="secondary" onClick={() => setEditingRow(null)}>{zh ? "取消" : "Cancel"}</button><button className="primary" onClick={() => { if (editOperation) { onMutation(editMethod, editOperation.split(" · ")[0].replace(/^(PUT|PATCH)\s+/, "").replace(/\{[^}]+\}/, encodeURIComponent(rowId(editingRow))), editForm, editOperation); } else { try { const next = JSON.parse(editForm) as Record<string, unknown>; setLocalRows((rows) => rows.map((row) => row === editingRow ? page.columns.map((column) => String(next[column] ?? "")) : row)); } catch { return; } } setEditingRow(null); }}>{zh ? "保存编辑" : "Save changes"}</button></div></div></div>}
+      {deletingRow && deleteOperation && <div className="edit-dialog-backdrop" role="presentation" onClick={() => setDeletingRow(null)}><div className="edit-dialog" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="panel-head"><div><span className="eyebrow">DELETE · CONFIRMATION</span><h4>{zh ? "确认删除" : "Confirm deletion"}</h4></div><button type="button" className="icon-btn" onClick={() => setDeletingRow(null)}>×</button></div><p className="modal-intro">{zh ? `确定删除记录 ${rowId(deletingRow)} 吗？此操作不可撤销。` : `Delete record ${rowId(deletingRow)}? This cannot be undone.`}</p><div className="modal-actions"><button className="secondary" onClick={() => setDeletingRow(null)}>{zh ? "取消" : "Cancel"}</button><button className="danger" onClick={() => { onDelete(deleteOperation.split(" · ")[0].replace(/^DELETE\s+/, ""), rowId(deletingRow), deleteOperation); setDeletingRow(null); }}>{zh ? "确认删除" : "Delete"}</button></div></div></div>}
       {createOperation && (
         <div className="mutation-box">
           <div>

@@ -1,9 +1,94 @@
-/* Keep route content fluid on wide screens. The sidebar owns the fixed width. */
+/* Desktop shell: the sidebar is fixed to the client viewport while only the
+   content pane scrolls. This prevents long generated pages from stretching
+   the navigation column. */
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 0;
+}
+
+html,
+body,
+#root,
+.app,
+.app > aside,
+.app > main {
+  scrollbar-width: thin;
+  scrollbar-color: #3b4655 transparent;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+#root::-webkit-scrollbar,
+.app::-webkit-scrollbar,
+.app > aside::-webkit-scrollbar,
+.app > main::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track,
+#root::-webkit-scrollbar-track,
+.app::-webkit-scrollbar-track,
+.app > aside::-webkit-scrollbar-track,
+.app > main::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb,
+#root::-webkit-scrollbar-thumb,
+.app::-webkit-scrollbar-thumb,
+.app > aside::-webkit-scrollbar-thumb,
+.app > main::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: #3b4655;
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover,
+#root::-webkit-scrollbar-thumb:hover,
+.app::-webkit-scrollbar-thumb:hover,
+.app > aside::-webkit-scrollbar-thumb:hover,
+.app > main::-webkit-scrollbar-thumb:hover {
+  background-color: #8eae52;
+}
+
+html::-webkit-scrollbar-button,
+body::-webkit-scrollbar-button,
+#root::-webkit-scrollbar-button,
+.app::-webkit-scrollbar-button,
+.app > aside::-webkit-scrollbar-button,
+.app > main::-webkit-scrollbar-button {
+  display: none;
+}
+
+.app {
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app > aside {
+  flex: 0 0 236px;
+  height: 100vh;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .app > main {
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
   width: auto;
   max-width: none;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .route-main,
@@ -21,6 +106,696 @@
   margin-right: 0;
 }
 
+/* Generative workbench: editorial intro on the first row, full-width command
+   surface below it. */
+.route-main > .hero {
+  display: block;
+  padding: 46px 3% 40px;
+}
+
+.hero-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 34%);
+  align-items: center;
+  gap: clamp(32px, 7vw, 120px);
+}
+
+.hero-copy {
+  max-width: 860px;
+}
+
+.hero-copy p {
+  max-width: 760px;
+}
+
+.hero-controls {
+  width: 100%;
+  margin-top: 28px;
+}
+
+.hero-controls .prompt-box {
+  width: 100%;
+  margin-top: 14px;
+}
+
+.hero-visual {
+  width: min(100%, 390px);
+  justify-self: center;
+}
+
+.hero-orb {
+  width: 100%;
+  aspect-ratio: 1.35;
+  height: auto;
+  margin: 0;
+  isolation: isolate;
+}
+
+.orb-halo {
+  position: absolute;
+  z-index: -1;
+  width: 48%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #bce84b1f;
+  filter: blur(28px);
+  animation: forge-pulse 3.8s ease-in-out infinite;
+}
+
+.orb-ring {
+  will-change: transform;
+}
+
+.hero-orb .ring-one {
+  width: 72%;
+  height: 36%;
+  animation: forge-orbit-one 12s linear infinite;
+}
+
+.hero-orb .ring-two {
+  width: 48%;
+  height: 82%;
+  animation: forge-orbit-two 16s linear infinite reverse;
+}
+
+.orb-ring i {
+  position: absolute;
+  top: 50%;
+  left: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d5fa61;
+  box-shadow: 0 0 13px #d5fa61;
+}
+
+.orb-core {
+  animation: forge-core 3.8s ease-in-out infinite;
+}
+
+.orb-core svg {
+  animation: forge-glyph 6s ease-in-out infinite;
+}
+
+.orb-meta {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  width: 74%;
+  margin: -5px auto 0;
+  padding-top: 9px;
+  border-top: 1px solid #2b3543;
+  color: #6e7a8d;
+  font: 9px 'DM Mono', monospace;
+  letter-spacing: .12em;
+}
+
+.orb-label {
+  position: static;
+}
+
+.signal-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #d5fa61;
+  box-shadow: 0 0 8px #d5fa61;
+  animation: forge-signal 1.8s steps(2, end) infinite;
+}
+
+@keyframes forge-orbit-one {
+  from { transform: rotate(-25deg); }
+  to { transform: rotate(335deg); }
+}
+
+@keyframes forge-orbit-two {
+  from { transform: rotate(18deg); }
+  to { transform: rotate(378deg); }
+}
+
+@keyframes forge-pulse {
+  0%, 100% { opacity: .55; transform: scale(.9); }
+  50% { opacity: 1; transform: scale(1.14); }
+}
+
+@keyframes forge-core {
+  0%, 100% { box-shadow: 0 0 34px #a9ca5466; transform: scale(.98); }
+  50% { box-shadow: 0 0 68px #a9ca54aa; transform: scale(1.03); }
+}
+
+@keyframes forge-glyph {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(8deg); }
+}
+
+@keyframes forge-signal {
+  50% { opacity: .25; }
+}
+
+@media (max-width: 900px) {
+  .hero-intro { grid-template-columns: 1fr; }
+  .hero-visual { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orb-halo,
+  .orb-ring,
+  .orb-core,
+  .orb-core svg,
+  .signal-dot { animation: none !important; }
+}
+
+/* Compact native-desktop density. */
+:root {
+  --control-h: 34px;
+  --control-radius: 7px;
+}
+
+select {
+  color-scheme: dark;
+}
+
+select option {
+  color: #dce5f1;
+  background: #111821;
+}
+
+.template-context {
+  position: relative;
+  width: min(100%, 660px);
+  min-height: 38px;
+  padding: 3px 7px 3px 10px;
+  gap: 7px;
+}
+
+.template-context > span {
+  white-space: nowrap;
+}
+
+.template-select {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+}
+
+.template-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #dce5f1;
+  text-align: left;
+  font-size: 11px;
+}
+
+.template-select-trigger:hover,
+.template-select-trigger[aria-expanded="true"] {
+  background: #171f2a;
+}
+
+.template-select-trigger span,
+.template-select-menu span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-select-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 5px);
+  right: 0;
+  left: 0;
+  overflow: hidden;
+  padding: 4px;
+  border: 1px solid #334154;
+  border-radius: 7px;
+  background: #111821;
+  box-shadow: 0 12px 32px #0009;
+}
+
+.template-select-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #aeb9c9;
+  text-align: left;
+  font-size: 11px;
+}
+
+.template-select-menu button:hover,
+.template-select-menu button.selected {
+  color: #edf3fb;
+  background: #1b2531;
+}
+
+.template-select-menu button.selected svg {
+  color: #d5fa61;
+}
+
+.clear-template {
+  min-width: 28px;
+  min-height: 28px;
+}
+
+.overview-card {
+  min-height: 104px;
+  padding: 16px;
+  gap: 12px;
+}
+
+.card-icon {
+  width: 30px;
+  height: 30px;
+  flex-basis: 30px;
+}
+
+.overview-card h3 {
+  margin-top: 6px;
+}
+
+.hero-action {
+  padding: 0 14px !important;
+}
+
+.overview-hero .hero-visual {
+  flex: 0 1 390px;
+  margin-right: 4%;
+}
+
+.overview-copy {
+  max-width: 760px;
+}
+
+.overview-copy h2.single-line-title {
+  max-width: none;
+  white-space: nowrap;
+  font-size: clamp(42px, 4.2vw, 60px);
+  letter-spacing: -.04em;
+}
+
+@media (max-width: 1080px) {
+  .overview-copy h2.single-line-title {
+    font-size: clamp(36px, 4.5vw, 48px);
+  }
+}
+
+@media (max-width: 640px) {
+  .overview-copy h2.single-line-title {
+    white-space: normal;
+    font-size: 42px;
+  }
+}
+
+/* Codex-style collapsible desktop navigation. */
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sidebar-toggle {
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #718096;
+}
+
+.sidebar-toggle:hover {
+  color: #dce5f1;
+  background: #171f2a;
+}
+
+.sidebar .nav-link > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar .side-footer {
+  display: block;
+  padding: 8px 0 0;
+  border-top: 1px solid #222b36;
+}
+
+.side-tools {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.sidebar .side-tools > button,
+.sidebar .side-tools > .backup-button,
+.sidebar .side-tools > .backup-manage-button,
+.sidebar .side-tools > .update-button {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  margin: 0;
+  padding: 0 7px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.sidebar .side-tools button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.side-health {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  margin-top: 9px;
+  padding: 0 4px;
+  color: #718096;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+@media (min-width: 641px) {
+  .app > .sidebar {
+    flex-basis: 224px;
+    width: 224px;
+    padding: 18px 12px 14px;
+  }
+
+  .app > .sidebar.collapsed {
+    flex-basis: 64px;
+    width: 64px;
+    padding-right: 9px;
+    padding-left: 9px;
+  }
+
+  .sidebar.collapsed .sidebar-head {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .sidebar.collapsed .brand > span,
+  .sidebar.collapsed .workspace,
+  .sidebar.collapsed .nav-section > .eyebrow,
+  .sidebar.collapsed .nav-link > span,
+  .sidebar.collapsed .side-tools button span,
+  .sidebar.collapsed .side-health > span:last-child {
+    display: none;
+  }
+
+  .sidebar.collapsed nav {
+    margin-top: 22px;
+  }
+
+  .sidebar.collapsed .nav-section {
+    margin-top: 18px;
+  }
+
+  .sidebar.collapsed .nav-link {
+    justify-content: center;
+    width: 38px;
+    min-height: 38px;
+    padding: 0;
+  }
+
+  .sidebar.collapsed .side-tools {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar.collapsed .side-tools > button {
+    min-height: 34px;
+    padding: 0;
+  }
+
+  .sidebar.collapsed .side-health {
+    justify-content: center;
+    padding: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .sidebar-toggle { display: none; }
+  .sidebar .side-footer { border-top: 0; }
+  .sidebar .side-tools { display: flex; }
+  .sidebar .side-tools .backup-button,
+  .sidebar .side-tools .backup-manage-button,
+  .sidebar .side-tools .update-button { display: none; }
+}
+
+/* Compact desktop density for a consumer-facing client. Keep hierarchy clear
+   without turning every section into a large dashboard card. */
+.app > main {
+  padding: 24px 4%;
+}
+
+.route-main > .generated-page,
+.route-main > .template-strip {
+  margin-top: 16px;
+}
+
+.generated-page,
+.template-strip {
+  padding: 16px 18px;
+  border-radius: 8px;
+}
+
+.generated-page .panel-head,
+.template-strip > div:first-child {
+  margin-bottom: 8px;
+}
+
+.generated-page .panel-head h3,
+.template-strip h3,
+.mutation-box h4 {
+  font-size: 15px;
+}
+
+.filter-row {
+  gap: 7px;
+  margin: 14px 0 10px;
+}
+
+.filter-row input,
+.delete-row input {
+  padding: 8px 10px;
+}
+
+.stats-row {
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.stat-card {
+  padding: 10px 12px;
+}
+
+.stat-card strong {
+  margin-top: 4px;
+  font-size: 17px;
+}
+
+th,
+td {
+  padding: 9px 10px;
+}
+
+.mutation-box {
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.mutation-box h4 {
+  margin: 5px 0 8px;
+}
+
+.mutation-box textarea {
+  min-height: 58px;
+  padding: 9px 10px;
+  margin-bottom: 8px;
+}
+
+.pagination {
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.template-strip {
+  margin-bottom: 16px;
+}
+
+.template-strip h3 {
+  margin: 4px 0 9px;
+}
+
+.history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.history-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.history-toggle {
+  border: 0;
+  background: transparent;
+  color: #a7d965;
+  font-size: 11px;
+}
+
+.history-item {
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+}
+
+.history-item .template-chip {
+  min-width: 0;
+  border-radius: 7px 0 0 7px;
+}
+
+.history-item .template-chip strong {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-delete {
+  width: 30px;
+  border: 1px solid #2d3948;
+  border-left: 0;
+  border-radius: 0 7px 7px 0;
+  background: #171e28;
+  color: #8b98aa;
+  font-size: 16px;
+}
+
+.history-delete:hover {
+  color: #ffdce0;
+  background: #3a2026;
+}
+
+.template-list {
+  gap: 7px;
+}
+
+.template-chip {
+  gap: 7px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.template-chip strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.version-list {
+  gap: 5px;
+  margin-top: 10px;
+  padding-top: 9px;
+}
+
+.page-actions {
+  gap: 6px;
+}
+
+.table-actions {
+  display: flex;
+  gap: 5px;
+}
+
+.table-action {
+  padding: 4px 7px;
+  border: 1px solid #334154;
+  border-radius: 5px;
+  background: #151d28;
+  color: #aebbd0;
+  font-size: 11px;
+}
+
+.table-action:hover {
+  border-color: #a7c95d;
+  color: #d5fa61;
+}
+
+.table-action-danger {
+  color: #f0a4aa;
+  border-color: #63343b;
+}
+
+.table-action-danger:hover {
+  color: #ffdce0;
+  border-color: #b95862;
+}
+
+.edit-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #05070acc;
+  backdrop-filter: blur(4px);
+}
+
+.edit-dialog {
+  width: min(560px, 100%);
+  padding: 18px;
+  border: 1px solid #344052;
+  border-radius: 9px;
+  background: #121821;
+  box-shadow: 0 20px 70px #000b;
+}
+
+.edit-dialog h4 {
+  margin: 5px 0 0;
+  font-size: 16px;
+}
+
+.edit-dialog textarea {
+  display: block;
+  width: 100%;
+  min-height: 180px;
+  margin-top: 14px;
+  padding: 10px;
+  resize: vertical;
+  border: 1px solid #303b4b;
+  border-radius: 6px;
+  background: #0e131a;
+  color: #dce5f1;
+  font: 12px 'DM Mono', monospace;
+}
+
+.local-detail {
+  margin-top: 12px;
+}
+
 .route-panel {
   width: 100%;
   max-width: none;
@@ -33,6 +808,18 @@
 }
 
 @media (max-width: 640px) {
+  .app {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  .app > aside,
+  .app > main {
+    height: auto;
+    overflow: visible;
+  }
+
   .route-main > .generated-page,
   .route-main > .template-strip,
   .generated-page,

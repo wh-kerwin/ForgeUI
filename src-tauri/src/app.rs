@@ -95,6 +95,11 @@ fn load_generation_sessions() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
+fn delete_generation_session(id: String) -> Result<(), String> {
+    storage::delete_generation_session(id)
+}
+
+#[tauri::command]
 fn save_business_connection(payload: String) -> Result<(), String> {
     storage::save_business_connection(payload)
 }
@@ -236,6 +241,7 @@ pub fn run() {
             load_default_model,
             save_generation_session,
             load_generation_sessions,
+            delete_generation_session,
             save_business_connection,
             load_business_connection,
             save_template,

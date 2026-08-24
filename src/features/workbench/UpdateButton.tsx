@@ -1,9 +1,12 @@
 import { DownloadCloud } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { useLanguage } from "../../i18n/LanguageProvider";
 
 type Props = { onNotice: (message: string) => void };
 
 export function UpdateButton({ onNotice }: Props) {
+  const { language } = useLanguage();
+  const label = language === "zh" ? "检查更新" : "Updates";
   async function check() {
     try {
       const version = await invoke<string | null>("check_for_updates");
@@ -16,5 +19,5 @@ export function UpdateButton({ onNotice }: Props) {
     }
   }
 
-  return <button className="update-button" onClick={check}><DownloadCloud size={14} />检查更新</button>;
+  return <button className="update-button" aria-label={label} title={label} onClick={check}><DownloadCloud size={14} /><span>{label}</span></button>;
 }

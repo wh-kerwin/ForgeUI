@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArchiveRestore, RefreshCw } from "lucide-react";
 import { listDatabaseBackups, restoreDatabaseBackup, type DatabaseBackup } from "../../lib/tauri/storage";
+import { useLanguage } from "../../i18n/LanguageProvider";
 
 type Props = { onNotice: (message: string) => void };
 
@@ -15,6 +16,8 @@ function formatDate(seconds: number) {
 }
 
 export function DatabaseBackupManager({ onNotice }: Props) {
+  const { language } = useLanguage();
+  const label = language === "zh" ? "管理备份" : "Backups";
   const [open, setOpen] = useState(false);
   const [backups, setBackups] = useState<DatabaseBackup[]>([]);
   const [loading, setLoading] = useState(false);
@@ -40,7 +43,7 @@ export function DatabaseBackupManager({ onNotice }: Props) {
   }
 
   return <>
-    <button className="backup-manage-button" onClick={() => setOpen(true)}><ArchiveRestore size={14} />管理备份</button>
+    <button className="backup-manage-button" aria-label={label} title={label} onClick={() => setOpen(true)}><ArchiveRestore size={14} /><span>{label}</span></button>
     {open && <div className="modal-backdrop" onClick={() => setOpen(false)}>
       <section className="modal backup-manager" onClick={(event) => event.stopPropagation()}>
         <div className="modal-head"><div><span className="eyebrow">LOCAL BACKUPS</span><h2>数据库备份</h2></div><button className="icon-btn" onClick={() => setOpen(false)}>关闭</button></div>

@@ -4,7 +4,7 @@ import { toModelSafePageSpec } from "../pages/modelSafePageSpec";
 
 export function buildModelRequest(model: ModelConfig, prompt: string, spec: OpenApiSummary | null, template?: PageSpec) {
   const templateContext = template
-    ? `\nUse this saved PageSpec as a structural starting point. Preserve useful layout choices and adapt its operations to the request. Saved template (safe structure only): ${JSON.stringify(toModelSafePageSpec(template))}`
+    ? `\nUse this existing PageSpec as the only structural starting point. Preserve all existing operation bindings exactly; never invent, remove, or change operation_id, method, or path. If the request asks for an operation that is not already bound, implement the interaction as a local UI state/modal and do not add an operation. Existing PageSpec (safe structure only): ${JSON.stringify(toModelSafePageSpec(template))}`
     : "";
   return {
     prompt: `${prompt}${templateContext}`,

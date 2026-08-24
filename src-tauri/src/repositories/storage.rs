@@ -138,6 +138,15 @@ pub fn load_generation_sessions() -> Result<Vec<String>, String> {
         .map_err(|e| e.to_string())
 }
 
+pub fn delete_generation_session(id: String) -> Result<(), String> {
+    let db = database::open()?;
+    let affected = db
+        .execute("DELETE FROM generation_sessions WHERE id=?1", params![id])
+        .map_err(|e| e.to_string())?;
+    if affected == 0 { return Err("生成历史不存在或已删除".into()); }
+    Ok(())
+}
+
 pub fn save_business_connection(payload: String) -> Result<(), String> {
     let db = database::open()?;
     db.execute("INSERT INTO business_connection(id,payload,updated_at) VALUES(1,?1,datetime('now')) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at", params![payload]).map_err(|e| e.to_string())?;
