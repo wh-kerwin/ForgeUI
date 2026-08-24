@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { X } from "lucide-react";
 import "../../styles.css";
@@ -32,6 +32,12 @@ export function Workbench() {
   const [editorModel, setEditorModel] = useState<ModelConfig | undefined>();
   const [refining, setRefining] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  useEffect(() => {
+    if (import.meta.env.DEV) return;
+    const preventNativeContextMenu = (event: MouseEvent) => event.preventDefault();
+    document.addEventListener("contextmenu", preventNativeContextMenu);
+    return () => document.removeEventListener("contextmenu", preventNativeContextMenu);
+  }, []);
   const { route, navigate } = useAppRouter();
   const connection = useBusinessConnection(setNotice);
   const modelConfigs = useModelConfigurations();

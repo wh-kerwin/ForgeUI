@@ -8,6 +8,25 @@ use crate::{
         openapi::{self, OpenApiSummary},
     },
 };
+use tauri::{
+    menu::MenuBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager,
+};
+
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+fn hide_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+}
 
 #[tauri::command]
 async fn validate_model_config(input: ModelConfigInput) -> Result<ValidationResult, String> {
@@ -224,6 +243,32 @@ fn restore_database_backup(file_name: String) -> Result<String, String> {
 
 pub fn run() {
     tauri::Builder::default()
+        .on_menu_event(|app, event| match event.id().0.as_str() {
+            "tray-show" => show_main_window(app),
+            "tray-hide" => hide_main_window(app),
+            "tray-quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| match event {
+            TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            }
+            | TrayIconEvent::DoubleClick {
+                button: MouseButton::Left,
+                ..
+            } => show_main_window(tray.app_handle()),
+            _ => {}
+        })
+        .on_window_event(|window, event| {
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             validate_model_config,
             generate_page,
@@ -273,6 +318,20 @@ pub fn run() {
                         .build(),
                 )?;
             }
+            let tray_menu = MenuBuilder::new(app)
+                .text("tray-show", "显示 Forge UI")
+                .text("tray-hide", "隐藏到托盘")
+                .separator()
+                .text("tray-quit", "退出 Forge UI")
+                .build()?;
+            let mut tray = TrayIconBuilder::with_id("forge-ui-tray")
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .tooltip("Forge UI");
+            if let Some(icon) = app.default_window_icon().cloned() {
+                tray = tray.icon(icon);
+            }
+            tray.build(app)?;
             Ok(())
         })
         .run(tauri::generate_context!())

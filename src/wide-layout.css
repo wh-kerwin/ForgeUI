@@ -496,6 +496,10 @@ select option {
 }
 
 @media (min-width: 641px) {
+  .sidebar-head + nav {
+    margin-top: 36px;
+  }
+
   .app > .sidebar {
     flex-basis: 224px;
     width: 224px;
