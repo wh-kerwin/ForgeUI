@@ -1,0 +1,51 @@
+name: Build desktop installers
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+
+      - name: Build Windows MSI
+        if: runner.os == 'Windows'
+        run: npx tauri build --bundles msi
+
+      - name: Build macOS DMG
+        if: runner.os == 'macOS'
+        run: npx tauri build --bundles dmg
+
+      - name: Upload Windows installers
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-ui-windows-${{ github.run_number }}
+          if-no-files-found: error
+          path: src-tauri/target/release/bundle/msi/*.msi
+
+      - name: Upload macOS installer
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-ui-macos-${{ github.run_number }}
+          if-no-files-found: error
+          path: src-tauri/target/release/bundle/dmg/*.dmg

@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "tauri": "cargo tauri",
-    "tauri:dev": "cargo tauri dev",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
     "dev:tauri": "npm run tauri:dev",
     "build": "tsc -b && vite build",
-    "tauri:build": "cargo tauri build",
+    "tauri:build": "tauri build",
     "validate:updater": "node scripts/validate-updater-config.mjs",
     "preview": "vite preview"
   },
@@ -23,6 +23,7 @@
     "vite": "latest"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
     "@types/react": "latest",
     "@types/react-dom": "latest"
   }

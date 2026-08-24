@@ -28,7 +28,7 @@ C:\Users\admin\.cargo\bin\cargo.exe test --manifest-path src-tauri\Cargo.toml
 npm run tauri:dev
 ```
 
-`npm run dev` 仅启动浏览器预览。要验证系统钥匙串、SQLite、Rust 网络请求和 IPC，请使用 `cargo-tauri dev`。
+`npm run dev` 仅启动浏览器预览。要验证系统钥匙串、SQLite、Rust 网络请求和 IPC，请使用 `npm run tauri:dev`。
 
 ## 验证
 
@@ -49,5 +49,14 @@ npm run tauri:build -- --debug
 - 企业 CA 只作为额外信任根，不能绕过 TLS 证书校验。
 
 ## 正式发布
+
+### GitHub 手动打包
+
+仓库包含 `Build desktop installers` workflow。在 GitHub 仓库中打开 **Actions → Build desktop installers → Run workflow → Run workflow**。两个平台构建完成后，在该次运行底部的 **Artifacts** 下载：
+
+- `forge-ui-windows-*`：Windows MSI `.msi` 安装包。
+- `forge-ui-macos-*`：macOS `.dmg` 安装包。
+
+安装包版本读取 `src-tauri/tauri.conf.json` 中的 `version`。当前 workflow 生成未签名安装包，仅用于内部测试；Windows SmartScreen 和 macOS Gatekeeper 可能显示安全提示。
 
 Windows 签名、Tauri 更新签名/更新地址、macOS 签名与公证需要外部凭证。详见 [docs/release.md](docs/release.md)。
