@@ -2,6 +2,8 @@ name: Build desktop installers
 
 on:
   workflow_dispatch:
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -49,3 +51,24 @@ jobs:
           name: forge-ui-macos-${{ github.run_number }}
           if-no-files-found: error
           path: src-tauri/target/release/bundle/dmg/*.dmg
+
+  attach-to-release:
+    name: Attach installers to Release
+    if: github.event_name == 'release'
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download packaged installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: forge-ui-*-${{ github.run_number }}
+          path: release-assets
+          merge-multiple: true
+
+      - name: Upload installers to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" release-assets/* --clobber

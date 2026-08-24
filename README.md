@@ -59,4 +59,14 @@ npm run tauri:build -- --debug
 
 安装包版本读取 `src-tauri/tauri.conf.json` 中的 `version`。当前 workflow 生成未签名安装包，仅用于内部测试；Windows SmartScreen 和 macOS Gatekeeper 可能显示安全提示。
 
+### 创建 Release 并自动关联安装包
+
+1. 提交发布版本代码，并确保 `src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 和 `package.json` 中的版本一致。
+2. 在 GitHub 打开 **Releases → Draft a new release**。
+3. 创建或选择版本标签（例如 `v0.2.0`），目标分支选择 `main`。
+4. 点击 **Publish release**。保存草稿不会触发打包，正式发布才会触发。
+5. `Build desktop installers` workflow 会从该标签构建 Windows 和 macOS；两个平台成功后，MSI 和 DMG 会自动追加到该 Release 的 **Assets**。
+
+如果上传 Assets 返回 `403 Resource not accessible by integration`，请在 **Settings → Actions → General → Workflow permissions** 中允许 GitHub Actions 使用读写权限。
+
 Windows 签名、Tauri 更新签名/更新地址、macOS 签名与公证需要外部凭证。详见 [docs/release.md](docs/release.md)。
