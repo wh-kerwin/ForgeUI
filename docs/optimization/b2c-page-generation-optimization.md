@@ -1046,20 +1046,17 @@ Theme Token 与"使用 Ant Design / Element Plus 真实组件库"是两个不同
 
 | 检查 | 当前证据 |
 |------|----------|
-| 前端单元测试 | `npm test`：38 passed，覆盖场景差异、B2B/C 端预设、解析修复、字段联动、真实数据映射、主题精确值、安全 token、权限、排序查询、redirect 路由契约、4 项窄视口下拉定位边界及 95% 阈值自动停止 |
+| 前端单元测试 | `npm test`：40 passed，覆盖场景差异、B2B/C 端预设、解析修复、字段联动、真实数据映射、主题精确值、安全 token、权限、排序查询、redirect 路由契约及 4 项窄视口下拉定位边界 |
 | 前端构建 | `npm run build`：通过 |
-| Rust 权威校验 | `cargo test`：42 passed，覆盖 PageSpec、OpenAPI 字段联动、操作授权、主题 token、模型输出有界规范化，以及客户端默认模型选择与停用状态 |
+| Rust 权威校验 | `cargo test`：51 passed，覆盖 PageSpec、OpenAPI 字段联动、操作授权、主题 token、模型输出有界规范化、项目与 API 文档隔离及引用保护 |
 | Rust 格式 | `cargo fmt --all -- --check`：通过 |
 | 响应式下拉 | Edge/CDP 在 320 / 520 / 1280px 验证；触发器与选项统一为 26px；菜单打开前即获得有效位置，挂载后按真实高度校正并 Portal 到 `BODY`。三个宽度下菜单均可见且四向溢出为 0，320px 下保持触发器宽度并自动向上展开 |
 | Theme Token 运行时 | Edge/CDP 对 clean-light / minimal-dark 的内联表单、详情、错误态、弹窗、删除预览、按钮、排序图标与 Portal 下拉读取计算样式，均跟随当前 Token |
-| 客户端模型配置 | `npm run validate:model-conformance:config`：脱敏识别默认模型 `Agens · openai · agnes-2.5-flash`，并在 Rust 进程内确认 1 个系统钥匙串引用可解析；Node 不接触凭证 |
 | 真实模型一致性 | 正式 50 次分层验收运行到 8 次时出现第 3 个 `invalid-output`，当时 schema-pass 为 5/8；即使后续全通过，最高也只有 47/50（94%），因此提前停止。随后以 Dashboard / CRUD / enterprise-theme 各 1 条执行最小诊断，3/3 均通过；链路和三类语义均可用，但当前供应商输出稳定性尚不足以勾选 95% 验收项 |
 | DSL 运行时语义 | Edge/Playwright 在 1280 / 320px 验证：sidebar 两栏自动回落单栏、full 单栏、modal 桌面宽 820px/移动端自适应；四类 redirect 子路由可见且可返回；权限拒绝态可见；320px `scrollWidth === clientWidth` |
 | UI 静态检测 | Impeccable detector：0 findings |
 
 真实模型调用已获授权并实际执行，但两项 95% 验收仍未通过：正式抽样在第 8 次出现第 3 个无效输出后已无法达到 95%，因此没有用继续调用或补抽样掩盖失败。企业蓝在正式样本中 2/3 通过，最小诊断样本也通过，说明确定性主题意图解析已经生效，但还不能证明供应商输出达到稳定验收阈值。
-
-仓库已提供可重复验收命令。默认通过本地 Rust 探针复用客户端默认模型：Node 只传入 Prompt、OpenAPI 上下文和允许的操作，Rust 在进程内读取 `model_configs` 元数据与系统钥匙串，并只返回校验后的 PageSpec 或脱敏错误；凭证不会进入环境变量、stdout 或文件，单次输出上限固定为 4096 Token。先运行 `npm run validate:model-conformance:config` 脱敏确认配置，再运行 `npm run validate:model-conformance:dry` 检查 50 次请求编排；真实抽样使用 `npm run validate:model-conformance -- --confirm-paid-calls`。仅在 CI 等无客户端数据库场景下，才显式提供 `MODEL_BASE_URL`、`MODEL_NAME` 和可选的 `MODEL_API_KEY` / `MODEL_PROTOCOL`；真实调用仍必须带确认参数。
 
 Theme Token 的实现采用集中覆盖策略：`generated.css`、`route.css` 和 `styles.css` 保留 forge-default 与工作台外壳基线，后加载的 `wide-layout.css` 只覆盖 `.generated-page` 及其 Portal 弹窗/下拉。这样仍满足生成页面内所有组件实时换肤，同时避免 clean-light 等页面主题把侧边导航、模型配置页一起改色。
 

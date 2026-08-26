@@ -636,11 +636,9 @@ Week 7+     迭代功能
 | 检查 | 结果 |
 |------|------|
 | `npm run build` | 通过 |
-| `npm test` | 38 passed，0 failed；包含 4 项窄视口下拉定位边界和 1 项 95% 阈值自动停止测试 |
+| `npm test` | 40 passed，0 failed；包含 4 项窄视口下拉定位边界测试 |
 | `cargo fmt --all -- --check` | 通过 |
-| `cargo test` | 42 passed，0 failed |
-| `npm run validate:model-conformance:config` | 通过；脱敏识别客户端默认模型 `Agens · openai · agnes-2.5-flash`，并确认 1 个系统钥匙串引用可解析；凭证未输出或持久化 |
-| `npm run validate:model-conformance:dry` | 通过；完成 50 次 Dashboard 15 / CRUD 15 / enterprise-theme 20 请求编排，单次输出上限 4096 Token，不访问网络 |
+| `cargo test` | 51 passed，0 failed |
 | 真实模型一致性验收 | 未达 95%：正式 50 次验收运行到 8 次时已出现 3 个 `invalid-output`（5/8 schema-pass），理论最高合规率降至 94%，因此提前停止以避免无效调用；随后 Dashboard / CRUD / enterprise-theme 各 1 条最小诊断均通过，说明链路可用但供应商输出稳定性仍不足 |
 | 响应式下拉 | 触发器与选项统一为 26px；Portal 菜单在 320 / 520 / 1280px 均位于可视区内，320px 下可自动向上展开且无水平溢出 |
 | `git diff --check` | 通过（仅 Git 的 LF/CRLF 提示） |

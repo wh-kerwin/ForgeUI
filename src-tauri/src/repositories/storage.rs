@@ -2,7 +2,42 @@ use crate::{
     domain::page_spec::{validate, PageSpec},
     repositories::database,
 };
-use rusqlite::params;
+use rusqlite::{params, Transaction};
+
+fn validate_artifact_scope(
+    transaction: &Transaction<'_>,
+    project_id: &str,
+    api_document_ids: &[String],
+) -> Result<Vec<String>, String> {
+    let project_exists: bool = transaction
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM projects WHERE id=?1)",
+            params![project_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    if !project_exists {
+        return Err("项目不存在".into());
+    }
+    let mut unique = Vec::new();
+    for id in api_document_ids {
+        if unique.iter().any(|existing| existing == id) {
+            continue;
+        }
+        let belongs_to_project: bool = transaction
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM api_documents WHERE id=?1 AND project_id=?2)",
+                params![id, project_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+        if !belongs_to_project {
+            return Err("页面引用了不属于当前项目的 API 文档".into());
+        }
+        unique.push(id.clone());
+    }
+    Ok(unique)
+}
 
 pub fn save_model_metadata(id: String, payload: String) -> Result<(), String> {
     let payload = sanitize_model_metadata(&payload)?;
@@ -116,23 +151,35 @@ pub fn load_default_model() -> Result<Option<String>, String> {
 
 pub fn save_generation_session(
     id: String,
+    project_id: String,
     model_id: String,
     prompt: String,
     payload: String,
+    api_document_ids: Vec<String>,
 ) -> Result<(), String> {
     let spec: PageSpec =
         serde_json::from_str(&payload).map_err(|e| format!("页面 DSL 无效：{e}"))?;
     validate(&spec)?;
-    let db = database::open()?;
-    db.execute("INSERT INTO generation_sessions(id,model_id,prompt,payload,created_at) VALUES(?1,?2,?3,?4,datetime('now'))", params![id, model_id, prompt, payload]).map_err(|e| e.to_string())?;
-    Ok(())
+    let mut db = database::open()?;
+    let transaction = db.transaction().map_err(|e| e.to_string())?;
+    let api_document_ids = validate_artifact_scope(&transaction, &project_id, &api_document_ids)?;
+    transaction.execute("INSERT INTO generation_sessions(id,project_id,model_id,prompt,payload,created_at) VALUES(?1,?2,?3,?4,?5,datetime('now'))", params![id, project_id, model_id, prompt, payload]).map_err(|e| e.to_string())?;
+    for api_document_id in api_document_ids {
+        transaction
+            .execute(
+                "INSERT INTO generation_session_api_documents(session_id,api_document_id) VALUES(?1,?2)",
+                params![id, api_document_id],
+            )
+            .map_err(|e| e.to_string())?;
+    }
+    transaction.commit().map_err(|e| e.to_string())
 }
 
-pub fn load_generation_sessions() -> Result<Vec<String>, String> {
+pub fn load_generation_sessions(project_id: String) -> Result<Vec<String>, String> {
     let db = database::open()?;
-    let mut statement = db.prepare("SELECT json_object('id',id,'modelId',model_id,'prompt',prompt,'payload',payload,'createdAt',created_at) FROM generation_sessions ORDER BY created_at DESC LIMIT 100").map_err(|e| e.to_string())?;
+    let mut statement = db.prepare("SELECT json_object('id',id,'projectId',project_id,'modelId',model_id,'prompt',prompt,'payload',payload,'createdAt',created_at,'apiDocumentIds',json(COALESCE((SELECT json_group_array(api_document_id) FROM generation_session_api_documents refs WHERE refs.session_id=generation_sessions.id),'[]'))) FROM generation_sessions WHERE project_id=?1 ORDER BY created_at DESC LIMIT 100").map_err(|e| e.to_string())?;
     let rows = statement
-        .query_map([], |row| row.get::<_, String>(0))
+        .query_map(params![project_id], |row| row.get::<_, String>(0))
         .map_err(|e| e.to_string())?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())
@@ -170,13 +217,16 @@ pub fn load_business_connection() -> Result<Option<String>, String> {
 
 pub fn save_template(
     id: String,
+    project_id: String,
     name: String,
     payload: String,
     model_id: Option<String>,
+    api_document_ids: Vec<String>,
 ) -> Result<(), String> {
     let mut db = database::open()?;
     let transaction = db.transaction().map_err(|e| e.to_string())?;
-    transaction.execute("INSERT INTO templates (id,name,payload,model_id,version,updated_at) VALUES (?1,?2,?3,?4,1,datetime('now')) ON CONFLICT(id) DO UPDATE SET name=excluded.name,payload=excluded.payload,model_id=excluded.model_id,version=templates.version+1,updated_at=excluded.updated_at", params![id, name, payload, model_id]).map_err(|e| e.to_string())?;
+    let api_document_ids = validate_artifact_scope(&transaction, &project_id, &api_document_ids)?;
+    transaction.execute("INSERT INTO templates (id,project_id,name,payload,model_id,version,updated_at) VALUES (?1,?2,?3,?4,?5,1,datetime('now')) ON CONFLICT(id) DO UPDATE SET project_id=excluded.project_id,name=excluded.name,payload=excluded.payload,model_id=excluded.model_id,version=templates.version+1,updated_at=excluded.updated_at", params![id, project_id, name, payload, model_id]).map_err(|e| e.to_string())?;
     let version: i64 = transaction
         .query_row(
             "SELECT version FROM templates WHERE id=?1",
@@ -185,6 +235,20 @@ pub fn save_template(
         )
         .map_err(|e| e.to_string())?;
     transaction.execute("INSERT OR REPLACE INTO template_versions(template_id,version,payload,created_at) VALUES(?1,?2,?3,datetime('now'))", params![id, version, payload]).map_err(|e| e.to_string())?;
+    transaction
+        .execute(
+            "DELETE FROM template_api_documents WHERE template_id=?1",
+            params![id],
+        )
+        .map_err(|e| e.to_string())?;
+    for api_document_id in api_document_ids {
+        transaction
+            .execute(
+                "INSERT INTO template_api_documents(template_id,api_document_id) VALUES(?1,?2)",
+                params![id, api_document_id],
+            )
+            .map_err(|e| e.to_string())?;
+    }
     transaction.commit().map_err(|e| e.to_string())
 }
 
@@ -206,11 +270,11 @@ pub fn rename_template(id: String, name: String) -> Result<(), String> {
     Ok(())
 }
 
-pub fn load_templates() -> Result<Vec<String>, String> {
+pub fn load_templates(project_id: String) -> Result<Vec<String>, String> {
     let db = database::open()?;
-    let mut statement = db.prepare("SELECT json_object('id',id,'name',name,'payload',payload,'modelId',model_id,'version',version,'updatedAt',updated_at) FROM templates ORDER BY updated_at DESC").map_err(|e| e.to_string())?;
+    let mut statement = db.prepare("SELECT json_object('id',id,'projectId',project_id,'name',name,'payload',payload,'modelId',model_id,'version',version,'updatedAt',updated_at,'apiDocumentIds',json(COALESCE((SELECT json_group_array(api_document_id) FROM template_api_documents refs WHERE refs.template_id=templates.id),'[]'))) FROM templates WHERE project_id=?1 ORDER BY updated_at DESC").map_err(|e| e.to_string())?;
     let rows = statement
-        .query_map([], |row| row.get::<_, String>(0))
+        .query_map(params![project_id], |row| row.get::<_, String>(0))
         .map_err(|e| e.to_string())?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())
@@ -266,7 +330,7 @@ pub fn export_template(id: String) -> Result<String, String> {
     db.query_row("SELECT json_object('format','forge-template-v1','id',id,'name',name,'payload',payload,'version',version) FROM templates WHERE id=?1", params![id], |row| row.get(0)).map_err(|error| format!("模板不存在：{error}"))
 }
 
-pub fn import_template(document: String) -> Result<(), String> {
+pub fn import_template(document: String, project_id: String) -> Result<(), String> {
     let value: serde_json::Value =
         serde_json::from_str(&document).map_err(|e| format!("模板 JSON 无效：{e}"))?;
     if value.get("format").and_then(|item| item.as_str()) != Some("forge-template-v1") {
@@ -287,7 +351,14 @@ pub fn import_template(document: String) -> Result<(), String> {
     let page_spec: PageSpec =
         serde_json::from_str(payload).map_err(|e| format!("页面 DSL 无效：{e}"))?;
     validate(&page_spec)?;
-    save_template(format!("imported-{id}"), name.into(), payload.into(), None)
+    save_template(
+        format!("imported-{id}"),
+        project_id,
+        name.into(),
+        payload.into(),
+        None,
+        Vec::new(),
+    )
 }
 
 #[cfg(test)]

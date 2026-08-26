@@ -9,7 +9,15 @@ const DEFAULT_INTERACTION: ResolvedInteraction = {
   detail: "inline",
 };
 
-export function resolveInteraction(page: Pick<PageSpec, "interaction">): ResolvedInteraction {
+const CRUD_MODAL_INTERACTION: ResolvedInteraction = {
+  create: "modal",
+  update: "modal",
+  delete: "modal",
+  detail: "modal",
+};
+
+export function resolveInteraction(page: Pick<PageSpec, "interaction">, isCrudPage = false): ResolvedInteraction {
+  if (isCrudPage) return CRUD_MODAL_INTERACTION;
   return { ...DEFAULT_INTERACTION, ...page.interaction };
 }
 

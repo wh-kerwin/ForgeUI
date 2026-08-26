@@ -2,7 +2,7 @@ import { Bot, Settings2, SlidersHorizontal } from "lucide-react";
 import { HeroVisual } from "./HeroVisual";
 import { PromptBox } from "./PromptBox";
 import { TemplatePicker } from "./TemplatePicker";
-import type { TemplateRecord } from "../../types/domain";
+import type { ApiDocument, TemplateRecord } from "../../types/domain";
 import type { PromptTemplate } from "../../types/domain";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { SelectField } from "../../components/SelectField";
@@ -21,9 +21,12 @@ type Props = {
   selectedPromptTemplateId?: string;
   onPromptTemplateSelect?: (id: string) => void;
   onManagePromptTemplates: () => void;
+  apiDocuments: ApiDocument[];
+  selectedApiDocumentIds: string[];
+  onApiDocumentSelectionChange: (ids: string[]) => void;
 };
 
-export function PromptGenerator({ prompt, onPromptChange, onGenerate, generating, onOpenSettings, templates, selectedTemplateId, onTemplateSelect, onTemplateClear, promptTemplates = [], selectedPromptTemplateId, onPromptTemplateSelect, onManagePromptTemplates }: Props) {
+export function PromptGenerator({ prompt, onPromptChange, onGenerate, generating, onOpenSettings, templates, selectedTemplateId, onTemplateSelect, onTemplateClear, promptTemplates = [], selectedPromptTemplateId, onPromptTemplateSelect, onManagePromptTemplates, apiDocuments, selectedApiDocumentIds, onApiDocumentSelectionChange }: Props) {
   const { language } = useLanguage();
   const zh = language === "zh";
   const examples = zh ? ["本周订单总览 Dashboard", "设备管理：按状态筛选并支持编辑", "客户列表 + 详情 + 趋势"] : ["Weekly orders dashboard", "Device manager with status filters", "Customers, details and trends"];
@@ -42,6 +45,11 @@ export function PromptGenerator({ prompt, onPromptChange, onGenerate, generating
           <TemplatePicker templates={templates} selectedId={selectedTemplateId} onSelect={onTemplateSelect} onClear={onTemplateClear} />
           {promptTemplates.length ? <div className="prompt-scene-context"><SlidersHorizontal size={16} /><span>PROMPT SCENE</span><SelectField value={selectedPromptTemplateId ?? promptTemplates[0].id} options={promptTemplates.map((item) => ({ value: item.id, label: item.name }))} onChange={(value) => onPromptTemplateSelect?.(value)} ariaLabel={zh ? "选择 Prompt 场景" : "Select prompt scene"} /><button type="button" className="icon-btn manage-prompt-templates" aria-label={zh ? "管理 Prompt 模板" : "Manage prompt templates"} title={zh ? "管理 Prompt 模板" : "Manage prompt templates"} onClick={onManagePromptTemplates}><Settings2 size={15} /></button></div> : null}
         </div>
+        <fieldset className="generation-api-selector">
+          <legend>{zh ? "本次使用的 API 文档" : "API documents for this generation"}</legend>
+          <div>{apiDocuments.filter((document) => document.enabled).map((document) => <label key={document.id}><input type="checkbox" checked={selectedApiDocumentIds.includes(document.id)} onChange={(event) => onApiDocumentSelectionChange(event.target.checked ? [...selectedApiDocumentIds, document.id] : selectedApiDocumentIds.filter((id) => id !== document.id))}/><span>{document.name}</span><small>{document.auth.authorizedOperations?.length ?? 0}</small></label>)}</div>
+          {apiDocuments.filter((document) => document.enabled).length === 0 && <span className="muted">{zh ? "当前项目没有可用的 API 文档" : "No enabled API documents"}</span>}
+        </fieldset>
         </div>
         <HeroVisual />
       </div>

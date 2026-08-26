@@ -2,7 +2,7 @@ use crate::services::url_security::{
     read_limited_response, validate_content_length, validate_https_or_debug_local,
 };
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 #[derive(Debug, Serialize)]
@@ -16,6 +16,8 @@ pub struct OpenApiSummary {
     pub discovered_url: String,
     #[serde(rename = "fieldSchemas")]
     pub field_schemas: HashMap<String, Vec<FieldSchema>>,
+    #[serde(rename = "queryParameters")]
+    pub query_parameters: HashMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -95,6 +97,7 @@ pub fn parse(content: &str, source: &str) -> Result<OpenApiSummary, String> {
         .unwrap_or_else(|| source.to_string());
     let mut operations = Vec::new();
     let mut field_schemas = HashMap::new();
+    let mut query_parameters = HashMap::new();
     if let Some(paths) = value.get("paths").and_then(|item| item.as_object()) {
         for (path, item) in paths {
             if let Some(path_operations) = item.as_object() {
@@ -117,6 +120,10 @@ pub fn parse(content: &str, source: &str) -> Result<OpenApiSummary, String> {
                             operation_id.to_string(),
                             extract_field_schemas(&value, path, operation, &spec_version),
                         );
+                        query_parameters.insert(
+                            operation_id.to_string(),
+                            extract_query_parameters(&value, item, operation),
+                        );
                     }
                 }
             }
@@ -132,7 +139,40 @@ pub fn parse(content: &str, source: &str) -> Result<OpenApiSummary, String> {
         api_base_url,
         discovered_url: source.to_string(),
         field_schemas,
+        query_parameters,
     })
+}
+
+fn extract_query_parameters(
+    root: &serde_json::Value,
+    path_item: &serde_json::Value,
+    operation: &serde_json::Value,
+) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut seen = HashSet::new();
+    for parameters in [path_item.get("parameters"), operation.get("parameters")] {
+        for parameter in parameters.and_then(|value| value.as_array()).into_iter().flatten() {
+            let parameter = resolve_parameter_reference(root, parameter);
+            let name = parameter.get("name").and_then(|value| value.as_str());
+            if parameter.get("in").and_then(|value| value.as_str()) == Some("query") {
+                if let Some(name) = name.filter(|name| !name.trim().is_empty()) {
+                    if seen.insert(name.to_string()) {
+                        names.push(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+    names
+}
+
+fn resolve_parameter_reference<'a>(root: &'a serde_json::Value, parameter: &'a serde_json::Value) -> &'a serde_json::Value {
+    parameter
+        .get("$ref")
+        .and_then(|value| value.as_str())
+        .and_then(|reference| reference.strip_prefix('#'))
+        .and_then(|pointer| root.pointer(pointer))
+        .unwrap_or(parameter)
 }
 
 fn extract_field_schemas(
@@ -488,6 +528,32 @@ mod tests {
             &condition.equals,
             VisibilityEquals::One(value) if value == "done"
         ));
+    }
+
+    #[test]
+    fn extracts_operation_and_path_query_parameters_in_document_order() {
+        let document = serde_json::json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Products", "version": "1"},
+            "components": {"parameters": {"Sort": {"name": "sort", "in": "query", "schema": {"type": "string"}}}},
+            "paths": {"/products": {
+                "parameters": [{"name": "page", "in": "query", "schema": {"type": "integer"}}],
+                "get": {
+                    "operationId": "listProducts",
+                    "parameters": [
+                        {"name": "pageSize", "in": "query", "schema": {"type": "integer"}},
+                        {"name": "keyword", "in": "query", "schema": {"type": "string"}},
+                        {"name": "category", "in": "query", "schema": {"type": "string"}},
+                        {"name": "minPrice", "in": "query", "schema": {"type": "number"}},
+                        {"name": "maxPrice", "in": "query", "schema": {"type": "number"}},
+                        {"$ref": "#/components/parameters/Sort"},
+                        {"name": "authorization", "in": "header", "schema": {"type": "string"}}
+                    ]
+                }
+            }}
+        }).to_string();
+        let summary = parse(&document, "https://example.com/openapi.json").unwrap();
+        assert_eq!(summary.query_parameters["listProducts"], ["page", "pageSize", "keyword", "category", "minPrice", "maxPrice", "sort"]);
     }
 
     #[test]

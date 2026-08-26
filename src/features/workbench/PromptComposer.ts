@@ -15,7 +15,8 @@ const CONSTRAINTS = [
   "filters and columns must be arrays of strings; every row must contain exactly one string cell per column.",
   "Every view reference (defaultSort.column, chart axes/group, and kanban group/card fields) must exactly match one string in columns. Omit a view when its required columns are unavailable.",
   "Keep the PageSpec compact: use at most 10 columns, 4 sample rows, and 3 top-level views; omit optional metadata that does not improve the requested screen.",
-  "Only bind operation_id, method, and path combinations listed in OPENAPI_CONTEXT. Never invent an operation.",
+  "Only bind apiDocumentId, operation_id, method, and path combinations listed in OPENAPI_CONTEXT. Never invent an operation or document identity.",
+  "Every generated operation and batch action binding must copy apiDocumentId from its matching OPENAPI_CONTEXT operation.",
   "For create/update bindings, copy the matching OPENAPI_CONTEXT bodySchemas entry into bodySchema when available, including visibleWhen conditions.",
   "Use list, chart, kanban, tabs, and split view types. Keep a list fallback when another view is primary and limit nested composition to four levels.",
   "Set layout to full by default so filters and stats render above the main view. Use sidebar only when the user explicitly requests a sidebar or side-by-side filter layout.",
@@ -118,18 +119,18 @@ function compactTemplateContext(template?: PageSpec): string {
   });
 }
 
-function compactOperationContext(operations: AllowedOperation[], roleHints: Record<string, string[]>): string {
-  const compact = operations.slice(0, 16).map((operation) => ({
+function compactOperationContext(operations: AllowedOperation[]): string {
+  const compact = operations.slice(0, 16).map(({ api_document_id, ...operation }) => ({
+    apiDocumentId: api_document_id,
     ...operation,
-    suggested_roles: roleHints[operation.operation_id] ?? [],
+    suggested_roles: inferOperationRoles([operation])[operation.operation_id] ?? [],
   }));
   return JSON.stringify({ operations: compact, omitted: Math.max(0, operations.length - compact.length) });
 }
 
 export function composeModelPrompt({ prompt, template, promptTemplate, allowedOperations }: PromptComposerInput) {
   const scene = sceneOf(promptTemplate);
-  const roleHints = inferOperationRoles(allowedOperations);
-  const operationContext = compactOperationContext(allowedOperations, roleHints);
+  const operationContext = compactOperationContext(allowedOperations);
   const templateContext = compactTemplateContext(template);
   const customScenePrompt = scenePromptOf(promptTemplate).trim().slice(0, 600);
   const layers = [

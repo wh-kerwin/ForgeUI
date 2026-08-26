@@ -1,6 +1,6 @@
 use crate::{
     domain::page_spec::PageSpec,
-    repositories::{secrets, storage},
+    repositories::{projects, secrets, storage},
     services::{
         business_api::{self, ApiRequest, ApiResponse},
         exporter,
@@ -131,16 +131,18 @@ fn load_default_model() -> Result<Option<String>, String> {
 #[tauri::command]
 fn save_generation_session(
     id: String,
+    project_id: String,
     model_id: String,
     prompt: String,
     payload: String,
+    api_document_ids: Vec<String>,
 ) -> Result<(), String> {
-    storage::save_generation_session(id, model_id, prompt, payload)
+    storage::save_generation_session(id, project_id, model_id, prompt, payload, api_document_ids)
 }
 
 #[tauri::command]
-fn load_generation_sessions() -> Result<Vec<String>, String> {
-    storage::load_generation_sessions()
+fn load_generation_sessions(project_id: String) -> Result<Vec<String>, String> {
+    storage::load_generation_sessions(project_id)
 }
 
 #[tauri::command]
@@ -159,13 +161,73 @@ fn load_business_connection() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+fn list_projects() -> Result<Vec<projects::ProjectRecord>, String> {
+    projects::list_projects()
+}
+
+#[tauri::command]
+fn create_project(id: String, name: String) -> Result<projects::ProjectRecord, String> {
+    projects::create_project(id, name)
+}
+
+#[tauri::command]
+fn rename_project(id: String, name: String) -> Result<(), String> {
+    projects::rename_project(id, name)
+}
+
+#[tauri::command]
+fn delete_project(id: String) -> Result<(), String> {
+    projects::delete_project(id)
+}
+
+#[tauri::command]
+fn set_project_selected_api_documents(
+    project_id: String,
+    api_document_ids: Vec<String>,
+) -> Result<(), String> {
+    projects::set_project_selected_api_documents(project_id, api_document_ids)
+}
+
+#[tauri::command]
+fn list_api_documents(project_id: String) -> Result<Vec<projects::ApiDocumentRecord>, String> {
+    projects::list_api_documents(project_id)
+}
+
+#[tauri::command]
+fn save_api_document(
+    id: String,
+    project_id: String,
+    name: String,
+    payload: String,
+    enabled: bool,
+) -> Result<projects::ApiDocumentRecord, String> {
+    projects::save_api_document(id, project_id, name, payload, enabled)
+}
+
+#[tauri::command]
+fn set_api_document_enabled(
+    project_id: String,
+    api_document_id: String,
+    enabled: bool,
+) -> Result<(), String> {
+    projects::set_api_document_enabled(project_id, api_document_id, enabled)
+}
+
+#[tauri::command]
+fn delete_api_document(project_id: String, api_document_id: String) -> Result<(), String> {
+    projects::delete_api_document(project_id, api_document_id)
+}
+
+#[tauri::command]
 fn save_template(
     id: String,
+    project_id: String,
     name: String,
     payload: String,
     model_id: Option<String>,
+    api_document_ids: Vec<String>,
 ) -> Result<(), String> {
-    storage::save_template(id, name, payload, model_id)
+    storage::save_template(id, project_id, name, payload, model_id, api_document_ids)
 }
 
 #[tauri::command]
@@ -174,8 +236,8 @@ fn rename_template(id: String, name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn load_templates() -> Result<Vec<String>, String> {
-    storage::load_templates()
+fn load_templates(project_id: String) -> Result<Vec<String>, String> {
+    storage::load_templates(project_id)
 }
 
 #[tauri::command]
@@ -199,8 +261,8 @@ fn export_template(id: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn import_template(document: String) -> Result<(), String> {
-    storage::import_template(document)
+fn import_template(document: String, project_id: String) -> Result<(), String> {
+    storage::import_template(document, project_id)
 }
 
 #[tauri::command]
@@ -320,6 +382,15 @@ pub fn run() {
             delete_generation_session,
             save_business_connection,
             load_business_connection,
+            list_projects,
+            create_project,
+            rename_project,
+            delete_project,
+            set_project_selected_api_documents,
+            list_api_documents,
+            save_api_document,
+            set_api_document_enabled,
+            delete_api_document,
             save_template,
             rename_template,
             load_templates,

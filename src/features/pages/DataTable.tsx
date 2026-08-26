@@ -7,7 +7,24 @@ import { formatColumnValue } from "./columnFormatting";
 type Sort = NonNullable<Extract<PageView, { type: "list" }>["defaultSort"]>;
 type Props = Pick<PageSpec, "columns" | "rows"> & { columnMeta?: ColumnMeta[]; defaultSort?: Sort; batchActions?: BatchAction[]; selectedRows?: Set<number>; onSelectionChange?: (rows: Set<number>) => void; onBatchAction?: (action: BatchAction, rows: number[]) => void; onSortChange?: (sort: Sort) => void; onView?: (row: string[], rowIndex: number) => void; onEdit?: (row: string[], rowIndex: number) => void; onDelete?: (row: string[], rowIndex: number) => void };
 
-export function DataTable({ columns, rows, columnMeta = [], defaultSort, batchActions = [], selectedRows = new Set(), onSelectionChange, onBatchAction, onSortChange, onView, onEdit, onDelete }: Props) {
+const EMPTY_COLUMN_META: ColumnMeta[] = [];
+const EMPTY_BATCH_ACTIONS: BatchAction[] = [];
+const EMPTY_SELECTED_ROWS = new Set<number>();
+
+export function reconcileColumnOrder(current: number[], indexes: readonly number[]) {
+  const next = [...current.filter((index) => indexes.includes(index)), ...indexes.filter((index) => !current.includes(index))];
+  return current.length === next.length && current.every((index, position) => index === next[position]) ? current : next;
+}
+
+export function reconcileHiddenColumns(current: Set<number>, indexes: readonly number[], defaultHiddenIndexes: readonly number[]) {
+  const next = new Set([
+    ...[...current].filter((index) => indexes.includes(index)),
+    ...defaultHiddenIndexes,
+  ]);
+  return current.size === next.size && [...current].every((index) => next.has(index)) ? current : next;
+}
+
+export function DataTable({ columns, rows, columnMeta = EMPTY_COLUMN_META, defaultSort, batchActions = EMPTY_BATCH_ACTIONS, selectedRows = EMPTY_SELECTED_ROWS, onSelectionChange, onBatchAction, onSortChange, onView, onEdit, onDelete }: Props) {
   const { language } = useLanguage();
   const hasActions = Boolean(onView || onEdit || onDelete);
   const hasSelection = Boolean(onSelectionChange && batchActions.length);
@@ -43,11 +60,11 @@ export function DataTable({ columns, rows, columnMeta = [], defaultSort, batchAc
   const moveColumn = (from: number, to: number) => setColumnOrder((current) => { const next = [...current]; const [item] = next.splice(from, 1); next.splice(to, 0, item); return next; });
   useEffect(() => {
     const indexes = visibleColumns.map(({ index }) => index);
-    setColumnOrder((current) => [...current.filter((index) => indexes.includes(index)), ...indexes.filter((index) => !current.includes(index))]);
-    setHiddenColumns((current) => new Set([
-      ...[...current].filter((index) => indexes.includes(index)),
-      ...visibleColumns.filter(({ column }) => columnMeta.find((meta) => meta.name === column)?.visible === false).map(({ index }) => index),
-    ]));
+    const defaultHiddenIndexes = visibleColumns
+      .filter(({ column }) => columnMeta.find((meta) => meta.name === column)?.visible === false)
+      .map(({ index }) => index);
+    setColumnOrder((current) => reconcileColumnOrder(current, indexes));
+    setHiddenColumns((current) => reconcileHiddenColumns(current, indexes, defaultHiddenIndexes));
   }, [columnMeta, visibleColumns]);
   useEffect(() => setSort(defaultSort ?? null), [defaultSort]);
   const toggleSort = (column: string) => {

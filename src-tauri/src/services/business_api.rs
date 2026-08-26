@@ -1,4 +1,4 @@
-use crate::repositories::{secrets, storage};
+use crate::repositories::{projects, secrets};
 use crate::services::url_security::{
     read_limited_response, validate_content_length, validate_https_or_debug_local,
 };
@@ -11,10 +11,8 @@ pub struct ApiRequest {
     pub method: String,
     pub headers: Option<HashMap<String, String>>,
     pub body: Option<serde_json::Value>,
-    pub auth_type: Option<String>,
-    pub secret_ref: Option<String>,
-    pub api_key_name: Option<String>,
-    pub ca_pem: Option<String>,
+    pub project_id: String,
+    pub api_document_id: String,
     pub operation_key: Option<String>,
 }
 
@@ -26,25 +24,50 @@ pub struct ApiResponse {
 
 #[derive(Deserialize)]
 struct StoredBusinessConnection {
+    #[serde(default)]
+    r#type: String,
+    #[serde(rename = "secretRef")]
+    secret_ref: Option<String>,
+    #[serde(rename = "apiKeyName")]
+    api_key_name: Option<String>,
+    #[serde(rename = "caPem")]
+    ca_pem: Option<String>,
     #[serde(rename = "apiBaseUrl")]
     api_base_url: Option<String>,
     #[serde(rename = "authorizedOperations", default)]
     authorized_operations: Vec<String>,
 }
 
-fn validate_authorized_operation(
+struct AuthorizedDocument {
+    base_url: String,
+    auth: StoredBusinessConnection,
+}
+
+fn authorize_document(
+    project_id: &str,
+    api_document_id: &str,
     method: &str,
     target: &url::Url,
     operation_key: Option<&str>,
-) -> Result<String, String> {
+) -> Result<AuthorizedDocument, String> {
     let operation_key = operation_key.ok_or("业务请求缺少 operation 授权标识")?;
-    let stored = storage::load_business_connection()?.ok_or("请先保存业务连接与 operation 授权")?;
-    let connection: StoredBusinessConnection =
-        serde_json::from_str(&stored).map_err(|_| "本地业务连接配置无效".to_string())?;
+    let document = projects::resolve_api_document(project_id, api_document_id)?;
+    let connection: StoredBusinessConnection = serde_json::from_value(document.payload.auth)
+        .map_err(|_| "API 文档的业务连接配置无效".to_string())?;
     let base_url = connection
         .api_base_url
+        .as_deref()
         .filter(|value| !value.trim().is_empty())
-        .ok_or("业务连接缺少已授权 API 基址")?;
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            document
+                .payload
+                .spec
+                .get("api_base_url")
+                .and_then(|value| value.as_str())
+                .map(ToOwned::to_owned)
+        })
+        .ok_or("API 文档缺少已授权服务地址")?;
     if !connection
         .authorized_operations
         .iter()
@@ -58,11 +81,25 @@ fn validate_authorized_operation(
         .ok_or("operation 授权标识无效")?;
     let (expected_method, expected_path) =
         expected.split_once(' ').ok_or("operation 授权标识无效")?;
-    let path_matches = matches_operation_path(expected_path, target.path());
+    validate_target(target, Some(&base_url))?;
+    let base = url::Url::parse(&base_url).map_err(|_| "已授权业务服务地址无效".to_string())?;
+    let base_path = base.path().trim_end_matches('/');
+    let target_path = if base_path.is_empty() || base_path == "/" {
+        target.path()
+    } else {
+        target
+            .path()
+            .strip_prefix(base_path)
+            .unwrap_or(target.path())
+    };
+    let path_matches = matches_operation_path(expected_path, target_path);
     if expected_method != method || !path_matches {
         return Err("请求与已授权 operation 不匹配".into());
     }
-    Ok(base_url)
+    Ok(AuthorizedDocument {
+        base_url,
+        auth: connection,
+    })
 }
 
 fn matches_operation_path(pattern: &str, path: &str) -> bool {
@@ -123,9 +160,14 @@ fn validate_ca_pem(ca_pem: &str) -> Result<reqwest::Certificate, String> {
 pub async fn execute(request: ApiRequest) -> Result<ApiResponse, String> {
     let parsed = url::Url::parse(&request.url).map_err(|_| "业务 API 地址无效".to_string())?;
     let method = request.method.to_uppercase();
-    let authorized_base_url =
-        validate_authorized_operation(&method, &parsed, request.operation_key.as_deref())?;
-    validate_target(&parsed, Some(&authorized_base_url))?;
+    let authorized = authorize_document(
+        &request.project_id,
+        &request.api_document_id,
+        &method,
+        &parsed,
+        request.operation_key.as_deref(),
+    )?;
+    validate_target(&parsed, Some(&authorized.base_url))?;
     validate_https_or_debug_local(&parsed, "业务 API")?;
     if !matches!(method.as_str(), "GET" | "POST" | "PUT" | "PATCH" | "DELETE") {
         return Err("不支持的 HTTP 方法".into());
@@ -133,7 +175,7 @@ pub async fn execute(request: ApiRequest) -> Result<ApiResponse, String> {
     let mut client_builder = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none());
-    if let Some(ca_pem) = request.ca_pem.filter(|pem| !pem.trim().is_empty()) {
+    if let Some(ca_pem) = authorized.auth.ca_pem.filter(|pem| !pem.trim().is_empty()) {
         client_builder = client_builder.add_root_certificate(validate_ca_pem(&ca_pem)?);
     }
     let client = client_builder.build().map_err(|e| e.to_string())?;
@@ -152,12 +194,19 @@ pub async fn execute(request: ApiRequest) -> Result<ApiResponse, String> {
             }
         }
     }
-    if let (Some(auth_type), Some(secret_ref)) = (request.auth_type, request.secret_ref) {
+    if let Some(secret_ref) = authorized
+        .auth
+        .secret_ref
+        .filter(|_| authorized.auth.r#type != "none")
+    {
         let secret = secrets::load(&secret_ref).map_err(|_| "无法读取业务 API 凭证".to_string())?;
-        builder = match auth_type.as_str() {
+        builder = match authorized.auth.r#type.as_str() {
             "bearer" => builder.bearer_auth(secret),
             "apiKey" => {
-                let header_name = request.api_key_name.unwrap_or_else(|| "x-api-key".into());
+                let header_name = authorized
+                    .auth
+                    .api_key_name
+                    .unwrap_or_else(|| "x-api-key".into());
                 validate_credential_header(&header_name)?;
                 builder.header(header_name, secret)
             }

@@ -5,6 +5,8 @@ import { SelectField } from "../../components/SelectField";
 
 export function PageHeader({
   page,
+  projectId,
+  apiDocumentIds,
   isStreaming,
   modelId,
   templateId,
@@ -16,8 +18,11 @@ export function PageHeader({
   onThemeChange,
   onLoadData,
   loadingData,
+  showPageActions = true,
 }: {
   page: PageSpec;
+  projectId: string;
+  apiDocumentIds: string[];
   isStreaming: boolean;
   modelId?: string;
   templateId?: string;
@@ -29,6 +34,7 @@ export function PageHeader({
   onThemeChange: (theme: ThemeStyle) => void;
   onLoadData?: () => void;
   loadingData?: boolean;
+  showPageActions?: boolean;
 }) {
   return (
     <div className="panel-head">
@@ -48,13 +54,15 @@ export function PageHeader({
           <SelectField className="theme-select" value={theme} options={[{ value: "forge-default", label: zh ? "暗色默认" : "Dark default" }, { value: "enterprise-blue", label: zh ? "企业蓝白" : "Enterprise blue" }, { value: "clean-light", label: zh ? "干净浅色" : "Clean light" }, { value: "minimal-dark", label: zh ? "极简深色" : "Minimal dark" }]} onChange={(value) => onThemeChange(value as ThemeStyle)} ariaLabel={zh ? "切换页面主题" : "Switch page theme"} />
           {onLoadData && <button type="button" className="secondary" disabled={loadingData} onClick={onLoadData}><RefreshCw size={14} />{loadingData ? (zh ? "加载中" : "Loading") : (zh ? "加载真实数据" : "Load real data")}</button>}
           {onCreate && <button type="button" className="primary" onClick={onCreate}><Plus size={14} />{zh ? "新增" : "New"}</button>}
-          <PageExportActions
+          {showPageActions && <PageExportActions
             page={page}
+            projectId={projectId}
+            apiDocumentIds={apiDocumentIds}
             modelId={modelId}
             templateId={templateId}
             templateName={templateName}
             onSaved={onSaved}
-          />
+          />}
         </div>
       )}
     </div>

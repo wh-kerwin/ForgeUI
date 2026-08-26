@@ -42,6 +42,12 @@ fn default_version() -> u32 {
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct OperationBinding {
+    #[serde(
+        rename = "apiDocumentId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub api_document_id: Option<String>,
     pub operation_id: String,
     pub method: String,
     pub path: String,
@@ -107,6 +113,12 @@ pub struct ColumnMeta {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BatchAction {
+    #[serde(
+        rename = "apiDocumentId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub api_document_id: Option<String>,
     pub operation_id: String,
     pub method: String,
     pub path: String,
@@ -561,6 +573,7 @@ mod tests {
             "columns": ["ID"],
             "rows": [["1"]],
             "operations": [{
+                "apiDocumentId": "devices-api",
                 "operation_id": "deleteDevice",
                 "method": "DELETE",
                 "path": "/devices/{id}",
@@ -573,6 +586,14 @@ mod tests {
         assert_eq!(
             spec.operations[0].confirm_message.as_deref(),
             Some("删除后无法恢复")
+        );
+        assert_eq!(
+            spec.operations[0].api_document_id.as_deref(),
+            Some("devices-api")
+        );
+        assert_eq!(
+            serde_json::to_value(&spec).unwrap()["operations"][0]["apiDocumentId"],
+            "devices-api"
         );
         assert!(matches!(
             spec.interaction.unwrap().update,

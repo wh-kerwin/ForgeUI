@@ -95,6 +95,7 @@ export function parsePageSpec(value: unknown): PageSpec | null {
         (operation) =>
           isRecord(operation) &&
           typeof operation.operation_id === "string" &&
+          (operation.apiDocumentId === undefined || (typeof operation.apiDocumentId === "string" && operation.apiDocumentId.length > 0)) &&
           typeof operation.method === "string" &&
           ["GET", "POST", "PUT", "PATCH", "DELETE"].includes(operation.method) &&
           typeof operation.path === "string" &&
@@ -114,7 +115,7 @@ export function parsePageSpec(value: unknown): PageSpec | null {
       !value.views.every((view) => isPageView(view)))
   )
     return null;
-  if (value.batchActions !== undefined && (!Array.isArray(value.batchActions) || value.batchActions.length > 10 || !value.batchActions.every((action) => isRecord(action) && typeof action.operation_id === "string" && action.operation_id.length > 0 && ["POST", "DELETE"].includes(String(action.method)) && typeof action.path === "string" && action.path.length > 0 && (action.confirmMessage === undefined || typeof action.confirmMessage === "string") && isRecord(action.payloadBuilder) && (action.payloadBuilder.type === "ids" || (action.payloadBuilder.type === "custom" && typeof action.payloadBuilder.customPayload === "string" && action.payloadBuilder.customPayload.length > 0))))) return null;
+  if (value.batchActions !== undefined && (!Array.isArray(value.batchActions) || value.batchActions.length > 10 || !value.batchActions.every((action) => isRecord(action) && (action.apiDocumentId === undefined || (typeof action.apiDocumentId === "string" && action.apiDocumentId.length > 0)) && typeof action.operation_id === "string" && action.operation_id.length > 0 && ["POST", "DELETE"].includes(String(action.method)) && typeof action.path === "string" && action.path.length > 0 && (action.confirmMessage === undefined || typeof action.confirmMessage === "string") && isRecord(action.payloadBuilder) && (action.payloadBuilder.type === "ids" || (action.payloadBuilder.type === "custom" && typeof action.payloadBuilder.customPayload === "string" && action.payloadBuilder.customPayload.length > 0))))) return null;
   if (
     value.interaction !== undefined &&
     (!isRecord(value.interaction) ||

@@ -1710,3 +1710,172 @@ td {
     margin-right: 0;
   }
 }
+
+/* CRUD pages use a compact command layout: filters first, then actions, then data. */
+.generated-page--crud .generated-page-workspace {
+  display: block;
+}
+
+.generated-page--crud .generated-page-rail {
+  position: static;
+  width: 100%;
+  margin: 14px 0 0;
+  padding: 16px;
+  border: 1px solid var(--fg-border, #273241);
+  border-radius: var(--fg-radius, 7px);
+  background: var(--fg-surface-alt, #121923);
+}
+
+.generated-page--crud .filter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px 18px;
+  align-items: end;
+  margin: 0;
+}
+
+.generated-page--crud .filter-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: 0 16px;
+}
+
+.generated-page--crud .filter-row .ant-form-item {
+  margin-bottom: 0;
+}
+
+.generated-page--crud .filter-row .ant-form-item-label {
+  padding-bottom: 5px;
+}
+
+.generated-page--crud .filter-row .ant-form-item-label > label {
+  height: auto;
+  color: var(--fg-text-muted, #8290a3);
+  font-size: 12px;
+}
+
+.generated-page--crud .ant-input,
+.generated-page--crud .ant-input-affix-wrapper {
+  min-height: 34px;
+  border-color: var(--fg-border-control, #303b4b);
+  background: var(--fg-surface-control, #101720);
+  color: var(--fg-text, #e9edf5);
+  box-shadow: none;
+}
+
+.generated-page--crud .ant-input::placeholder {
+  color: var(--fg-text-subtle, #687187);
+}
+
+.generated-page--crud .filter-actions,
+.generated-command-bar,
+.generated-command-bar__primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.generated-page--crud .filter-actions {
+  padding-bottom: 1px;
+}
+
+.generated-page .ant-btn {
+  border-color: var(--fg-border-control, #303b4b);
+  background: var(--fg-surface-control, #101720);
+  color: var(--fg-text, #e9edf5);
+  box-shadow: none;
+}
+
+.generated-page .ant-btn-primary {
+  border-color: var(--fg-primary-bg, #1677ff);
+  background: var(--fg-primary-bg, #1677ff);
+  color: var(--fg-on-primary, #ffffff);
+}
+
+.generated-page .ant-btn-primary:not(:disabled):not(.ant-btn-disabled):hover {
+  border-color: var(--fg-primary-bg-hover, #4096ff);
+  background: var(--fg-primary-bg-hover, #4096ff);
+  color: var(--fg-on-primary, #ffffff);
+}
+
+.generated-page .ant-pagination {
+  color: var(--fg-text-muted, #8290a3);
+}
+
+.generated-page .ant-pagination .ant-pagination-item,
+.generated-page .ant-pagination .ant-pagination-prev button,
+.generated-page .ant-pagination .ant-pagination-next button,
+.generated-page .ant-pagination .ant-pagination-jump-next .ant-pagination-item-link,
+.generated-page .ant-pagination .ant-pagination-jump-prev .ant-pagination-item-link {
+  border-color: var(--fg-border-control, #303b4b);
+  background: var(--fg-surface-control, #101720);
+  color: var(--fg-text, #e9edf5);
+}
+
+.generated-page .ant-pagination .ant-pagination-item-active {
+  border-color: var(--fg-primary, #d5fa61);
+}
+
+.generated-page .ant-pagination .ant-pagination-item-active a {
+  color: var(--fg-primary, #d5fa61);
+}
+
+.generated-command-bar {
+  justify-content: space-between;
+  min-height: 58px;
+  margin: 14px 0 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--fg-border, #273241);
+}
+
+.generated-command-bar .page-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.generated-page--crud .table-action {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg-primary, #1677ff);
+}
+
+.generated-page--crud .table-action:hover {
+  border: 0;
+  background: transparent;
+  color: var(--fg-primary-bg-hover, #4096ff);
+}
+
+.generated-page--crud .table-action-danger,
+.generated-page--crud .table-action-danger:hover {
+  color: var(--fg-danger, #ff4d4f);
+}
+
+.generated-page .chart-canvas {
+  height: 300px;
+  margin-top: 8px;
+}
+
+.generated-page .chart-heading > span {
+  color: var(--fg-text-muted, #8290a3);
+  font-size: 12px;
+}
+
+.generated-page .mini-chart {
+  display: block;
+}
+
+@media (max-width: 760px) {
+  .generated-page--crud .filter-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .generated-page--crud .filter-actions {
+    padding: 0;
+  }
+
+  .generated-command-bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

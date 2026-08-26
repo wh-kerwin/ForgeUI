@@ -1,8 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   BusinessAuth,
+  ApiDocument,
   GenerationSession,
   ModelConfig,
+  Project,
   TemplateRecord,
   TemplateVersion,
 } from "../../types/domain";
@@ -49,8 +51,42 @@ export async function saveSecret(secretRef: string, value: string) {
 export async function loadSecret(secretRef: string) {
   return invoke<string>("load_secret", { secretRef });
 }
-export async function listTemplates() {
-  return (await invoke<string[]>("load_templates")).map(
+export async function listProjects() {
+  return invoke<Project[]>("list_projects");
+}
+export async function createProject(id: string, name: string) {
+  await invoke("create_project", { id, name });
+}
+export async function renameProject(id: string, name: string) {
+  await invoke("rename_project", { id, name });
+}
+export async function deleteProject(id: string) {
+  await invoke("delete_project", { id });
+}
+export async function saveProjectDocumentSelection(projectId: string, apiDocumentIds: string[]) {
+  await invoke("set_project_selected_api_documents", { projectId, apiDocumentIds });
+}
+export async function listApiDocuments(projectId: string) {
+  const records = await invoke<Array<Omit<ApiDocument, "spec" | "auth"> & { payload: Pick<ApiDocument, "spec" | "auth"> }>>("list_api_documents", { projectId });
+  return records.map(({ payload, ...record }) => ({ ...record, ...payload }));
+}
+export async function saveApiDocument(document: ApiDocument) {
+  await invoke("save_api_document", {
+    id: document.id,
+    projectId: document.projectId,
+    name: document.name,
+    enabled: document.enabled,
+    payload: JSON.stringify({ spec: document.spec, auth: document.auth }),
+  });
+}
+export async function setApiDocumentEnabled(projectId: string, apiDocumentId: string, enabled: boolean) {
+  await invoke("set_api_document_enabled", { projectId, apiDocumentId, enabled });
+}
+export async function deleteApiDocument(projectId: string, apiDocumentId: string) {
+  await invoke("delete_api_document", { projectId, apiDocumentId });
+}
+export async function listTemplates(projectId: string) {
+  return (await invoke<string[]>("load_templates", { projectId })).map(
     (row) => JSON.parse(row) as TemplateRecord,
   );
 }
@@ -68,8 +104,8 @@ export async function listTemplateVersions(id: string) {
 export async function restoreTemplateVersion(id: string, version: number) {
   await invoke("restore_template_version", { id, version });
 }
-export async function listGenerationSessions() {
-  return (await invoke<string[]>("load_generation_sessions")).map(
+export async function listGenerationSessions(projectId: string) {
+  return (await invoke<string[]>("load_generation_sessions", { projectId })).map(
     (row) => JSON.parse(row) as GenerationSession,
   );
 }
@@ -77,15 +113,19 @@ export async function deleteGenerationSession(id: string) {
   await invoke("delete_generation_session", { id });
 }
 export async function saveGenerationSession(
+  projectId: string,
   modelId: string,
   prompt: string,
   payload: string,
+  apiDocumentIds: string[],
 ) {
   await invoke("save_generation_session", {
     id: crypto.randomUUID(),
+    projectId,
     modelId,
     prompt,
     payload,
+    apiDocumentIds,
   });
 }
 export async function backupLocalDatabase() {

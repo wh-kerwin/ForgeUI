@@ -42,6 +42,7 @@ test("page metadata, documented operation roles, and linked body schemas parse",
     createdAt: "2026-08-25T10:00:00Z",
     updatedAt: "2026-08-25T11:00:00Z",
     operations: [{
+      apiDocumentId: "orders-api",
       operation_id: "updateOrder",
       method: "PATCH",
       path: "/orders/{id}",
@@ -54,8 +55,10 @@ test("page metadata, documented operation roles, and linked body schemas parse",
   });
   assert.equal(parsed?.layout, "sidebar");
   assert.equal(parsed?.operations?.[0].bodySchema?.[1].visibleWhen?.field, "status");
+  assert.equal(parsed?.operations?.[0].apiDocumentId, "orders-api");
   assert.equal(parsePageSpec({ ...base, layout: "popover" }), null);
   assert.equal(parsePageSpec({ ...base, operations: [{ operation_id: "x", method: "POST", path: "/x", role: "create", bodySchema: [{ name: "reason", type: "string", required: true, visibleWhen: { field: "status", equals: [] } }] }] }), null);
+  assert.equal(parsePageSpec({ ...base, operations: [{ apiDocumentId: 42, operation_id: "x", method: "GET", path: "/x", role: "list" }] }), null);
 });
 
 test("money formatting follows the declared currency symbol", () => {

@@ -66,6 +66,7 @@ export type ColumnMeta = {
 };
 
 export type BatchAction = {
+  apiDocumentId?: string;
   operation_id: string;
   method: "POST" | "DELETE";
   path: string;
@@ -76,6 +77,7 @@ export type BatchAction = {
 export type InteractionMode = "modal" | "drawer" | "inline" | "redirect";
 
 export type OperationBinding = {
+  apiDocumentId?: string;
   operation_id: string;
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
@@ -105,6 +107,26 @@ export type OpenApiSummary = {
   api_base_url: string;
   discovered_url: string;
   fieldSchemas?: Record<string, FieldSchema[]>;
+  queryParameters?: Record<string, string[]>;
+};
+
+export type Project = {
+  id: string;
+  name: string;
+  selectedApiDocumentIds: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ApiDocument = {
+  id: string;
+  projectId: string;
+  name: string;
+  enabled: boolean;
+  spec: OpenApiSummary;
+  auth: BusinessAuth;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type FieldSchema = {
@@ -116,7 +138,7 @@ export type FieldSchema = {
   visibleWhen?: { field: string; equals: string | string[] };
 };
 
-export type AllowedOperation = { operation_id: string; method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; path: string };
+export type AllowedOperation = { api_document_id?: string; operation_id: string; method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; path: string };
 
 export type BusinessAuth = {
   type: string;
@@ -131,11 +153,13 @@ export type BusinessAuth = {
 
 export type TemplateRecord = {
   id: string;
+  projectId: string;
   name: string;
   payload: string;
   version: number;
   updatedAt: string;
   modelId?: string | null;
+  apiDocumentIds: string[];
 };
 export type TemplateVersion = {
   version: number;
@@ -145,8 +169,10 @@ export type TemplateVersion = {
 
 export type GenerationSession = {
   id: string;
+  projectId: string;
   modelId: string;
   prompt: string;
   payload: string;
   createdAt: string;
+  apiDocumentIds: string[];
 };

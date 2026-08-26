@@ -49,6 +49,8 @@ pub struct GenerateInput {
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct AllowedOperation {
+    #[serde(default)]
+    pub api_document_id: Option<String>,
     pub operation_id: String,
     pub method: String,
     pub path: String,
@@ -215,7 +217,7 @@ where
     let schema = page_schema::schema();
     let custom_prompt = input.system_prompt.unwrap_or_default();
     let custom_prompt: String = custom_prompt.chars().take(4000).collect();
-    let system = format!("You generate ONLY valid JSON matching this PageSpec schema: {schema}. filters and columns MUST be arrays of strings, never objects. rows MUST be arrays of arrays of strings, never objects. stats values MUST be strings. Every view column reference (defaultSort.column, chart axes/group, and kanban group/card fields) MUST exactly match one string in columns; omit a view when its required columns are unavailable. Keep the output compact: use at most 10 columns, 4 sample rows, and 3 top-level views; omit optional metadata that does not improve the requested screen. Use layout=full by default so filters and stats appear above the main view; use layout=sidebar only when the user explicitly requests a sidebar or side-by-side filter layout. Explicit user requests for modal/dialog detail or editing MUST be reflected in interaction.detail or interaction.update. When an existing PageSpec is provided, preserve its operation bindings exactly; never invent an operation_id, method, or path. If no authorized operation exists for a requested action, represent it as local UI state only. Never include markdown or code. Do not invent credentials or execute actions. The UI is a read-only preview. {}", custom_prompt);
+    let system = format!("You generate ONLY valid JSON matching this PageSpec schema: {schema}. filters and columns MUST be arrays of strings, never objects. rows MUST be arrays of arrays of strings, never objects. stats values MUST be strings. Every view column reference (defaultSort.column, chart axes/group, and kanban group/card fields) MUST exactly match one string in columns; omit a view when its required columns are unavailable. Keep the output compact: use at most 10 columns, 4 sample rows, and 3 top-level views; omit optional metadata that does not improve the requested screen. Use layout=full by default so filters and stats appear above the main view; use layout=sidebar only when the user explicitly requests a sidebar or side-by-side filter layout. Explicit user requests for modal/dialog detail or editing MUST be reflected in interaction.detail or interaction.update. When an existing PageSpec is provided, preserve its operation bindings exactly; never invent an apiDocumentId, operation_id, method, or path. Every new operation and batch action binding MUST copy apiDocumentId from the matching authorized OpenAPI operation. If no authorized operation exists for a requested action, represent it as local UI state only. Never include markdown or code. Do not invent credentials or execute actions. The UI is a read-only preview. {}", custom_prompt);
     let context = input
         .openapi_context
         .unwrap_or_else(|| "No OpenAPI context provided".into());
@@ -565,20 +567,30 @@ fn validate_operation_bindings(
         return Ok(());
     }
     let allowed = allowed.ok_or("页面声明了 operation 绑定，但未提供已导入 OpenAPI 允许列表")?;
-    let is_allowed = |operation_id: &str, method: &str, path: &str| {
-        allowed.iter().any(|operation| {
-            operation.operation_id == operation_id
-                && operation.method == method
-                && operation.path == path
-        })
-    };
-    if bindings
-        .iter()
-        .any(|binding| !is_allowed(&binding.operation_id, &binding.method, &binding.path))
-        || batch_actions
-            .iter()
-            .any(|action| !is_allowed(&action.operation_id, &action.method, &action.path))
-    {
+    let is_allowed =
+        |api_document_id: Option<&str>, operation_id: &str, method: &str, path: &str| {
+            allowed.iter().any(|operation| {
+                operation.api_document_id.as_deref() == api_document_id
+                    && operation.operation_id == operation_id
+                    && operation.method == method
+                    && operation.path == path
+            })
+        };
+    if bindings.iter().any(|binding| {
+        !is_allowed(
+            binding.api_document_id.as_deref(),
+            &binding.operation_id,
+            &binding.method,
+            &binding.path,
+        )
+    }) || batch_actions.iter().any(|action| {
+        !is_allowed(
+            action.api_document_id.as_deref(),
+            &action.operation_id,
+            &action.method,
+            &action.path,
+        )
+    }) {
         return Err("PageSpec 包含不属于已导入 OpenAPI 的 operation 绑定".into());
     }
     Ok(())
@@ -586,17 +598,31 @@ fn validate_operation_bindings(
 
 fn retain_allowed_model_bindings(spec: &mut PageSpec, allowed: Option<&[AllowedOperation]>) {
     let allowed = allowed.unwrap_or_default();
-    let is_allowed = |operation_id: &str, method: &str, path: &str| {
-        allowed.iter().any(|operation| {
-            operation.operation_id == operation_id
-                && operation.method == method
-                && operation.path == path
-        })
-    };
-    spec.operations
-        .retain(|binding| is_allowed(&binding.operation_id, &binding.method, &binding.path));
-    spec.batch_actions
-        .retain(|action| is_allowed(&action.operation_id, &action.method, &action.path));
+    let is_allowed =
+        |api_document_id: Option<&str>, operation_id: &str, method: &str, path: &str| {
+            allowed.iter().any(|operation| {
+                operation.api_document_id.as_deref() == api_document_id
+                    && operation.operation_id == operation_id
+                    && operation.method == method
+                    && operation.path == path
+            })
+        };
+    spec.operations.retain(|binding| {
+        is_allowed(
+            binding.api_document_id.as_deref(),
+            &binding.operation_id,
+            &binding.method,
+            &binding.path,
+        )
+    });
+    spec.batch_actions.retain(|action| {
+        is_allowed(
+            action.api_document_id.as_deref(),
+            &action.operation_id,
+            &action.method,
+            &action.path,
+        )
+    });
 }
 
 fn explicit_layout(prompt: &str) -> &'static str {
@@ -665,8 +691,12 @@ fn explicit_modal_actions(prompt: &str) -> (bool, bool) {
         if !has_positive_modal {
             continue;
         }
-        detail |= detail_patterns.iter().any(|pattern| clause.contains(pattern));
-        update |= update_patterns.iter().any(|pattern| clause.contains(pattern));
+        detail |= detail_patterns
+            .iter()
+            .any(|pattern| clause.contains(pattern));
+        update |= update_patterns
+            .iter()
+            .any(|pattern| clause.contains(pattern));
     }
 
     (detail, update)
@@ -678,7 +708,9 @@ fn apply_explicit_page_intent(spec: &mut PageSpec, prompt: &str) {
     if !detail_modal && !update_modal {
         return;
     }
-    let interaction = spec.interaction.get_or_insert_with(InteractionSpec::default);
+    let interaction = spec
+        .interaction
+        .get_or_insert_with(InteractionSpec::default);
     if detail_modal {
         interaction.detail = Some(InteractionMode::Modal);
     }
@@ -954,6 +986,7 @@ mod tests {
     #[test]
     fn rejects_operation_bindings_outside_openapi_allow_list() {
         let binding = OperationBinding {
+            api_document_id: None,
             operation_id: "getDevice".into(),
             method: "GET".into(),
             path: "/devices/{id}".into(),
@@ -964,6 +997,7 @@ mod tests {
             sort_param: None,
         };
         let allowed = vec![AllowedOperation {
+            api_document_id: None,
             operation_id: "listDevices".into(),
             method: "GET".into(),
             path: "/devices".into(),
@@ -972,8 +1006,45 @@ mod tests {
     }
 
     #[test]
+    fn operation_bindings_must_match_the_authorized_document_identity() {
+        let mut binding = OperationBinding {
+            api_document_id: Some("document-b".into()),
+            operation_id: "listDevices".into(),
+            method: "GET".into(),
+            path: "/devices".into(),
+            role: "list".into(),
+            body_schema: None,
+            confirm_message: None,
+            pagination: None,
+            sort_param: None,
+        };
+        let allowed = vec![AllowedOperation {
+            api_document_id: Some("document-a".into()),
+            operation_id: "listDevices".into(),
+            method: "GET".into(),
+            path: "/devices".into(),
+        }];
+
+        assert!(
+            validate_operation_bindings(std::slice::from_ref(&binding), &[], Some(&allowed))
+                .is_err()
+        );
+        binding.api_document_id = Some("document-a".into());
+        assert!(
+            validate_operation_bindings(std::slice::from_ref(&binding), &[], Some(&allowed))
+                .is_ok()
+        );
+        binding.api_document_id = None;
+        assert!(
+            validate_operation_bindings(std::slice::from_ref(&binding), &[], Some(&allowed))
+                .is_err()
+        );
+    }
+
+    #[test]
     fn rejects_batch_actions_outside_openapi_allow_list() {
         let action = BatchAction {
+            api_document_id: None,
             operation_id: "archiveDevices".into(),
             method: "POST".into(),
             path: "/devices/archive".into(),
@@ -984,6 +1055,7 @@ mod tests {
             },
         };
         let allowed = vec![AllowedOperation {
+            api_document_id: None,
             operation_id: "listDevices".into(),
             method: "GET".into(),
             path: "/devices".into(),
@@ -994,6 +1066,7 @@ mod tests {
     #[test]
     fn model_output_drops_hallucinated_bindings_without_weakening_strict_validation() {
         let allowed = vec![AllowedOperation {
+            api_document_id: None,
             operation_id: "listDevices".into(),
             method: "GET".into(),
             path: "/devices".into(),
@@ -1133,9 +1206,18 @@ mod tests {
     fn explicit_modal_intent_targets_view_and_edit_in_chinese_and_english() {
         assert_eq!(explicit_modal_actions("查看编辑要用弹窗"), (true, true));
         assert_eq!(explicit_modal_actions("详情使用对话框"), (true, false));
-        assert_eq!(explicit_modal_actions("Edit records in a modal"), (false, true));
-        assert_eq!(explicit_modal_actions("View and edit in a modal dialog"), (true, true));
-        assert_eq!(explicit_modal_actions("编辑使用内联区域，不要用弹窗"), (false, false));
+        assert_eq!(
+            explicit_modal_actions("Edit records in a modal"),
+            (false, true)
+        );
+        assert_eq!(
+            explicit_modal_actions("View and edit in a modal dialog"),
+            (true, true)
+        );
+        assert_eq!(
+            explicit_modal_actions("编辑使用内联区域，不要用弹窗"),
+            (false, false)
+        );
     }
 
     #[test]

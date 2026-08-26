@@ -3,26 +3,34 @@ import { invoke } from "@tauri-apps/api/core";
 import type { GenerationSession, PageSpec, TemplateRecord, TemplateVersion } from "../../types/domain";
 import { deleteGenerationSession, deleteTemplate, listGenerationSessions, listTemplateVersions, listTemplates, renameTemplate, restoreTemplateVersion, saveGenerationSession } from "../../lib/tauri/storage";
 
-type Args = { onNotice: (message: string) => void };
+type Args = { projectId: string; onNotice: (message: string) => void };
 
-export function useWorkbenchPersistence({ onNotice }: Args) {
+export function useWorkbenchPersistence({ projectId, onNotice }: Args) {
   const [templates, setTemplates] = useState<TemplateRecord[]>([]);
   const [versions, setVersions] = useState<TemplateVersion[]>([]);
   const [versionTemplateId, setVersionTemplateId] = useState("");
   const [sessions, setSessions] = useState<GenerationSession[]>([]);
 
   async function refreshTemplates() {
-    try { setTemplates(await listTemplates()); } catch { /* Browser preview has no native database. */ }
+    if (!projectId) return setTemplates([]);
+    try { setTemplates(await listTemplates(projectId)); } catch { /* Browser preview has no native database. */ }
   }
 
   async function refreshSessions() {
-    try { setSessions(await listGenerationSessions()); } catch { /* Browser preview has no native database. */ }
+    if (!projectId) return setSessions([]);
+    try { setSessions(await listGenerationSessions(projectId)); } catch { /* Browser preview has no native database. */ }
   }
 
-  useEffect(() => { void refreshTemplates(); void refreshSessions(); }, []);
+  useEffect(() => {
+    setVersions([]);
+    setVersionTemplateId("");
+    void refreshTemplates();
+    void refreshSessions();
+  }, [projectId]);
 
-  async function saveSession(modelId: string, prompt: string, page: PageSpec) {
-    await saveGenerationSession(modelId, prompt, JSON.stringify(page));
+  async function saveSession(modelId: string, prompt: string, page: PageSpec, apiDocumentIds: string[]) {
+    if (!projectId) throw new Error("请先选择项目");
+    await saveGenerationSession(projectId, modelId, prompt, JSON.stringify(page), apiDocumentIds);
     await refreshSessions();
   }
 
@@ -56,7 +64,7 @@ export function useWorkbenchPersistence({ onNotice }: Args) {
   }
 
   async function importTemplate(file: File) {
-    try { await invoke("import_template", { document: await file.text() }); await refreshTemplates(); onNotice("模板已导入，请重新绑定本地业务连接后使用"); }
+    try { await invoke("import_template", { document: await file.text(), projectId }); await refreshTemplates(); onNotice("模板已导入当前项目，请确认 API 文档绑定后使用"); }
     catch (error) { onNotice(String(error)); }
   }
 

@@ -10,9 +10,6 @@
     "dev:tauri": "npm run tauri:dev",
     "build": "tsc -b && vite build",
     "test": "node --loader ./scripts/typescript-test-loader.mjs --test tests/*.test.ts",
-    "validate:model-conformance": "node --loader ./scripts/typescript-test-loader.mjs scripts/validate-model-conformance.mjs",
-    "validate:model-conformance:config": "node --loader ./scripts/typescript-test-loader.mjs scripts/validate-model-conformance.mjs --check-client-config",
-    "validate:model-conformance:dry": "node --loader ./scripts/typescript-test-loader.mjs scripts/validate-model-conformance.mjs --dry-run",
     "tauri:build": "tauri build",
     "validate:updater": "node scripts/validate-updater-config.mjs",
     "preview": "vite preview"
@@ -20,9 +17,11 @@
   "dependencies": {
     "@tauri-apps/api": "^2.6.0",
     "@vitejs/plugin-react": "latest",
+    "antd": "^6.6.1",
     "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
+    "recharts": "^3.10.1",
     "typescript": "latest",
     "vite": "latest",
     "zustand": "^5.0.15"
@@ -30,6 +29,7 @@
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",
     "@types/react": "latest",
-    "@types/react-dom": "latest"
+    "@types/react-dom": "latest",
+    "esbuild": "^0.28.2"
   }
 }

@@ -1,14 +1,15 @@
 import { useEffect } from "react";
-import type { BusinessAuth, OpenApiSummary } from "../../types/domain";
+import type { ApiDocument } from "../../types/domain";
 import { useWorkbenchStore } from "../../store/workbenchStore";
 
-type Options = { spec: OpenApiSummary | null; auth: BusinessAuth; onNotice: (message: string) => void; };
+type Options = { projectId: string; apiDocuments: ApiDocument[]; onNotice: (message: string) => void; };
 
-export function useGeneratedPageActions({ spec, auth, onNotice }: Options) {
+export function useGeneratedPageActions({ projectId, apiDocuments, onNotice }: Options) {
   const page = useWorkbenchStore((state) => state.page);
   const setPage = useWorkbenchStore((state) => state.setPage);
   const detail = useWorkbenchStore((state) => state.detail);
   const querying = useWorkbenchStore((state) => state.querying);
+  const queryMeta = useWorkbenchStore((state) => state.queryMeta);
   const configureApi = useWorkbenchStore((state) => state.configureApi);
   const cancelPendingQuery = useWorkbenchStore((state) => state.cancelPendingQuery);
   const query = useWorkbenchStore((state) => state.query);
@@ -17,9 +18,9 @@ export function useGeneratedPageActions({ spec, auth, onNotice }: Options) {
   const deleteRecord = useWorkbenchStore((state) => state.deleteRecord);
 
   useEffect(() => {
-    configureApi({ spec, auth, onNotice });
+    configureApi({ projectId, apiDocuments, onNotice });
     return cancelPendingQuery;
-  }, [auth, cancelPendingQuery, configureApi, onNotice, spec]);
+  }, [apiDocuments, cancelPendingQuery, configureApi, onNotice, projectId]);
 
-  return { page, setPage, detail, querying, query, loadDetail, mutate, deleteRecord };
+  return { page, setPage, detail, querying, queryMeta, query, loadDetail, mutate, deleteRecord };
 }
