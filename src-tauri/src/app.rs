@@ -11,7 +11,7 @@ use crate::{
 use tauri::{
     menu::MenuBuilder,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Emitter, Manager,
 };
 
 fn show_main_window(app: &tauri::AppHandle) {
@@ -36,6 +36,36 @@ async fn validate_model_config(input: ModelConfigInput) -> Result<ValidationResu
 #[tauri::command]
 async fn generate_page(input: GenerateInput) -> Result<PageSpec, String> {
     model_provider::generate_page(input).await
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PageGenerationDelta<'a> {
+    request_id: &'a str,
+    delta: &'a str,
+}
+
+#[tauri::command]
+async fn generate_page_stream(
+    window: tauri::WebviewWindow,
+    input: GenerateInput,
+    request_id: String,
+) -> Result<PageSpec, String> {
+    if request_id.is_empty() || request_id.len() > 128 {
+        return Err("页面生成 requestId 无效".into());
+    }
+    model_provider::generate_page_stream(input, |delta| {
+        window
+            .emit(
+                "page-generation-delta",
+                PageGenerationDelta {
+                    request_id: &request_id,
+                    delta,
+                },
+            )
+            .map_err(|error| format!("发送页面增量失败：{error}"))
+    })
+    .await
 }
 
 #[tauri::command]
@@ -272,6 +302,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             validate_model_config,
             generate_page,
+            generate_page_stream,
             execute_api,
             import_openapi_url,
             discover_openapi_candidates,
@@ -305,9 +336,9 @@ pub fn run() {
             install_update
         ])
         .setup(|app| {
-            // Startup backup happens before the UI can mutate local state. Failure is non-fatal:
-            // a first run has no database yet, and the app remains usable if storage is unavailable.
-            let _ = crate::repositories::database::backup();
+            std::thread::spawn(|| {
+                let _ = crate::repositories::database::backup();
+            });
             #[cfg(feature = "updater")]
             app.handle()
                 .plugin(tauri_plugin_updater::Builder::new().build())?;

@@ -1,9 +1,12 @@
-import type { PageSpec, GenerationSession, TemplateRecord, TemplateVersion } from "../../types/domain";
+import type { FieldSchema, PageSpec, GenerationSession, TemplateRecord, TemplateVersion } from "../../types/domain";
 import { GeneratedPage } from "../pages/GeneratedPage";
 import { GenerationHistory } from "../sessions/GenerationHistory";
 
 type Props = {
   page: PageSpec | null;
+  isStreaming: boolean;
+  fieldSchemas?: Record<string, FieldSchema[]>;
+  grantedRoles?: string[];
   modelId?: string;
   templateId?: string;
   templateName?: string;
@@ -13,7 +16,7 @@ type Props = {
   onSaved: () => void;
   onQuery: (filters: Record<string, string>, operationKey?: string) => void;
   onMutation: (method: string, path: string, body: string, operationKey: string) => void;
-  onDelete: (path: string, id: string, operationKey: string) => void;
+  onDelete: (path: string, id: string, operationKey: string, confirmed?: boolean) => void;
   querying: boolean;
   onRefine: (instruction: string) => Promise<void>;
   refining: boolean;
@@ -33,6 +36,6 @@ type Props = {
   onRenameTemplate: (id: string, name: string) => void;
 };
 
-export function GeneratedWorkbenchView({ page, modelId, templateId, templateName, operations, detail, onDetail, onSaved, onQuery, onMutation, onDelete, querying, onRefine, refining, sessions, templates, versions, selectedTemplateId, onOpenSession, onDeleteSession, onUseTemplate, onShowVersions, onRestore, onInvalid, onExport, onImport, onDeleteTemplate, onRenameTemplate }: Props) {
-  return <>{page && <GeneratedPage page={page} modelId={modelId} templateId={templateId} templateName={templateName} operations={operations} detail={detail} onDetail={onDetail} onSaved={onSaved} onQuery={onQuery} onMutation={onMutation} onDelete={onDelete} querying={querying} onRefine={onRefine} refining={refining} />}<GenerationHistory sessions={sessions} onOpen={onOpenSession} onDelete={onDeleteSession} onInvalid={() => onInvalid("Generation history is invalid")} /></>;
+export function GeneratedWorkbenchView({ page, isStreaming, fieldSchemas, grantedRoles, modelId, templateId, templateName, operations, detail, onDetail, onSaved, onQuery, onMutation, onDelete, querying, onRefine, refining, sessions, templates, versions, selectedTemplateId, onOpenSession, onDeleteSession, onUseTemplate, onShowVersions, onRestore, onInvalid, onExport, onImport, onDeleteTemplate, onRenameTemplate }: Props) {
+  return <>{page && <GeneratedPage page={page} isStreaming={isStreaming} fieldSchemas={fieldSchemas} grantedRoles={grantedRoles} modelId={modelId} templateId={templateId} templateName={templateName} operations={operations} detail={detail} onDetail={onDetail} onSaved={onSaved} onQuery={onQuery} onMutation={onMutation} onDelete={onDelete} querying={querying} onRefine={onRefine} refining={refining} />}<GenerationHistory sessions={sessions} onOpen={onOpenSession} onDelete={onDeleteSession} onInvalid={() => onInvalid("Generation history is invalid")} /></>;
 }

@@ -16,6 +16,7 @@ export type ModelConfig = {
   structuredOutput: "jsonSchema" | "jsonObject" | "prompt";
   customHeaders: Record<string, string>;
   customHeaderSecretRefs?: Record<string, string>;
+  promptTemplateId?: string;
   notes: string;
 };
 
@@ -23,12 +24,77 @@ export type PageSpec = {
   version?: number;
   title: string;
   description: string;
+  layout?: "sidebar" | "full" | "modal";
+  breadcrumb?: string[];
+  permissionRole?: string;
+  createdAt?: string;
+  updatedAt?: string;
   filters: string[];
   stats: { label: string; value: string }[];
   columns: string[];
+  columnMeta?: ColumnMeta[];
   rows: string[][];
-  operations?: { operation_id: string; method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; path: string; role: string }[];
+  operations?: OperationBinding[];
+  views?: PageView[];
+  interaction?: Partial<Record<"create" | "update" | "delete" | "detail", InteractionMode>>;
+  batchActions?: BatchAction[];
+  theme?: ThemeStyle;
+  styleTokens?: StyleToken;
 };
+
+export type ThemeStyle = "forge-default" | "enterprise-blue" | "clean-light" | "minimal-dark" | "custom";
+export type StyleToken = {
+  primary?: string; primaryBg?: string; primaryBgHover?: string;
+  surface?: string; surfaceAlt?: string; surfaceControl?: string;
+  border?: string; borderControl?: string; focusRing?: string;
+  text?: string; textMuted?: string; textSubtle?: string;
+  danger?: string; dangerBg?: string; success?: string;
+  radius?: "none" | "sm" | "md" | "lg" | "full";
+  density?: "compact" | "comfortable" | "relaxed";
+};
+
+export type ColumnMeta = {
+  name: string;
+  type: "string" | "number" | "date" | "datetime" | "enum" | "boolean" | "money";
+  format?: string;
+  enumLabels?: Record<string, string>;
+  sortable?: boolean;
+  filterable?: boolean;
+  searchMode?: "exact" | "fuzzy" | "range";
+  width?: string;
+  visible?: boolean;
+};
+
+export type BatchAction = {
+  operation_id: string;
+  method: "POST" | "DELETE";
+  path: string;
+  confirmMessage?: string;
+  payloadBuilder: { type: "ids" | "custom"; customPayload?: string };
+};
+
+export type InteractionMode = "modal" | "drawer" | "inline" | "redirect";
+
+export type OperationBinding = {
+  operation_id: string;
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  path: string;
+  role: "list" | "detail" | "create" | "update" | "delete" | "stat" | "export" | "stats" | "read";
+  bodySchema?: FieldSchema[];
+  confirmMessage?: string;
+  pagination?: { pageParam: string; sizeParam: string; defaultSize: number };
+  sortParam?: string;
+};
+
+export type PromptTemplate = { id: string; name: string; scene: "dashboard" | "crud" | "report" | "kanban" | "shop" | "content" | "social"; systemPrompt: string; isDefault?: boolean };
+export type LoadingState = "idle" | "generating" | "querying" | "mutating" | "saving";
+
+export type PageView =
+  | { type: "list"; title?: string; defaultSort?: { column: string; order: "asc" | "desc" } }
+  | { type: "chart"; title: string; chartType: "bar" | "line" | "pie"; xAxisColumn: string; yAxisColumn: string; groupByColumn?: string }
+  | { type: "kanban"; title: string; groupColumn: string; cardFields: string[] }
+  | { type: "tabs"; items: { key: string; label: string; view: PageView }[] }
+  | { type: "split"; left: PageView; right: PageView; splitRatio?: number };
 
 export type OpenApiSummary = {
   title: string;
@@ -38,6 +104,16 @@ export type OpenApiSummary = {
   operations: string[];
   api_base_url: string;
   discovered_url: string;
+  fieldSchemas?: Record<string, FieldSchema[]>;
+};
+
+export type FieldSchema = {
+  name: string;
+  type: "string" | "number" | "integer" | "boolean" | "date" | "enum";
+  enumValues?: string[];
+  required: boolean;
+  description?: string;
+  visibleWhen?: { field: string; equals: string | string[] };
 };
 
 export type AllowedOperation = { operation_id: string; method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; path: string };
@@ -49,6 +125,7 @@ export type BusinessAuth = {
   caPem: string;
   apiBaseUrl?: string;
   authorizedOperations?: string[];
+  grantedRoles?: string[];
   openApiSpec?: OpenApiSummary;
 };
 

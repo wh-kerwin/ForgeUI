@@ -52,11 +52,22 @@ mod tests {
             version: 1,
             title: "设备/清单".into(),
             description: "".into(),
+            layout: None,
+            breadcrumb: vec![],
+            permission_role: None,
+            created_at: None,
+            updated_at: None,
             filters: vec![],
             stats: vec![],
             columns: vec!["名称".into()],
+            column_meta: vec![],
             rows: vec![vec!["A".into()]],
             operations: vec![],
+            views: vec![],
+            interaction: None,
+            batch_actions: vec![],
+            theme: None,
+            style_tokens: None,
         };
         assert!(xlsx(page).unwrap().starts_with(b"PK"));
     }

@@ -2,6 +2,8 @@ import { ChangeEvent, useRef } from "react";
 import { Database, FileJson, Plus, Upload } from "lucide-react";
 import type { SetStateAction } from "react";
 import type { BusinessAuth, OpenApiSummary } from "../../types/domain";
+import { SelectField } from "../../components/SelectField";
+import { GrantedRolesField } from "../../components/GrantedRolesField";
 
 type Props = {
   spec: OpenApiSummary | null;
@@ -93,16 +95,8 @@ export function BusinessConnectionPanel({
           value={businessAuth.apiBaseUrl || ""}
           onChange={(event) => setBusinessAuth((current) => ({ ...current, apiBaseUrl: event.target.value }))}
         />
-        <select
-          value={businessAuth.type}
-          onChange={(e) =>
-            setBusinessAuth((v) => ({ ...v, type: e.target.value }))
-          }
-        >
-          <option value="none">无认证</option>
-          <option value="bearer">Bearer Token</option>
-          <option value="apiKey">API Key</option>
-        </select>
+        <SelectField value={businessAuth.type} options={[{ value: "none", label: "无认证" }, { value: "bearer", label: "Bearer Token" }, { value: "apiKey", label: "API Key" }]} onChange={(value) => setBusinessAuth((current) => ({ ...current, type: value }))} ariaLabel="认证方式" />
+        <GrantedRolesField roles={businessAuth.grantedRoles ?? []} onChange={(roles) => setBusinessAuth((current) => ({ ...current, grantedRoles: roles }))} label="当前用户角色" placeholder="例如：admin, operator" help="仅控制生成页面可见性；业务接口仍以服务端鉴权为准。" />
         {businessAuth.type === "apiKey" && (
           <input
             placeholder="Header 名称"

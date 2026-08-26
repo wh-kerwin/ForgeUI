@@ -3,14 +3,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { loadBusinessConnection } from "../../lib/tauri/storage";
 import type { BusinessAuth, OpenApiSummary } from "../../types/domain";
 
-const defaultAuth: BusinessAuth = { type: "none", secretRef: "business-default", apiKeyName: "x-api-key", caPem: "", apiBaseUrl: "", authorizedOperations: [] };
+const defaultAuth: BusinessAuth = { type: "none", secretRef: "business-default", apiKeyName: "x-api-key", caPem: "", apiBaseUrl: "", authorizedOperations: [], grantedRoles: [] };
 
 export function useBusinessConnection(onNotice: (message: string) => void) {
   const [spec, setSpec] = useState<OpenApiSummary | null>(null);
   const [auth, setAuth] = useState<BusinessAuth>(defaultAuth);
   const [secret, setSecret] = useState("");
 
-  useEffect(() => { loadBusinessConnection().then((value) => { if (!value) return; setAuth(value); if (value.openApiSpec) setSpec(value.openApiSpec); }).catch(() => undefined); }, []);
+  useEffect(() => { loadBusinessConnection().then((value) => { if (!value) return; setAuth({ ...defaultAuth, ...value, authorizedOperations: value.authorizedOperations ?? [], grantedRoles: value.grantedRoles ?? [] }); if (value.openApiSpec) setSpec(value.openApiSpec); }).catch(() => undefined); }, []);
 
   async function importSwaggerUrl() {
     const url = window.prompt("输入 Swagger/OpenAPI URL");
@@ -48,8 +48,8 @@ export function useBusinessConnection(onNotice: (message: string) => void) {
         await invoke("delete_secret", { secretRef: auth.secretRef }).catch(() => undefined);
       }
       setSecret("");
-      await invoke("save_business_connection", { payload: JSON.stringify({ ...auth, apiBaseUrl: auth.apiBaseUrl || spec?.api_base_url || "", authorizedOperations: auth.authorizedOperations || [] }) });
-      onNotice("业务 API 凭证已保存到系统钥匙串");
+      await invoke("save_business_connection", { payload: JSON.stringify({ ...auth, apiBaseUrl: auth.apiBaseUrl || spec?.api_base_url || "", authorizedOperations: auth.authorizedOperations || [], grantedRoles: auth.grantedRoles || [] }) });
+      onNotice("业务连接配置已保存");
     } catch (error) { onNotice(String(error)); }
   }
 

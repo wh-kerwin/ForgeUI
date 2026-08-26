@@ -18,3 +18,7 @@ export function operationForRole(page: PageSpec, importedOperations: string[], r
   if (binding) return operationKey(binding.method, binding.path, binding.operation_id);
   return firstOperation(importedOperations, method, requiresPathParameter);
 }
+
+export function bindingForRole(page: PageSpec, role: string, method: string) {
+  return page.operations?.find((item) => item.role === role && item.method === method);
+}

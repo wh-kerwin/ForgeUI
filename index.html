@@ -1,1 +1,21 @@
-<html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Forge UI</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Forge UI</title>
+  <style>
+    /* 内联关键样式，避免等待外部 CSS 加载后文字不可见 */
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body {
+      font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+      background: #0b0e13;
+      color: #e9edf5;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

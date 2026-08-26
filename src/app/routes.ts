@@ -8,8 +8,8 @@ export type AppRoute =
 
 export function parseRoute(pathname = window.location.pathname): AppRoute {
   const value = pathname.replace(/^\/+|\/+$/g, "");
-  return value === "generate" ||
-    value === "templates" ||
+  if (value === "generate" || value.startsWith("generate/")) return "generate";
+  return value === "templates" ||
     value === "business" ||
     value === "openapi" ||
     value === "models"

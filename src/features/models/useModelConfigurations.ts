@@ -32,6 +32,7 @@ function normalizeModel(model: Partial<ModelConfig>): ModelConfig {
     structuredOutput: model.structuredOutput || "jsonObject",
     customHeaders: model.customHeaders || {},
     customHeaderSecretRefs: model.customHeaderSecretRefs,
+    promptTemplateId: model.promptTemplateId,
     notes: model.notes || "",
   };
 }

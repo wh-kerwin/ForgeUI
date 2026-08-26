@@ -7,16 +7,27 @@ license = ""
 repository = ""
 edition = "2021"
 rust-version = "1.88.0"
+default-run = "app"
 
 [features]
 default = []
 updater = ["dep:tauri-plugin-updater"]
+model-conformance-probe = []
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
 name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "app"
+path = "src/main.rs"
+
+[[bin]]
+name = "model-conformance-probe"
+path = "src/bin/model-conformance-probe.rs"
+required-features = ["model-conformance-probe"]
 
 [build-dependencies]
 tauri-build = { version = "2.3.0", features = [] }

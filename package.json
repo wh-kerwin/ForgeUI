@@ -9,6 +9,10 @@
     "tauri:dev": "tauri dev",
     "dev:tauri": "npm run tauri:dev",
     "build": "tsc -b && vite build",
+    "test": "node --loader ./scripts/typescript-test-loader.mjs --test tests/*.test.ts",
+    "validate:model-conformance": "node --loader ./scripts/typescript-test-loader.mjs scripts/validate-model-conformance.mjs",
+    "validate:model-conformance:config": "node --loader ./scripts/typescript-test-loader.mjs scripts/validate-model-conformance.mjs --check-client-config",
+    "validate:model-conformance:dry": "node --loader ./scripts/typescript-test-loader.mjs scripts/validate-model-conformance.mjs --dry-run",
     "tauri:build": "tauri build",
     "validate:updater": "node scripts/validate-updater-config.mjs",
     "preview": "vite preview"
@@ -20,7 +24,8 @@
     "react": "latest",
     "react-dom": "latest",
     "typescript": "latest",
-    "vite": "latest"
+    "vite": "latest",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",

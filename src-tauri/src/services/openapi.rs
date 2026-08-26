@@ -2,6 +2,7 @@ use crate::services::url_security::{
     read_limited_response, validate_content_length, validate_https_or_debug_local,
 };
 use serde::Serialize;
+use std::collections::HashMap;
 use std::time::Duration;
 
 #[derive(Debug, Serialize)]
@@ -13,6 +14,32 @@ pub struct OpenApiSummary {
     pub operations: Vec<String>,
     pub api_base_url: String,
     pub discovered_url: String,
+    #[serde(rename = "fieldSchemas")]
+    pub field_schemas: HashMap<String, Vec<FieldSchema>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldSchema {
+    pub name: String,
+    pub r#type: String,
+    pub enum_values: Option<Vec<String>>,
+    pub required: bool,
+    pub description: Option<String>,
+    pub visible_when: Option<VisibleWhen>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct VisibleWhen {
+    pub field: String,
+    pub equals: VisibilityEquals,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum VisibilityEquals {
+    One(String),
+    Many(Vec<String>),
 }
 
 pub fn parse(content: &str, source: &str) -> Result<OpenApiSummary, String> {
@@ -42,9 +69,13 @@ pub fn parse(content: &str, source: &str) -> Result<OpenApiSummary, String> {
         .pointer("/servers/0/url")
         .and_then(|v| v.as_str())
         .and_then(|server| {
-            url::Url::parse(source)
+            url::Url::parse(server)
                 .ok()
-                .and_then(|base| base.join(server).ok())
+                .or_else(|| {
+                    url::Url::parse(source)
+                        .ok()
+                        .and_then(|base| base.join(server).ok())
+                })
                 .map(|url| url.to_string())
         })
         .or_else(|| {
@@ -63,6 +94,7 @@ pub fn parse(content: &str, source: &str) -> Result<OpenApiSummary, String> {
         })
         .unwrap_or_else(|| source.to_string());
     let mut operations = Vec::new();
+    let mut field_schemas = HashMap::new();
     if let Some(paths) = value.get("paths").and_then(|item| item.as_object()) {
         for (path, item) in paths {
             if let Some(path_operations) = item.as_object() {
@@ -81,6 +113,10 @@ pub fn parse(content: &str, source: &str) -> Result<OpenApiSummary, String> {
                             path,
                             operation_id
                         ));
+                        field_schemas.insert(
+                            operation_id.to_string(),
+                            extract_field_schemas(&value, path, operation, &spec_version),
+                        );
                     }
                 }
             }
@@ -95,6 +131,150 @@ pub fn parse(content: &str, source: &str) -> Result<OpenApiSummary, String> {
         operations,
         api_base_url,
         discovered_url: source.to_string(),
+        field_schemas,
+    })
+}
+
+fn extract_field_schemas(
+    root: &serde_json::Value,
+    path: &str,
+    operation: &serde_json::Value,
+    spec_version: &str,
+) -> Vec<FieldSchema> {
+    let mut fields = Vec::new();
+    if let Some(body_schema) = request_body_schema(root, operation, spec_version) {
+        if let Some(properties) = body_schema
+            .get("properties")
+            .and_then(|item| item.as_object())
+        {
+            let required = body_schema
+                .get("required")
+                .and_then(|item| item.as_array())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            for (name, schema) in properties {
+                fields.push(field_from_schema(
+                    name,
+                    schema,
+                    required.contains(&name.as_str()),
+                ));
+            }
+        } else if let Some(name) = path.split('/').next_back().filter(|name| !name.is_empty()) {
+            fields.push(field_from_schema(name, body_schema, false));
+        }
+    }
+    fields
+}
+
+fn request_body_schema<'a>(
+    root: &'a serde_json::Value,
+    operation: &'a serde_json::Value,
+    spec_version: &str,
+) -> Option<&'a serde_json::Value> {
+    if spec_version.starts_with('2') {
+        operation
+            .get("parameters")?
+            .as_array()?
+            .iter()
+            .find(|parameter| parameter.get("in").and_then(|v| v.as_str()) == Some("body"))
+            .and_then(|parameter| parameter.get("schema"))
+            .map(|schema| resolve_schema(root, schema))
+    } else {
+        operation
+            .get("requestBody")?
+            .get("content")?
+            .as_object()?
+            .values()
+            .next()?
+            .get("schema")
+            .map(|schema| resolve_schema(root, schema))
+    }
+}
+
+fn resolve_schema<'a>(
+    root: &'a serde_json::Value,
+    schema: &'a serde_json::Value,
+) -> &'a serde_json::Value {
+    schema
+        .get("$ref")
+        .and_then(|reference| reference.as_str())
+        .and_then(|reference| reference.strip_prefix("#/"))
+        .and_then(|pointer| root.pointer(&format!("/{pointer}")))
+        .unwrap_or(schema)
+}
+
+fn field_from_schema(name: &str, schema: &serde_json::Value, required: bool) -> FieldSchema {
+    let format = schema.get("format").and_then(|value| value.as_str());
+    let enum_values = schema
+        .get("enum")
+        .and_then(|values| values.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str().map(ToOwned::to_owned))
+                .collect::<Vec<_>>()
+        })
+        .filter(|values| !values.is_empty());
+    let r#type = if enum_values.is_some() {
+        "enum"
+    } else if format == Some("date") || format == Some("date-time") {
+        "date"
+    } else {
+        match schema
+            .get("type")
+            .and_then(|value| value.as_str())
+            .unwrap_or("string")
+        {
+            "number" | "integer" | "boolean" | "string" => schema
+                .get("type")
+                .and_then(|value| value.as_str())
+                .unwrap_or("string"),
+            _ => "string",
+        }
+    };
+    FieldSchema {
+        name: name.to_string(),
+        r#type: r#type.to_string(),
+        enum_values,
+        required,
+        description: schema
+            .get("description")
+            .and_then(|value| value.as_str())
+            .map(ToOwned::to_owned),
+        visible_when: extract_visible_when(schema),
+    }
+}
+
+fn extract_visible_when(schema: &serde_json::Value) -> Option<VisibleWhen> {
+    let condition = schema
+        .get("x-visible-when")
+        .or_else(|| schema.get("x-visibleWhen"))?;
+    let field = condition.get("field")?.as_str()?.trim();
+    if field.is_empty() {
+        return None;
+    }
+    let equals = match condition.get("equals")? {
+        serde_json::Value::String(value) => VisibilityEquals::One(value.clone()),
+        serde_json::Value::Array(values) => {
+            let values = values
+                .iter()
+                .map(|value| value.as_str().map(ToOwned::to_owned))
+                .collect::<Option<Vec<_>>>()?;
+            if values.is_empty() {
+                return None;
+            }
+            VisibilityEquals::Many(values)
+        }
+        _ => return None,
+    };
+    Some(VisibleWhen {
+        field: field.to_string(),
+        equals,
     })
 }
 
@@ -234,6 +414,80 @@ mod tests {
         assert_eq!(summary.spec_version, "3.1.0");
         assert_eq!(summary.api_base_url, "https://api.example.com/v2");
         assert_eq!(summary.operations[0], "GET /items/{id} · getItem");
+    }
+
+    #[test]
+    fn uses_absolute_server_url_for_local_file_imports() {
+        let document = r#"{"openapi":"3.0.3","info":{"title":"Local","version":"1"},"servers":[{"url":"http://localhost:3000"}],"paths":{}}"#;
+        let summary = parse(document, "local-file").unwrap();
+        assert_eq!(summary.api_base_url, "http://localhost:3000/");
+    }
+
+    #[test]
+    fn extracts_typed_request_fields_and_parameters() {
+        let document = serde_json::json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Demo", "version": "1"},
+            "paths": {"/items": {"post": {
+                "operationId": "createItem",
+                "parameters": [{"name": "trace", "in": "header", "required": true, "schema": {"type": "string"}}],
+                "requestBody": {"content": {"application/json": {"schema": {
+                    "type": "object",
+                    "required": ["status"],
+                    "properties": {
+                        "status": {"type": "string", "enum": ["new", "done"]},
+                        "count": {"type": "integer"},
+                        "when": {"type": "string", "format": "date"},
+                        "reason": {"type": "string", "x-visible-when": {"field": "status", "equals": "done"}}
+                    }
+                }}}
+            }}}}
+        }).to_string();
+        let summary = parse(&document, "https://example.com/openapi.json").unwrap();
+        let fields = &summary.field_schemas["createItem"];
+        assert_eq!(
+            fields
+                .iter()
+                .find(|field| field.name == "status")
+                .unwrap()
+                .r#type,
+            "enum"
+        );
+        assert!(
+            fields
+                .iter()
+                .find(|field| field.name == "status")
+                .unwrap()
+                .required
+        );
+        assert_eq!(
+            fields
+                .iter()
+                .find(|field| field.name == "count")
+                .unwrap()
+                .r#type,
+            "integer"
+        );
+        assert_eq!(
+            fields
+                .iter()
+                .find(|field| field.name == "when")
+                .unwrap()
+                .r#type,
+            "date"
+        );
+        let condition = fields
+            .iter()
+            .find(|field| field.name == "reason")
+            .unwrap()
+            .visible_when
+            .as_ref()
+            .unwrap();
+        assert_eq!(condition.field, "status");
+        assert!(matches!(
+            &condition.equals,
+            VisibilityEquals::One(value) if value == "done"
+        ));
     }
 
     #[test]
