@@ -1,6 +1,10 @@
 import type { PageSpec } from "../../types/domain";
 import { isPageView, parsePageSpec } from "./parsePageSpec";
-import { extractStructuredPageFields, normalizeModelJsonText, repairModelJson } from "./modelJsonRepair";
+import {
+  extractStructuredPageFields,
+  normalizeModelJsonText,
+  repairModelJson,
+} from "./modelJsonRepair";
 
 type StreamingPageParserOptions = {
   onDelta: (partial: Partial<PageSpec>) => void;
@@ -103,17 +107,26 @@ export class StreamingPageParser {
     if (typeof record.version === "number") partial.version = record.version;
     if (typeof record.title === "string") partial.title = record.title;
     if (typeof record.description === "string") partial.description = record.description;
-    if (["sidebar", "full", "modal"].includes(String(record.layout))) partial.layout = record.layout as PageSpec["layout"];
-    if (Array.isArray(record.breadcrumb)) partial.breadcrumb = record.breadcrumb.filter((item): item is string => typeof item === "string");
+    if (["sidebar", "full", "modal"].includes(String(record.layout)))
+      partial.layout = record.layout as PageSpec["layout"];
+    if (Array.isArray(record.breadcrumb))
+      partial.breadcrumb = record.breadcrumb.filter(
+        (item): item is string => typeof item === "string",
+      );
     if (typeof record.permissionRole === "string") partial.permissionRole = record.permissionRole;
     if (typeof record.createdAt === "string") partial.createdAt = record.createdAt;
     if (typeof record.updatedAt === "string") partial.updatedAt = record.updatedAt;
-    if (Array.isArray(record.filters)) partial.filters = record.filters.filter((item): item is string => typeof item === "string");
-    if (Array.isArray(record.columns)) partial.columns = record.columns.filter((item): item is string => typeof item === "string");
+    if (Array.isArray(record.filters))
+      partial.filters = record.filters.filter((item): item is string => typeof item === "string");
+    if (Array.isArray(record.columns))
+      partial.columns = record.columns.filter((item): item is string => typeof item === "string");
     if (Array.isArray(record.stats)) {
       partial.stats = record.stats.filter(
         (item): item is { label: string; value: string } =>
-          Boolean(item) && typeof item === "object" && typeof (item as Record<string, unknown>).label === "string" && typeof (item as Record<string, unknown>).value === "string",
+          Boolean(item) &&
+          typeof item === "object" &&
+          typeof (item as Record<string, unknown>).label === "string" &&
+          typeof (item as Record<string, unknown>).value === "string",
       );
     }
     if (Array.isArray(record.rows)) {
@@ -122,14 +135,52 @@ export class StreamingPageParser {
         .map((row) => row.filter((cell): cell is string => typeof cell === "string"));
     }
     if (Array.isArray(record.views)) partial.views = record.views.filter(isPageView);
-    if (Array.isArray(record.columnMeta)) partial.columnMeta = record.columnMeta.filter((meta): meta is NonNullable<PageSpec["columnMeta"]>[number] => Boolean(meta) && typeof meta === "object" && !Array.isArray(meta) && typeof (meta as Record<string, unknown>).name === "string" && ["string", "number", "date", "datetime", "enum", "boolean", "money"].includes(String((meta as Record<string, unknown>).type)));
-    if (record.interaction && typeof record.interaction === "object" && !Array.isArray(record.interaction)) {
-      const modes = Object.fromEntries(Object.entries(record.interaction as Record<string, unknown>).filter(([key, mode]) => ["create", "update", "delete", "detail"].includes(key) && ["modal", "drawer", "inline", "redirect"].includes(String(mode))));
+    if (Array.isArray(record.columnMeta))
+      partial.columnMeta = record.columnMeta.filter(
+        (meta): meta is NonNullable<PageSpec["columnMeta"]>[number] =>
+          Boolean(meta) &&
+          typeof meta === "object" &&
+          !Array.isArray(meta) &&
+          typeof (meta as Record<string, unknown>).name === "string" &&
+          ["string", "number", "date", "datetime", "enum", "boolean", "money"].includes(
+            String((meta as Record<string, unknown>).type),
+          ),
+      );
+    if (
+      record.interaction &&
+      typeof record.interaction === "object" &&
+      !Array.isArray(record.interaction)
+    ) {
+      const modes = Object.fromEntries(
+        Object.entries(record.interaction as Record<string, unknown>).filter(
+          ([key, mode]) =>
+            ["create", "update", "delete", "detail"].includes(key) &&
+            ["modal", "drawer", "inline", "redirect"].includes(String(mode)),
+        ),
+      );
       if (Object.keys(modes).length) partial.interaction = modes as PageSpec["interaction"];
     }
-    if (Array.isArray(record.batchActions)) partial.batchActions = record.batchActions.filter((action): action is NonNullable<PageSpec["batchActions"]>[number] => Boolean(action) && typeof action === "object" && !Array.isArray(action) && typeof (action as Record<string, unknown>).operation_id === "string" && ["POST", "DELETE"].includes(String((action as Record<string, unknown>).method)));
-    if (["forge-default", "enterprise-blue", "clean-light", "minimal-dark", "custom"].includes(String(record.theme))) partial.theme = record.theme as PageSpec["theme"];
-    if (record.styleTokens && typeof record.styleTokens === "object" && !Array.isArray(record.styleTokens)) partial.styleTokens = record.styleTokens as PageSpec["styleTokens"];
+    if (Array.isArray(record.batchActions))
+      partial.batchActions = record.batchActions.filter(
+        (action): action is NonNullable<PageSpec["batchActions"]>[number] =>
+          Boolean(action) &&
+          typeof action === "object" &&
+          !Array.isArray(action) &&
+          typeof (action as Record<string, unknown>).operation_id === "string" &&
+          ["POST", "DELETE"].includes(String((action as Record<string, unknown>).method)),
+      );
+    if (
+      ["forge-default", "enterprise-blue", "clean-light", "minimal-dark", "custom"].includes(
+        String(record.theme),
+      )
+    )
+      partial.theme = record.theme as PageSpec["theme"];
+    if (
+      record.styleTokens &&
+      typeof record.styleTokens === "object" &&
+      !Array.isArray(record.styleTokens)
+    )
+      partial.styleTokens = record.styleTokens as PageSpec["styleTokens"];
     return Object.keys(partial).length > 0 ? partial : null;
   }
 }

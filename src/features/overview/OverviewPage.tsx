@@ -5,15 +5,168 @@ import { ReadinessRail } from "./ReadinessRail";
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { HeroVisual } from "../workbench/HeroVisual";
 
-type Props = { templates: TemplateRecord[]; sessions: GenerationSession[]; spec?: OpenApiSummary; modelReady: boolean; onNavigate: (route: AppRoute) => void; onStartGenerate: (prompt?: string) => void };
+type Props = {
+  templates: TemplateRecord[];
+  sessions: GenerationSession[];
+  spec?: OpenApiSummary;
+  modelReady: boolean;
+  onNavigate: (route: AppRoute) => void;
+  onStartGenerate: (prompt?: string) => void;
+};
 
-export function OverviewPage({ templates, sessions, spec, modelReady, onNavigate, onStartGenerate }: Props) {
+export function OverviewPage({
+  templates,
+  sessions,
+  spec,
+  modelReady,
+  onNavigate,
+  onStartGenerate,
+}: Props) {
   const { language } = useLanguage();
   const zh = language === "zh";
-  return <main className="route-main overview-main">
-    <header className="overview-header"><div><span className="eyebrow">{zh ? "我的工作台" : "YOUR WORKSPACE"}</span><h1>{zh ? "把后台，变成你的工作台" : "Turn your backend into a workspace"}</h1></div><button className="ghost" onClick={() => onNavigate("business")}><Database size={15} />{spec ? (zh ? "管理连接" : "Manage connection") : (zh ? "连接后台" : "Connect a backend")}</button></header>
-    <section className="overview-hero"><div className="overview-copy"><span className="pill"><WandSparkles size={14} />{zh ? "生成式业务 UI" : "GENERATIVE BUSINESS UI"}</span><h2 className={zh ? "single-line-title" : ""}>{zh ? <>今天想看什么，<em>直接说。</em></> : <>What do you want<br /><em>to see today?</em></>}</h2><p>{zh ? "连接已有的 OpenAPI 服务，用一句话生成查询、Dashboard 和 CRUD 页面。喜欢的结果，保存下来反复使用。" : "Connect an existing OpenAPI service and describe what you need. Generate queries, dashboards and CRUD pages, then keep the ones worth reusing."}</p><button className="primary hero-action" onClick={() => onStartGenerate()}><Sparkles size={16} />{zh ? "开始生成" : "Start generating"} <ArrowUpRight size={15} /></button></div><HeroVisual label="API → UI" version="READY / 01" /></section>
-    <ReadinessRail modelReady={modelReady} backendReady={Boolean(spec)} templateCount={templates.length} onNavigate={onNavigate} /><section className="overview-grid"><button className="overview-card primary-card" onClick={() => onStartGenerate(zh ? "生成一个业务总览 Dashboard，展示核心指标、最近趋势和需要关注的异常" : "Generate a business overview dashboard with key metrics, recent trends and anomalies to watch")}><div className="card-icon"><Plus size={18} /></div><div><span className="eyebrow">{zh ? "快速开始" : "QUICK START"}</span><h3>{zh ? "生成一个总览 Dashboard" : "Generate an overview dashboard"}</h3><p>{zh ? "从一句描述开始，继续用对话修改页面。" : "Start with one sentence and refine the resulting page in conversation."}</p></div><ArrowUpRight size={17} /></button><button className="overview-card" onClick={() => onNavigate("templates")}><div className="card-icon soft"><Library size={18} /></div><div><span className="eyebrow">{zh ? "已保存模板" : "SAVED TEMPLATES"}</span><h3>{templates.length ? `${templates.length} ${zh ? "个页面模板" : `saved page${templates.length === 1 ? "" : "s"}`}` : (zh ? "还没有页面模板" : "No saved pages yet")}</h3><p>{templates.length ? (zh ? "打开一个喜欢的页面，继续生成。" : "Open a favorite page and keep building.") : (zh ? "保存生成结果，下次直接复用。" : "Save a generated result to reuse it later.")}</p></div><ArrowUpRight size={17} /></button></section>
-    <section className="overview-lower"><div className="section-title"><div><span className="eyebrow">{zh ? "最近使用" : "RECENT ACTIVITY"}</span><h3>{zh ? "最近使用" : "Recently used"}</h3></div><button className="text-button" onClick={() => onNavigate("generate")}>{zh ? "查看全部" : "View all"} <ArrowUpRight size={14} /></button></div>{sessions.length ? <div className="recent-list">{sessions.slice(0, 3).map((session) => <button key={session.id} className="recent-item" onClick={() => onStartGenerate(session.prompt)}><span className="recent-mark"><Sparkles size={14} /></span><span className="recent-copy"><strong>{session.prompt}</strong><small>{session.createdAt}</small></span><ArrowUpRight size={15} /></button>)}</div> : <div className="empty-state overview-empty"><Sparkles size={20} /><strong>{zh ? "你的生成记录会出现在这里" : "Your generated pages will appear here"}</strong><span>{zh ? "描述一个页面，Forge 会帮你把它变成可运行的界面。" : "Describe a page and Forge will turn it into a working interface."}</span></div>}</section>
-  </main>;
+  return (
+    <main className="route-main overview-main">
+      <header className="overview-header">
+        <div>
+          <span className="eyebrow">{zh ? "我的工作台" : "YOUR WORKSPACE"}</span>
+          <h1>{zh ? "把后台，变成你的工作台" : "Turn your backend into a workspace"}</h1>
+        </div>
+        <button className="ghost" onClick={() => onNavigate("business")}>
+          <Database size={15} />
+          {spec ? (zh ? "管理连接" : "Manage connection") : zh ? "连接后台" : "Connect a backend"}
+        </button>
+      </header>
+      <section className="overview-hero">
+        <div className="overview-copy">
+          <span className="pill">
+            <WandSparkles size={14} />
+            {zh ? "生成式业务 UI" : "GENERATIVE BUSINESS UI"}
+          </span>
+          <h2 className={zh ? "single-line-title" : ""}>
+            {zh ? (
+              <>
+                今天想看什么，<em>直接说。</em>
+              </>
+            ) : (
+              <>
+                What do you want
+                <br />
+                <em>to see today?</em>
+              </>
+            )}
+          </h2>
+          <p>
+            {zh
+              ? "连接已有的 OpenAPI 服务，用一句话生成查询、Dashboard 和 CRUD 页面。喜欢的结果，保存下来反复使用。"
+              : "Connect an existing OpenAPI service and describe what you need. Generate queries, dashboards and CRUD pages, then keep the ones worth reusing."}
+          </p>
+          <button className="primary hero-action" onClick={() => onStartGenerate()}>
+            <Sparkles size={16} />
+            {zh ? "开始生成" : "Start generating"} <ArrowUpRight size={15} />
+          </button>
+        </div>
+        <HeroVisual label="API → UI" version="READY / 01" />
+      </section>
+      <ReadinessRail
+        modelReady={modelReady}
+        backendReady={Boolean(spec)}
+        templateCount={templates.length}
+        onNavigate={onNavigate}
+      />
+      <section className="overview-grid">
+        <button
+          className="overview-card primary-card"
+          onClick={() =>
+            onStartGenerate(
+              zh
+                ? "生成一个业务总览 Dashboard，展示核心指标、最近趋势和需要关注的异常"
+                : "Generate a business overview dashboard with key metrics, recent trends and anomalies to watch",
+            )
+          }
+        >
+          <div className="card-icon">
+            <Plus size={18} />
+          </div>
+          <div>
+            <span className="eyebrow">{zh ? "快速开始" : "QUICK START"}</span>
+            <h3>{zh ? "生成一个总览 Dashboard" : "Generate an overview dashboard"}</h3>
+            <p>
+              {zh
+                ? "从一句描述开始，继续用对话修改页面。"
+                : "Start with one sentence and refine the resulting page in conversation."}
+            </p>
+          </div>
+          <ArrowUpRight size={17} />
+        </button>
+        <button className="overview-card" onClick={() => onNavigate("templates")}>
+          <div className="card-icon soft">
+            <Library size={18} />
+          </div>
+          <div>
+            <span className="eyebrow">{zh ? "已保存模板" : "SAVED TEMPLATES"}</span>
+            <h3>
+              {templates.length
+                ? `${templates.length} ${zh ? "个页面模板" : `saved page${templates.length === 1 ? "" : "s"}`}`
+                : zh
+                  ? "还没有页面模板"
+                  : "No saved pages yet"}
+            </h3>
+            <p>
+              {templates.length
+                ? zh
+                  ? "打开一个喜欢的页面，继续生成。"
+                  : "Open a favorite page and keep building."
+                : zh
+                  ? "保存生成结果，下次直接复用。"
+                  : "Save a generated result to reuse it later."}
+            </p>
+          </div>
+          <ArrowUpRight size={17} />
+        </button>
+      </section>
+      <section className="overview-lower">
+        <div className="section-title">
+          <div>
+            <span className="eyebrow">{zh ? "最近使用" : "RECENT ACTIVITY"}</span>
+            <h3>{zh ? "最近使用" : "Recently used"}</h3>
+          </div>
+          <button className="text-button" onClick={() => onNavigate("generate")}>
+            {zh ? "查看全部" : "View all"} <ArrowUpRight size={14} />
+          </button>
+        </div>
+        {sessions.length ? (
+          <div className="recent-list">
+            {sessions.slice(0, 3).map((session) => (
+              <button
+                key={session.id}
+                className="recent-item"
+                onClick={() => onStartGenerate(session.prompt)}
+              >
+                <span className="recent-mark">
+                  <Sparkles size={14} />
+                </span>
+                <span className="recent-copy">
+                  <strong>{session.prompt}</strong>
+                  <small>{session.createdAt}</small>
+                </span>
+                <ArrowUpRight size={15} />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state overview-empty">
+            <Sparkles size={20} />
+            <strong>
+              {zh ? "你的生成记录会出现在这里" : "Your generated pages will appear here"}
+            </strong>
+            <span>
+              {zh
+                ? "描述一个页面，Forge 会帮你把它变成可运行的界面。"
+                : "Describe a page and Forge will turn it into a working interface."}
+            </span>
+          </div>
+        )}
+      </section>
+    </main>
+  );
 }

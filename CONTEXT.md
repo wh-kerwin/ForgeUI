@@ -27,4 +27,3 @@ _Avoid_: Cross-project page
 **Template**:
 A saved, versioned Generated Page that belongs to one Project.
 _Avoid_: Global template
-

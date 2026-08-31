@@ -13,6 +13,7 @@
 ### Task 1: Database schema and migration
 
 **Files:**
+
 - Modify: `src-tauri/src/repositories/migrations.rs`
 - Test: `src-tauri/src/repositories/migrations.rs`
 
@@ -21,6 +22,7 @@ Add migration v4 with `projects`, `api_documents`, `template_api_documents`, and
 ### Task 2: Project and API Document repository
 
 **Files:**
+
 - Create: `src-tauri/src/repositories/projects.rs`
 - Modify: `src-tauri/src/repositories/mod.rs`
 - Modify: `src-tauri/src/app.rs`
@@ -30,6 +32,7 @@ Implement list/create/rename/delete Project commands, remembered document select
 ### Task 3: Project-scoped artifacts
 
 **Files:**
+
 - Modify: `src-tauri/src/repositories/storage.rs`
 - Modify: `src-tauri/src/app.rs`
 - Modify: `src/lib/tauri/storage.ts`
@@ -40,6 +43,7 @@ Require `projectId` for template and generation-session persistence, synchronize
 ### Task 4: Document-aware generation and PageSpec
 
 **Files:**
+
 - Modify: `src/types/domain.ts`
 - Modify: `src-tauri/src/domain/page_spec.rs`
 - Modify: `src-tauri/src/services/model_provider.rs`
@@ -53,6 +57,7 @@ Add `apiDocumentId` to operation and batch bindings. Build one namespaced model 
 ### Task 5: Runtime request isolation
 
 **Files:**
+
 - Modify: `src-tauri/src/services/business_api.rs`
 - Modify: `src/store/workbenchStore.ts`
 - Modify: `src/features/pages/pageOperations.ts`
@@ -64,6 +69,7 @@ Resolve every request through persisted `projectId` and `apiDocumentId`. Ignore 
 ### Task 6: Project and document UI
 
 **Files:**
+
 - Create: `src/features/projects/useProjectWorkspace.ts`
 - Create: `src/features/projects/ProjectSwitcher.tsx`
 - Modify: `src/features/workbench/WorkbenchSidebar.tsx`

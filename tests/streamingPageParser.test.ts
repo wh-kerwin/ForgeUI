@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { PageSpec } from "../src/types/domain";
-import { extractStructuredPageFields, repairModelJson } from "../src/features/pages/modelJsonRepair";
+import {
+  extractStructuredPageFields,
+  repairModelJson,
+} from "../src/features/pages/modelJsonRepair";
 import { StreamingPageParser } from "../src/features/pages/streamingPageParser";
 
 test("repair handles fences, JSONC comments, trailing commas, and truncated strings", () => {
@@ -23,24 +26,38 @@ test("repair handles fences, JSONC comments, trailing commas, and truncated stri
   assert.deepEqual(parsed.columns, ["Name"]);
   assert.equal(parsed.views?.[0].type, "list");
 
-  const truncated = JSON.parse(repairModelJson('{"title":"Devices","description":"unfinished')) as Partial<PageSpec>;
+  const truncated = JSON.parse(
+    repairModelJson('{"title":"Devices","description":"unfinished'),
+  ) as Partial<PageSpec>;
   assert.equal(truncated.description, "unfinished");
 });
 
 test("structured fallback only exposes safely extracted user-readable fields", () => {
-  assert.deepEqual(extractStructuredPageFields('{"title":"Devices","description":"Partial","rows":[broken'), {
-    title: "Devices",
-    description: "Partial",
-  });
+  assert.deepEqual(
+    extractStructuredPageFields('{"title":"Devices","description":"Partial","rows":[broken'),
+    {
+      title: "Devices",
+      description: "Partial",
+    },
+  );
   assert.equal(extractStructuredPageFields("not json at all"), null);
 });
 
 test("streaming preview includes valid views and completes repaired PageSpec", () => {
   const deltas: Partial<PageSpec>[] = [];
   let completed: PageSpec | undefined;
-  const parser = new StreamingPageParser({ onDelta: (partial) => deltas.push(partial), onComplete: (page) => { completed = page; } });
-  parser.push('{"title":"Orders","description":"Trend","filters":[],"stats":[],"columns":["Date","Count"],"rows":[["2026-08-25","2"]],');
-  parser.push('"views":[{"type":"chart","title":"Trend","chartType":"line","xAxisColumn":"Date","yAxisColumn":"Count"}],"interaction":{"create":"modal","detail":"modal"},}');
+  const parser = new StreamingPageParser({
+    onDelta: (partial) => deltas.push(partial),
+    onComplete: (page) => {
+      completed = page;
+    },
+  });
+  parser.push(
+    '{"title":"Orders","description":"Trend","filters":[],"stats":[],"columns":["Date","Count"],"rows":[["2026-08-25","2"]],',
+  );
+  parser.push(
+    '"views":[{"type":"chart","title":"Trend","chartType":"line","xAxisColumn":"Date","yAxisColumn":"Count"}],"interaction":{"create":"modal","detail":"modal"},}',
+  );
   parser.finish();
   assert.equal(completed?.title, "Orders");
   assert.equal(completed?.views?.[0].type, "chart");

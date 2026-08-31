@@ -1,8 +1,17 @@
 import type { ApiDocument, ModelConfig, PageSpec, PromptTemplate } from "../../types/domain";
-import { allowedOperationsForDocuments, buildOpenApiContext } from "../connections/openApiOperations";
+import {
+  allowedOperationsForDocuments,
+  buildOpenApiContext,
+} from "../connections/openApiOperations";
 import { composeModelPrompt } from "./PromptComposer";
 
-export function buildModelRequest(model: ModelConfig, prompt: string, documents: readonly ApiDocument[], template?: PageSpec, promptTemplate?: PromptTemplate | string) {
+export function buildModelRequest(
+  model: ModelConfig,
+  prompt: string,
+  documents: readonly ApiDocument[],
+  template?: PageSpec,
+  promptTemplate?: PromptTemplate | string,
+) {
   const allowedOperations = allowedOperationsForDocuments(documents);
   const composed = composeModelPrompt({ prompt, template, promptTemplate, allowedOperations });
   return {

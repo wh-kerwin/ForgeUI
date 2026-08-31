@@ -44,11 +44,15 @@ function toCell(value: unknown): string {
   return String(value);
 }
 
-export function mapRealDataResponse(body: unknown): { columns: string[]; rows: string[][]; total?: number } | null {
+export function mapRealDataResponse(
+  body: unknown,
+): { columns: string[]; rows: string[][]; total?: number } | null {
   const list = unwrapList(body);
   if (!list?.length) return null;
-  const records = list.slice(0, 100).map((item) => isRecord(item) ? item : { value: item });
-  const columns = withRecordIdFirst([...new Set(records.flatMap((record) => Object.keys(record)))].slice(0, 50));
+  const records = list.slice(0, 100).map((item) => (isRecord(item) ? item : { value: item }));
+  const columns = withRecordIdFirst(
+    [...new Set(records.flatMap((record) => Object.keys(record)))].slice(0, 50),
+  );
   if (!columns.length) return null;
   const total = findTotal(body);
   return {

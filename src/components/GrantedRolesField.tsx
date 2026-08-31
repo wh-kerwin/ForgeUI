@@ -18,9 +18,20 @@ export function GrantedRolesField({
   const [draft, setDraft] = useState(() => roles.join(", "));
   useEffect(() => setDraft(roles.join(", ")), [roles]);
   const commit = () => onChange(parseGrantedRoles(draft));
-  return <label className="auth-field">
-    <span>{label}</span>
-    <input value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} placeholder={placeholder} aria-describedby={helpId} />
-    <small id={helpId}>{help}</small>
-  </label>;
+  return (
+    <label className="auth-field">
+      <span>{label}</span>
+      <input
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+        }}
+        placeholder={placeholder}
+        aria-describedby={helpId}
+      />
+      <small id={helpId}>{help}</small>
+    </label>
+  );
 }

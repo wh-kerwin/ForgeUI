@@ -16,7 +16,8 @@ type ModalProps = {
   closeLabel?: string;
 };
 
-const FOCUSABLE = 'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE =
+  'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
 export function Modal({
   open,
@@ -35,11 +36,14 @@ export function Modal({
   const onCloseRef = useRef(onClose);
   const titleId = useId();
 
-  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     requestAnimationFrame(() => {
@@ -53,7 +57,9 @@ export function Modal({
         return;
       }
       if (event.key !== "Tab" || !panelRef.current) return;
-      const focusable = [...panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((element) => element.offsetParent !== null);
+      const focusable = [...panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+        (element) => element.offsetParent !== null,
+      );
       if (!focusable.length) {
         event.preventDefault();
         panelRef.current.focus();
@@ -94,13 +100,23 @@ export function Modal({
         aria-labelledby={title ? titleId : undefined}
         tabIndex={-1}
       >
-        {(title || subtitle) && <div className="page-modal-header">
-          <div>
-            {title && <h2 id={titleId}>{title}</h2>}
-            {subtitle && <p>{subtitle}</p>}
+        {(title || subtitle) && (
+          <div className="page-modal-header">
+            <div>
+              {title && <h2 id={titleId}>{title}</h2>}
+              {subtitle && <p>{subtitle}</p>}
+            </div>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={closeLabel}
+              title={closeLabel}
+              onClick={onClose}
+            >
+              <X size={16} />
+            </button>
           </div>
-          <button type="button" className="icon-btn" aria-label={closeLabel} title={closeLabel} onClick={onClose}><X size={16} /></button>
-        </div>}
+        )}
         <div className="page-modal-body">{children}</div>
       </div>
     </div>,

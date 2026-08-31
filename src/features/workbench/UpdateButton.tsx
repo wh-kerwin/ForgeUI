@@ -1,6 +1,7 @@
 import { DownloadCloud } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useLanguage } from "../../i18n/LanguageProvider";
+import { toUserMessage } from "../../lib/errors";
 
 type Props = { onNotice: (message: string) => void };
 
@@ -15,9 +16,14 @@ export function UpdateButton({ onNotice }: Props) {
       await invoke<string | null>("install_update");
       onNotice("更新包已安装，应用将按安装器设置重启");
     } catch (error) {
-      onNotice(`更新不可用：${String(error)}`);
+      onNotice(`更新不可用：${toUserMessage(error)}`);
     }
   }
 
-  return <button className="update-button" aria-label={label} title={label} onClick={check}><DownloadCloud size={14} /><span>{label}</span></button>;
+  return (
+    <button className="update-button" aria-label={label} title={label} onClick={check}>
+      <DownloadCloud size={14} />
+      <span>{label}</span>
+    </button>
+  );
 }

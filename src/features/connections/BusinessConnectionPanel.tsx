@@ -60,7 +60,18 @@ export function BusinessConnectionPanel({
           <div className="operation-list">
             {spec.operations?.map((operation) => (
               <label key={operation} className="operation-option">
-                <input type="checkbox" checked={businessAuth.authorizedOperations?.includes(operation) || false} onChange={(event) => setBusinessAuth((current) => ({ ...current, authorizedOperations: event.target.checked ? [...(current.authorizedOperations || []), operation] : (current.authorizedOperations || []).filter((item) => item !== operation) }))} />
+                <input
+                  type="checkbox"
+                  checked={businessAuth.authorizedOperations?.includes(operation) || false}
+                  onChange={(event) =>
+                    setBusinessAuth((current) => ({
+                      ...current,
+                      authorizedOperations: event.target.checked
+                        ? [...(current.authorizedOperations || []), operation]
+                        : (current.authorizedOperations || []).filter((item) => item !== operation),
+                    }))
+                  }
+                />
                 <span>{operation}</span>
               </label>
             ))}
@@ -82,7 +93,13 @@ export function BusinessConnectionPanel({
         <Plus size={15} />
         添加 Swagger / OpenAPI 地址
       </button>
-      <input ref={fileInput} type="file" accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml" hidden onChange={handleFile} />
+      <input
+        ref={fileInput}
+        type="file"
+        accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml"
+        hidden
+        onChange={handleFile}
+      />
       <button className="add-row" onClick={() => fileInput.current?.click()}>
         <Upload size={15} />
         导入本地 JSON / YAML 文件
@@ -93,10 +110,27 @@ export function BusinessConnectionPanel({
           type="url"
           placeholder="业务 API 基址，例如 https://api.example.com/v1"
           value={businessAuth.apiBaseUrl || ""}
-          onChange={(event) => setBusinessAuth((current) => ({ ...current, apiBaseUrl: event.target.value }))}
+          onChange={(event) =>
+            setBusinessAuth((current) => ({ ...current, apiBaseUrl: event.target.value }))
+          }
         />
-        <SelectField value={businessAuth.type} options={[{ value: "none", label: "无认证" }, { value: "bearer", label: "Bearer Token" }, { value: "apiKey", label: "API Key" }]} onChange={(value) => setBusinessAuth((current) => ({ ...current, type: value }))} ariaLabel="认证方式" />
-        <GrantedRolesField roles={businessAuth.grantedRoles ?? []} onChange={(roles) => setBusinessAuth((current) => ({ ...current, grantedRoles: roles }))} label="当前用户角色" placeholder="例如：admin, operator" help="仅控制生成页面可见性；业务接口仍以服务端鉴权为准。" />
+        <SelectField
+          value={businessAuth.type}
+          options={[
+            { value: "none", label: "无认证" },
+            { value: "bearer", label: "Bearer Token" },
+            { value: "apiKey", label: "API Key" },
+          ]}
+          onChange={(value) => setBusinessAuth((current) => ({ ...current, type: value }))}
+          ariaLabel="认证方式"
+        />
+        <GrantedRolesField
+          roles={businessAuth.grantedRoles ?? []}
+          onChange={(roles) => setBusinessAuth((current) => ({ ...current, grantedRoles: roles }))}
+          label="当前用户角色"
+          placeholder="例如：admin, operator"
+          help="仅控制生成页面可见性；业务接口仍以服务端鉴权为准。"
+        />
         {businessAuth.type === "apiKey" && (
           <input
             placeholder="Header 名称"
@@ -126,9 +160,7 @@ export function BusinessConnectionPanel({
           className="ca-input"
           placeholder="可选：粘贴企业 CA PEM（不会关闭 TLS 校验）"
           value={businessAuth.caPem}
-          onChange={(e) =>
-            setBusinessAuth((v) => ({ ...v, caPem: e.target.value }))
-          }
+          onChange={(e) => setBusinessAuth((v) => ({ ...v, caPem: e.target.value }))}
         />
       </div>
     </div>

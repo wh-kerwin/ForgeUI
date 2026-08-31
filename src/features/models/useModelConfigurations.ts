@@ -11,6 +11,7 @@ import {
   saveSecret,
   setDefaultModel,
 } from "../../lib/tauri/storage";
+import { reportError } from "../../lib/errors";
 import type { ModelConfig } from "../../types/domain";
 
 const BROWSER_STORAGE_KEY = "forge-models";
@@ -61,7 +62,12 @@ export function useModelConfigurations() {
       localStorage.setItem(BROWSER_STORAGE_KEY, JSON.stringify(models));
       return;
     }
-    models.forEach((model) => saveModelMetadata(model).catch(() => undefined));
+    // Persistence is best-effort, but a failure was previously invisible.
+    models.forEach((model) =>
+      saveModelMetadata(model).catch((error) => {
+        reportError("modelConfigurations.saveMetadata", error);
+      }),
+    );
   }, [models]);
 
   useEffect(() => {
@@ -78,7 +84,11 @@ export function useModelConfigurations() {
           );
         }
       })
-      .catch(() => undefined);
+      .catch((error) => {
+        // No onNotice is available here, so surface it in the console rather
+        // than letting a failed load look like "no models configured".
+        reportError("modelConfigurations.load", error);
+      });
   }, []);
 
   async function saveModel(model: ModelConfig) {
@@ -131,16 +141,12 @@ export function useModelConfigurations() {
     const target = models.find((model) => model.id === id);
     if (isTauri()) {
       await deleteModelConfig(id);
-      if (target?.secretRef)
-        await deleteSecret(target.secretRef).catch(() => undefined);
-      for (const secretRef of Object.values(
-        target?.customHeaderSecretRefs || {},
-      ))
+      if (target?.secretRef) await deleteSecret(target.secretRef).catch(() => undefined);
+      for (const secretRef of Object.values(target?.customHeaderSecretRefs || {}))
         await deleteSecret(secretRef).catch(() => undefined);
     }
     setModels((current) => current.filter((model) => model.id !== id));
-    if (selectedId === id)
-      setSelectedId(models.find((model) => model.id !== id)?.id || "");
+    if (selectedId === id) setSelectedId(models.find((model) => model.id !== id)?.id || "");
   }
 
   return {

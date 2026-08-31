@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import process from "node:process";
 
-const file = process.argv[2] || process.env.TAURI_UPDATER_CONFIG || "src-tauri/tauri.updater.release.json";
+const file =
+  process.argv[2] || process.env.TAURI_UPDATER_CONFIG || "src-tauri/tauri.updater.release.json";
 
 function fail(message) {
   console.error(`updater config invalid: ${message}`);
@@ -33,7 +34,8 @@ for (const endpoint of endpoints || []) {
   try {
     const url = new URL(endpoint);
     if (url.protocol !== "https:") fail(`endpoint must use HTTPS: ${url.origin}`);
-    if (/example\.(com|org|net)|\.invalid$/i.test(url.hostname)) fail("endpoint is still an example/invalid host");
+    if (/example\.(com|org|net)|\.invalid$/i.test(url.hostname))
+      fail("endpoint is still an example/invalid host");
   } catch {
     fail("endpoint is not a valid URL");
   }

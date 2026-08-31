@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { FieldSchema, PageSpec } from "../src/types/domain";
-import { serializeFieldValues, validateField, visibleFieldSchemas } from "../src/features/pages/formValidation";
-import { resolveInteraction, usesOverlay, usesRedirect } from "../src/features/pages/interactionModes";
+import {
+  serializeFieldValues,
+  validateField,
+  visibleFieldSchemas,
+} from "../src/features/pages/formValidation";
+import {
+  resolveInteraction,
+  usesOverlay,
+  usesRedirect,
+} from "../src/features/pages/interactionModes";
 import { resolvePageLayout } from "../src/features/pages/pageLayout";
 import { parsePageSpec } from "../src/features/pages/parsePageSpec";
 
@@ -33,7 +41,10 @@ test("generated pages default to a vertical full layout and streaming drafts sta
 });
 
 test("explicit modal and drawer interaction modes parse and resolve", () => {
-  const page = { ...legacyPage, interaction: { create: "modal", update: "drawer", delete: "modal", detail: "modal" } } as const;
+  const page = {
+    ...legacyPage,
+    interaction: { create: "modal", update: "drawer", delete: "modal", detail: "modal" },
+  } as const;
   assert.deepEqual(parsePageSpec(page)?.interaction, page.interaction);
   const resolved = resolveInteraction(page);
   assert.equal(resolved.create, "modal");
@@ -43,7 +54,10 @@ test("explicit modal and drawer interaction modes parse and resolve", () => {
 });
 
 test("CRUD pages always use modal operations regardless of model interaction or prompt scene", () => {
-  const page = { ...legacyPage, interaction: { create: "inline", update: "redirect", delete: "inline", detail: "drawer" } } as const;
+  const page = {
+    ...legacyPage,
+    interaction: { create: "inline", update: "redirect", delete: "inline", detail: "drawer" },
+  } as const;
   assert.deepEqual(resolveInteraction(page, true), {
     create: "modal",
     update: "modal",
@@ -74,7 +88,11 @@ test("field validation reports required, numeric, integer, and enum errors", () 
   assert.match(validateField(fields[1], "abc", false), /number/);
   assert.match(validateField(fields[2], "1.5", false), /integer/);
   assert.match(validateField(fields[3], "missing", false), /valid/);
-  const invalid = serializeFieldValues(fields, { name: "", amount: "abc", count: "1.5", status: "missing" }, false);
+  const invalid = serializeFieldValues(
+    fields,
+    { name: "", amount: "abc", count: "1.5", status: "missing" },
+    false,
+  );
   assert.equal(invalid.payload, null);
   assert.equal(Object.keys(invalid.errors).length, 4);
 });
@@ -87,18 +105,53 @@ test("schema field values serialize to their API types", () => {
     { name: "enabled", type: "boolean", required: true },
     { name: "date", type: "date", required: false },
   ];
-  const result = serializeFieldValues(fields, { name: "Router", amount: "12.5", count: "2", enabled: "false", date: "2026-08-25" }, false);
-  assert.deepEqual(JSON.parse(result.payload ?? "{}"), { name: "Router", amount: 12.5, count: 2, enabled: false, date: "2026-08-25" });
+  const result = serializeFieldValues(
+    fields,
+    { name: "Router", amount: "12.5", count: "2", enabled: "false", date: "2026-08-25" },
+    false,
+  );
+  assert.deepEqual(JSON.parse(result.payload ?? "{}"), {
+    name: "Router",
+    amount: 12.5,
+    count: 2,
+    enabled: false,
+    date: "2026-08-25",
+  });
 });
 
 test("linked fields are rendered and serialized only when their condition matches", () => {
   const fields: FieldSchema[] = [
     { name: "status", type: "enum", required: true, enumValues: ["active", "closed"] },
-    { name: "closedReason", type: "string", required: true, visibleWhen: { field: "status", equals: "closed" } },
-    { name: "reviewer", type: "string", required: false, visibleWhen: { field: "status", equals: ["active", "closed"] } },
+    {
+      name: "closedReason",
+      type: "string",
+      required: true,
+      visibleWhen: { field: "status", equals: "closed" },
+    },
+    {
+      name: "reviewer",
+      type: "string",
+      required: false,
+      visibleWhen: { field: "status", equals: ["active", "closed"] },
+    },
   ];
   const activeFields = visibleFieldSchemas(fields, { status: "active", closedReason: "stale" });
-  assert.deepEqual(activeFields.map((field) => field.name), ["status", "reviewer"]);
-  assert.deepEqual(JSON.parse(serializeFieldValues(activeFields, { status: "active", closedReason: "stale", reviewer: "Ada" }, false).payload ?? "{}"), { status: "active", reviewer: "Ada" });
-  assert.deepEqual(visibleFieldSchemas(fields, { status: "closed" }).map((field) => field.name), ["status", "closedReason", "reviewer"]);
+  assert.deepEqual(
+    activeFields.map((field) => field.name),
+    ["status", "reviewer"],
+  );
+  assert.deepEqual(
+    JSON.parse(
+      serializeFieldValues(
+        activeFields,
+        { status: "active", closedReason: "stale", reviewer: "Ada" },
+        false,
+      ).payload ?? "{}",
+    ),
+    { status: "active", reviewer: "Ada" },
+  );
+  assert.deepEqual(
+    visibleFieldSchemas(fields, { status: "closed" }).map((field) => field.name),
+    ["status", "closedReason", "reviewer"],
+  );
 });

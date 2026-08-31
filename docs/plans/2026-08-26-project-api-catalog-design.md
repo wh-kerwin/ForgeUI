@@ -7,4 +7,3 @@ Users explicitly select the enabled API Documents used for each generation reque
 Generated Pages, Templates, and Generation Sessions belong to exactly one Project. Cross-project reuse is copy-based rather than shared ownership. Deleting an API Document is blocked while a saved Template or Generation Session references it; the error identifies the referencing artifacts. Existing singleton connection data migrates into a Default Project without losing templates, history, authorization, or credential references.
 
 The sidebar provides the current Project selector and project management commands. The OpenAPI view lists and manages documents in the current Project. The generation view presents an explicit multi-document selection before generation. Business connection settings edit the currently selected API Document.
-

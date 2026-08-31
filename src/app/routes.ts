@@ -1,18 +1,9 @@
-export type AppRoute =
-  | "overview"
-  | "generate"
-  | "templates"
-  | "business"
-  | "openapi"
-  | "models";
+export type AppRoute = "overview" | "generate" | "templates" | "business" | "openapi" | "models";
 
 export function parseRoute(pathname = window.location.pathname): AppRoute {
   const value = pathname.replace(/^\/+|\/+$/g, "");
   if (value === "generate" || value.startsWith("generate/")) return "generate";
-  return value === "templates" ||
-    value === "business" ||
-    value === "openapi" ||
-    value === "models"
+  return value === "templates" || value === "business" || value === "openapi" || value === "models"
     ? value
     : "overview";
 }

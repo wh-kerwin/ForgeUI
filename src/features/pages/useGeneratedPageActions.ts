@@ -2,7 +2,11 @@ import { useEffect } from "react";
 import type { ApiDocument } from "../../types/domain";
 import { useWorkbenchStore } from "../../store/workbenchStore";
 
-type Options = { projectId: string; apiDocuments: ApiDocument[]; onNotice: (message: string) => void; };
+type Options = {
+  projectId: string;
+  apiDocuments: ApiDocument[];
+  onNotice: (message: string) => void;
+};
 
 export function useGeneratedPageActions({ projectId, apiDocuments, onNotice }: Options) {
   const page = useWorkbenchStore((state) => state.page);

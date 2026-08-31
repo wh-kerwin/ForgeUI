@@ -24,7 +24,11 @@ async function loadDataTableStateHelpers() {
   evaluate(module, module.exports, createRequire(import.meta.url));
   return module.exports as {
     reconcileColumnOrder: (current: number[], indexes: readonly number[]) => number[];
-    reconcileHiddenColumns: (current: Set<number>, indexes: readonly number[], defaultHiddenIndexes: readonly number[]) => Set<number>;
+    reconcileHiddenColumns: (
+      current: Set<number>,
+      indexes: readonly number[],
+      defaultHiddenIndexes: readonly number[],
+    ) => Set<number>;
   };
 }
 

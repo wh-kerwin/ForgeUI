@@ -10,9 +10,7 @@ import type {
 } from "../../types/domain";
 
 export const isTauri = () =>
-  Boolean(
-    (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__,
-  );
+  Boolean((window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
 
 export async function saveModelMetadata(model: ModelConfig) {
   await invoke("save_model_metadata", {
@@ -67,7 +65,9 @@ export async function saveProjectDocumentSelection(projectId: string, apiDocumen
   await invoke("set_project_selected_api_documents", { projectId, apiDocumentIds });
 }
 export async function listApiDocuments(projectId: string) {
-  const records = await invoke<Array<Omit<ApiDocument, "spec" | "auth"> & { payload: Pick<ApiDocument, "spec" | "auth"> }>>("list_api_documents", { projectId });
+  const records = await invoke<
+    Array<Omit<ApiDocument, "spec" | "auth"> & { payload: Pick<ApiDocument, "spec" | "auth"> }>
+  >("list_api_documents", { projectId });
   return records.map(({ payload, ...record }) => ({ ...record, ...payload }));
 }
 export async function saveApiDocument(document: ApiDocument) {
@@ -79,7 +79,11 @@ export async function saveApiDocument(document: ApiDocument) {
     payload: JSON.stringify({ spec: document.spec, auth: document.auth }),
   });
 }
-export async function setApiDocumentEnabled(projectId: string, apiDocumentId: string, enabled: boolean) {
+export async function setApiDocumentEnabled(
+  projectId: string,
+  apiDocumentId: string,
+  enabled: boolean,
+) {
   await invoke("set_api_document_enabled", { projectId, apiDocumentId, enabled });
 }
 export async function deleteApiDocument(projectId: string, apiDocumentId: string) {

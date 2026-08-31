@@ -42,9 +42,18 @@ const SCENE_RULES: Record<PromptTemplate["scene"], string[]> = {
     "Prioritize a kanban view grouped by a real status/category column and show concise identifying card fields.",
     "Also provide a list fallback and never imply persistence without an authorized update operation.",
   ],
-  shop: ["Prioritize product discovery, clear price/availability, and lightweight modal interactions.", "Use consumer-facing copy and avoid dense administrative controls."],
-  content: ["Prioritize readable content hierarchy, category discovery, and detail previews.", "Keep editorial metadata concise and use modal detail when it preserves reading context."],
-  social: ["Prioritize identity, activity feeds, and safe lightweight interactions.", "Do not invent social mutations without matching authorized operations."],
+  shop: [
+    "Prioritize product discovery, clear price/availability, and lightweight modal interactions.",
+    "Use consumer-facing copy and avoid dense administrative controls.",
+  ],
+  content: [
+    "Prioritize readable content hierarchy, category discovery, and detail previews.",
+    "Keep editorial metadata concise and use modal detail when it preserves reading context.",
+  ],
+  social: [
+    "Prioritize identity, activity feeds, and safe lightweight interactions.",
+    "Do not invent social mutations without matching authorized operations.",
+  ],
 };
 
 const FEW_SHOTS: Record<PromptTemplate["scene"], object> = {
@@ -57,7 +66,16 @@ const FEW_SHOTS: Record<PromptTemplate["scene"], object> = {
     columns: ["Date", "Orders"],
     rows: [["2026-08-24", "120"]],
     operations: [],
-    views: [{ type: "list", title: "Data" }, { type: "chart", title: "Trend", chartType: "line", xAxisColumn: "Date", yAxisColumn: "Orders" }],
+    views: [
+      { type: "list", title: "Data" },
+      {
+        type: "chart",
+        title: "Trend",
+        chartType: "line",
+        xAxisColumn: "Date",
+        yAxisColumn: "Orders",
+      },
+    ],
   },
   crud: {
     version: 1,
@@ -90,11 +108,50 @@ const FEW_SHOTS: Record<PromptTemplate["scene"], object> = {
     columns: ["ID", "Title", "Status", "Owner"],
     rows: [["1", "Draft proposal", "Todo", "Alex"]],
     operations: [],
-    views: [{ type: "list", title: "All work" }, { type: "kanban", title: "Board", groupColumn: "Status", cardFields: ["Title", "Owner"] }],
+    views: [
+      { type: "list", title: "All work" },
+      { type: "kanban", title: "Board", groupColumn: "Status", cardFields: ["Title", "Owner"] },
+    ],
   },
-  shop: { version: 1, title: "Catalog", description: "Browse available products", filters: ["Category"], stats: [], columns: ["ID", "Product", "Price"], rows: [["1", "Product A", "99.00"]], operations: [], views: [{ type: "list", title: "Products" }], interaction: { detail: "modal" }, theme: "clean-light" },
-  content: { version: 1, title: "Stories", description: "Recent published content", filters: ["Category"], stats: [], columns: ["ID", "Title", "Published"], rows: [["1", "Story A", "2026-08-25"]], operations: [], views: [{ type: "list", title: "Latest" }], interaction: { detail: "modal" }, theme: "clean-light" },
-  social: { version: 1, title: "Community", description: "Recent activity", filters: ["Topic"], stats: [], columns: ["ID", "Author", "Post"], rows: [["1", "Alex", "Update"]], operations: [], views: [{ type: "list", title: "Feed" }], interaction: { detail: "modal" }, theme: "minimal-dark" },
+  shop: {
+    version: 1,
+    title: "Catalog",
+    description: "Browse available products",
+    filters: ["Category"],
+    stats: [],
+    columns: ["ID", "Product", "Price"],
+    rows: [["1", "Product A", "99.00"]],
+    operations: [],
+    views: [{ type: "list", title: "Products" }],
+    interaction: { detail: "modal" },
+    theme: "clean-light",
+  },
+  content: {
+    version: 1,
+    title: "Stories",
+    description: "Recent published content",
+    filters: ["Category"],
+    stats: [],
+    columns: ["ID", "Title", "Published"],
+    rows: [["1", "Story A", "2026-08-25"]],
+    operations: [],
+    views: [{ type: "list", title: "Latest" }],
+    interaction: { detail: "modal" },
+    theme: "clean-light",
+  },
+  social: {
+    version: 1,
+    title: "Community",
+    description: "Recent activity",
+    filters: ["Topic"],
+    stats: [],
+    columns: ["ID", "Author", "Post"],
+    rows: [["1", "Alex", "Update"]],
+    operations: [],
+    views: [{ type: "list", title: "Feed" }],
+    interaction: { detail: "modal" },
+    theme: "minimal-dark",
+  },
 };
 
 function sceneOf(template?: PromptTemplate | string): PromptTemplate["scene"] {
@@ -102,7 +159,7 @@ function sceneOf(template?: PromptTemplate | string): PromptTemplate["scene"] {
 }
 
 function scenePromptOf(template?: PromptTemplate | string): string {
-  return typeof template === "string" ? template : template?.systemPrompt ?? "";
+  return typeof template === "string" ? template : (template?.systemPrompt ?? "");
 }
 
 function compactTemplateContext(template?: PageSpec): string {
@@ -125,10 +182,18 @@ function compactOperationContext(operations: AllowedOperation[]): string {
     ...operation,
     suggested_roles: inferOperationRoles([operation])[operation.operation_id] ?? [],
   }));
-  return JSON.stringify({ operations: compact, omitted: Math.max(0, operations.length - compact.length) });
+  return JSON.stringify({
+    operations: compact,
+    omitted: Math.max(0, operations.length - compact.length),
+  });
 }
 
-export function composeModelPrompt({ prompt, template, promptTemplate, allowedOperations }: PromptComposerInput) {
+export function composeModelPrompt({
+  prompt,
+  template,
+  promptTemplate,
+  allowedOperations,
+}: PromptComposerInput) {
   const scene = sceneOf(promptTemplate);
   const operationContext = compactOperationContext(allowedOperations);
   const templateContext = compactTemplateContext(template);

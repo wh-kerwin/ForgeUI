@@ -1,10 +1,6 @@
 import { ChangeEvent, useMemo, useRef, useState } from "react";
 import { Download, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
-import type {
-  PageSpec,
-  TemplateRecord,
-  TemplateVersion,
-} from "../../types/domain";
+import type { PageSpec, TemplateRecord, TemplateVersion } from "../../types/domain";
 import { TemplateLibraryToolbar } from "./TemplateLibraryToolbar";
 import { usePinnedTemplates } from "./usePinnedTemplates";
 import { parsePageSpecJson } from "../pages/parsePageSpec";
@@ -62,10 +58,26 @@ export function TemplateLibrary({
         <h3>{zh ? "可复用页面" : "Reusable pages"}</h3>
       </div>
       <div className="template-list">
-        <input ref={fileInput} type="file" accept="application/json,.json" hidden onChange={handleImport} />
-        <TemplateLibraryToolbar query={query} count={visibleTemplates.length} total={templates.length} onQueryChange={setQuery} onImport={() => fileInput.current?.click()} />
-        {templates.length === 0 && <span className="muted">{zh ? "还没有本地模板" : "No saved templates yet"}</span>}
-        {templates.length > 0 && visibleTemplates.length === 0 && <span className="muted">{zh ? "没有匹配的页面模板" : "No matching templates"}</span>}
+        <input
+          ref={fileInput}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={handleImport}
+        />
+        <TemplateLibraryToolbar
+          query={query}
+          count={visibleTemplates.length}
+          total={templates.length}
+          onQueryChange={setQuery}
+          onImport={() => fileInput.current?.click()}
+        />
+        {templates.length === 0 && (
+          <span className="muted">{zh ? "还没有本地模板" : "No saved templates yet"}</span>
+        )}
+        {templates.length > 0 && visibleTemplates.length === 0 && (
+          <span className="muted">{zh ? "没有匹配的页面模板" : "No matching templates"}</span>
+        )}
         {visibleTemplates.map((template) => (
           <div key={template.id} className="template-entry">
             <button
@@ -83,26 +95,44 @@ export function TemplateLibrary({
               <strong>{template.name}</strong>
               <span>v{template.version}</span>
             </button>
-            <button className="version-btn pin-button" aria-label={pinned.includes(template.id) ? (zh ? "取消固定模板" : "Unpin template") : (zh ? "固定模板" : "Pin template")} onClick={() => togglePinned(template.id)}>{pinned.includes(template.id) ? <Pin size={14} /> : <PinOff size={14} />}</button>
-            <button className="version-btn pin-button" aria-label={zh ? "重命名模板" : "Rename template"} onClick={() => onRename(template.id, template.name)}><Pencil size={14} /></button>
             <button
-              className="version-btn"
-              onClick={() => onShowVersions(template.id)}
+              className="version-btn pin-button"
+              aria-label={
+                pinned.includes(template.id)
+                  ? zh
+                    ? "取消固定模板"
+                    : "Unpin template"
+                  : zh
+                    ? "固定模板"
+                    : "Pin template"
+              }
+              onClick={() => togglePinned(template.id)}
             >
+              {pinned.includes(template.id) ? <Pin size={14} /> : <PinOff size={14} />}
+            </button>
+            <button
+              className="version-btn pin-button"
+              aria-label={zh ? "重命名模板" : "Rename template"}
+              onClick={() => onRename(template.id, template.name)}
+            >
+              <Pencil size={14} />
+            </button>
+            <button className="version-btn" onClick={() => onShowVersions(template.id)}>
               {zh ? "历史" : "History"}
             </button>
-            <button className="version-btn" onClick={() => onExport(template.id, template.name)}><Download size={14} /> {zh ? "导出" : "Export"}</button>
-            <button className="danger" onClick={() => onDelete(template.id, template.name)}><Trash2 size={14} /> {zh ? "删除" : "Delete"}</button>
+            <button className="version-btn" onClick={() => onExport(template.id, template.name)}>
+              <Download size={14} /> {zh ? "导出" : "Export"}
+            </button>
+            <button className="danger" onClick={() => onDelete(template.id, template.name)}>
+              <Trash2 size={14} /> {zh ? "删除" : "Delete"}
+            </button>
           </div>
         ))}
       </div>
       {selectedTemplateId && (
         <div className="version-list">
           {versions.map((version) => (
-            <button
-              key={version.version}
-              onClick={() => onRestore(version.version)}
-            >
+            <button key={version.version} onClick={() => onRestore(version.version)}>
               {zh ? "恢复" : "Restore"} v{version.version}
               <span>{version.createdAt}</span>
             </button>

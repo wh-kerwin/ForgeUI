@@ -18,25 +18,25 @@
 
 ### 2.1 技术栈
 
-| 层级 | 技术 |
-|------|------|
-| 桌面框架 | Tauri 2.6 + Rust |
-| 前端 | React 19 + TypeScript + Vite |
-| 图标 | lucide-react |
-| 数据持久化 | SQLite（rusqlite bundled） |
-| 凭证存储 | Windows Credential Manager / macOS Keychain |
-| 样式 | 无 CSS 框架，手写 CSS（styles.css、route.css、wide-layout.css、generated.css） |
+| 层级       | 技术                                                                           |
+| ---------- | ------------------------------------------------------------------------------ |
+| 桌面框架   | Tauri 2.6 + Rust                                                               |
+| 前端       | React 19 + TypeScript + Vite                                                   |
+| 图标       | lucide-react                                                                   |
+| 数据持久化 | SQLite（rusqlite bundled）                                                     |
+| 凭证存储   | Windows Credential Manager / macOS Keychain                                    |
+| 样式       | 无 CSS 框架，手写 CSS（styles.css、route.css、wide-layout.css、generated.css） |
 
 ### 2.2 关键文件规模
 
-| 文件 | 行数 | 备注 |
-|------|------|------|
-| Workbench.tsx | 91（单行 JSX 超 400 字符） | 路由分发用三元链；全部状态集中于单组件 |
-| GeneratedPage.tsx | 256 | 承载筛选、CRUD、编辑弹窗、详情面板全部逻辑 |
-| TemplateLibrary.tsx | 114 | 模板搜索、固定、历史、导入导出混杂 |
-| useGeneratedPageActions.ts | 62 | API 调用集中，无请求合并 |
-| model_provider.rs | 423 | 生成逻辑 + SSE 解析 + schema 校验集中 |
-| business_api.rs | 228 | 操作授权校验 + 安全限制 |
+| 文件                       | 行数                       | 备注                                       |
+| -------------------------- | -------------------------- | ------------------------------------------ |
+| Workbench.tsx              | 91（单行 JSX 超 400 字符） | 路由分发用三元链；全部状态集中于单组件     |
+| GeneratedPage.tsx          | 256                        | 承载筛选、CRUD、编辑弹窗、详情面板全部逻辑 |
+| TemplateLibrary.tsx        | 114                        | 模板搜索、固定、历史、导入导出混杂         |
+| useGeneratedPageActions.ts | 62                         | API 调用集中，无请求合并                   |
+| model_provider.rs          | 423                        | 生成逻辑 + SSE 解析 + schema 校验集中      |
+| business_api.rs            | 228                        | 操作授权校验 + 安全限制                    |
 
 ### 2.3 核心数据流
 
@@ -66,18 +66,18 @@
 
 ### 2.4 已识别的主要缺陷
 
-| # | 问题 | 位置 | 影响 |
-|---|------|------|------|
-| D1 | 路由分发用长三元链 | Workbench.tsx:89 | 可读性差，新增路由易出错 |
-| D2 | GeneratedPage 承担全部 UI 职责 | GeneratedPage.tsx | 难以单独测试和复用 |
-| D3 | 所有表单为裸 JSON textarea | GeneratedPage.tsx:181-226 | 用户体验差，无法利用类型信息 |
-| D4 | 无流式渲染 | model_provider.rs:185-258 | 用户等待过程无反馈 |
-| D5 | 只能渲染单表列表 | PageSpec type | 不支持看板、图表等视图 |
-| D6 | 数据硬截断 100 行 | useGeneratedPageActions.ts:33 | 大数据量丢失 |
-| D7 | 无列自定义能力 | DataTable.tsx | 用户无法调整列顺序/显隐 |
-| D8 | redirect Policy::none() 过于激进 | business_api.rs:135 | 合法重定向被拒绝 |
-| D9 | 无全局状态管理 | Workbench.tsx | props drilling，状态散乱 |
-| D10 | 系统提示词硬编码在 Rust | model_provider.rs:189 | 无法按场景定制 |
+| #   | 问题                             | 位置                          | 影响                         |
+| --- | -------------------------------- | ----------------------------- | ---------------------------- |
+| D1  | 路由分发用长三元链               | Workbench.tsx:89              | 可读性差，新增路由易出错     |
+| D2  | GeneratedPage 承担全部 UI 职责   | GeneratedPage.tsx             | 难以单独测试和复用           |
+| D3  | 所有表单为裸 JSON textarea       | GeneratedPage.tsx:181-226     | 用户体验差，无法利用类型信息 |
+| D4  | 无流式渲染                       | model_provider.rs:185-258     | 用户等待过程无反馈           |
+| D5  | 只能渲染单表列表                 | PageSpec type                 | 不支持看板、图表等视图       |
+| D6  | 数据硬截断 100 行                | useGeneratedPageActions.ts:33 | 大数据量丢失                 |
+| D7  | 无列自定义能力                   | DataTable.tsx                 | 用户无法调整列顺序/显隐      |
+| D8  | redirect Policy::none() 过于激进 | business_api.rs:135           | 合法重定向被拒绝             |
+| D9  | 无全局状态管理                   | Workbench.tsx                 | props drilling，状态散乱     |
+| D10 | 系统提示词硬编码在 Rust          | model_provider.rs:189         | 无法按场景定制               |
 
 ---
 
@@ -149,6 +149,7 @@ async fn generate_page_stream(
 #### 3.1.3 UI 变化
 
 [GeneratedPage.tsx](src/features/pages/GeneratedPage.tsx) 接收 `isStreaming` prop：
+
 - 流式期间显示"生成中…"骨架屏
 - 部分解析结果实时更新统计卡片和表格预览
 - 完成时刷新完整 PageSpec
@@ -197,16 +198,20 @@ export function FieldRenderer({ field, value, onChange }: FieldRendererProps) {
   switch (field.type) {
     case "enum":
       return (
-        <select value={value} onChange={e => onChange(e.target.value)}>
-          {field.enum_values!.map(v => <option key={v} value={v}>{v}</option>)}
+        <select value={value} onChange={(e) => onChange(e.target.value)}>
+          {field.enum_values!.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
         </select>
       );
     case "date":
-      return <input type="date" value={value} onChange={e => onChange(e.target.value)} />;
+      return <input type="date" value={value} onChange={(e) => onChange(e.target.value)} />;
     case "number":
-      return <input type="number" value={value} onChange={e => onChange(e.target.value)} />;
+      return <input type="number" value={value} onChange={(e) => onChange(e.target.value)} />;
     default:
-      return <input type="text" value={value} onChange={e => onChange(e.target.value)} />;
+      return <input type="text" value={value} onChange={(e) => onChange(e.target.value)} />;
   }
 }
 ```
@@ -315,20 +320,20 @@ export type PageSpec = {
 };
 
 export type PageView =
-  | { type: "list"; title?: string }  // 现有表格视图
+  | { type: "list"; title?: string } // 现有表格视图
   | {
       type: "chart";
       title: string;
       chartType: "bar" | "line" | "pie";
-      xAxisColumn: string;    // 对应 columns 中的列名
+      xAxisColumn: string; // 对应 columns 中的列名
       yAxisColumn: string;
       groupByColumn?: string; // 可选，按此列分组
     }
   | {
       type: "kanban";
       title: string;
-      groupColumn: string;    // 按此列值分组
-      cardFields: string[];   // 卡片上显示的字段
+      groupColumn: string; // 按此列值分组
+      cardFields: string[]; // 卡片上显示的字段
     };
 ```
 
@@ -372,15 +377,17 @@ features/pages/
 在 [GeneratedPage.tsx](src/features/pages/GeneratedPage.tsx) 顶部增加视图切换 Tab：
 
 ```tsx
-{page.views && page.views.length > 1 && (
-  <div className="view-tabs">
-    {page.views.map(view => (
-      <button key={view.type} className={activeView === view.type ? "active" : ""}>
-        {view.title || view.type}
-      </button>
-    ))}
-  </div>
-)}
+{
+  page.views && page.views.length > 1 && (
+    <div className="view-tabs">
+      {page.views.map((view) => (
+        <button key={view.type} className={activeView === view.type ? "active" : ""}>
+          {view.title || view.type}
+        </button>
+      ))}
+    </div>
+  );
+}
 ```
 
 ---
@@ -455,12 +462,12 @@ export type PromptTemplate = {
 
 在 `model_provider.rs` 或前端新增内置模板，按场景拼接不同的系统提示词：
 
-| 场景 | 特点 |
-|------|------|
-| Dashboard | 强调 stats、chart、趋势分析 |
-| CRUD | 强调表格、筛选、新增/编辑/删除操作 |
-| Report | 强调分页、导出、汇总统计 |
-| Kanban | 强调看板分组、卡片展示 |
+| 场景      | 特点                               |
+| --------- | ---------------------------------- |
+| Dashboard | 强调 stats、chart、趋势分析        |
+| CRUD      | 强调表格、筛选、新增/编辑/删除操作 |
+| Report    | 强调分页、导出、汇总统计           |
+| Kanban    | 强调看板分组、卡片展示             |
 
 #### 3.6.3 用户自定义
 
@@ -473,6 +480,7 @@ export type PromptTemplate = {
 #### 3.7.1 样式统一
 
 当前有 4 个 CSS 文件散落各处：
+
 - `styles.css` — 基础样式
 - `route.css` — 路由页面样式
 - `wide-layout.css` — 宽屏适配
@@ -514,31 +522,31 @@ type LoadingState = "idle" | "generating" | "querying" | "mutating" | "saving";
 
 ### Phase 1：体验提升（预计 1-2 周）
 
-| 功能 | 描述 | 优先级 |
-|------|------|--------|
-| 流式预览 | LLM 输出过程中实时显示生成的 PageSpec 片段 | P0 |
-| 字段类型渲染 | 根据 OpenAPI schema 渲染对应控件（非 textarea） | P0 |
-| 列配置面板 | 拖拽排序、隐藏/显示列、调整列宽 | P1 |
-| 模板分类 | 在模板库按 Dashboard/CRUD/报表/看板分类展示 | P1 |
+| 功能         | 描述                                            | 优先级 |
+| ------------ | ----------------------------------------------- | ------ |
+| 流式预览     | LLM 输出过程中实时显示生成的 PageSpec 片段      | P0     |
+| 字段类型渲染 | 根据 OpenAPI schema 渲染对应控件（非 textarea） | P0     |
+| 列配置面板   | 拖拽排序、隐藏/显示列、调整列宽                 | P1     |
+| 模板分类     | 在模板库按 Dashboard/CRUD/报表/看板分类展示     | P1     |
 
 ### Phase 2：数据深度（预计 2-4 周）
 
-| 功能 | 描述 | 优先级 |
-|------|------|--------|
-| 多视图支持 | Table / Chart / Kanban 三种视图切换 | P0 |
-| 关联数据展开 | 点击行内外键展开子表数据（如订单→订单项） | P1 |
-| 批量操作 | 勾选多行批量删除/状态修改 | P1 |
-| 智能数据导出 | 按当前筛选条件导出 CSV/XLSX，而非全量 | P2 |
+| 功能         | 描述                                      | 优先级 |
+| ------------ | ----------------------------------------- | ------ |
+| 多视图支持   | Table / Chart / Kanban 三种视图切换       | P0     |
+| 关联数据展开 | 点击行内外键展开子表数据（如订单→订单项） | P1     |
+| 批量操作     | 勾选多行批量删除/状态修改                 | P1     |
+| 智能数据导出 | 按当前筛选条件导出 CSV/XLSX，而非全量     | P2     |
 
 ### Phase 3：协作与智能化（预计 1-2 月）
 
-| 功能 | 描述 | 优先级 |
-|------|------|--------|
-| 版本 Diff | 模板版本间展示 PageSpec 变更 diff | P1 |
-| AI 辅助修复 | API 返回数据结构与 PageSpec 列不匹配时，自动建议修复 | P1 |
-| 多后端切换 | 同一页面可绑定多个业务 API，运行时切换数据源 | P2 |
-| 插件系统 | 开放 `PageView` 渲染器为插件接口，社区可扩展新视图 | P2 |
-| 快捷键支持 | 全局快捷键（⌘K 快速生成、⌘S 保存模板等） | P2 |
+| 功能        | 描述                                                 | 优先级 |
+| ----------- | ---------------------------------------------------- | ------ |
+| 版本 Diff   | 模板版本间展示 PageSpec 变更 diff                    | P1     |
+| AI 辅助修复 | API 返回数据结构与 PageSpec 列不匹配时，自动建议修复 | P1     |
+| 多后端切换  | 同一页面可绑定多个业务 API，运行时切换数据源         | P2     |
+| 插件系统    | 开放 `PageView` 渲染器为插件接口，社区可扩展新视图   | P2     |
+| 快捷键支持  | 全局快捷键（⌘K 快速生成、⌘S 保存模板等）             | P2     |
 
 ---
 
@@ -571,12 +579,12 @@ Week 7+     迭代功能
 
 ## 6. 风险与注意事项
 
-| 风险 | 说明 | 缓解措施 |
-|------|------|----------|
-| 流式解析稳定性 | LLM 中途输出可能被截断，JSON 不完整 | 使用增量 JSON 解析库（如 `nearley`），每收到一个 token 尝试补全 |
-| PageSpec 版本升级 | 现有模板不兼容新 `views` 字段 | 前端 `parsePageSpec` 增加向后兼容逻辑，缺少 views 时默认使用 list 视图 |
-| 零额外依赖约束 | 官方设计不引入第三方库 | 优先使用原生 API（HTML5 drag、Canvas）；必须引入时评估 bundle 体积 |
-| Rust SSE 实现复杂度 | Tauri 2 对 SSE 流的支持需要额外封装 | 可先用非流式 MVP 验证流程，再逐步迁移 |
+| 风险                | 说明                                | 缓解措施                                                               |
+| ------------------- | ----------------------------------- | ---------------------------------------------------------------------- |
+| 流式解析稳定性      | LLM 中途输出可能被截断，JSON 不完整 | 使用增量 JSON 解析库（如 `nearley`），每收到一个 token 尝试补全        |
+| PageSpec 版本升级   | 现有模板不兼容新 `views` 字段       | 前端 `parsePageSpec` 增加向后兼容逻辑，缺少 views 时默认使用 list 视图 |
+| 零额外依赖约束      | 官方设计不引入第三方库              | 优先使用原生 API（HTML5 drag、Canvas）；必须引入时评估 bundle 体积     |
+| Rust SSE 实现复杂度 | Tauri 2 对 SSE 流的支持需要额外封装 | 可先用非流式 MVP 验证流程，再逐步迁移                                  |
 
 ---
 
@@ -584,29 +592,29 @@ Week 7+     迭代功能
 
 ### A. 关键文件索引
 
-| 文件 | 作用 |
-|------|------|
-| [src/types/domain.ts](src/types/domain.ts) | 类型定义（PageSpec、ModelConfig 等） |
-| [src/features/pages/GeneratedPage.tsx](src/features/pages/GeneratedPage.tsx) | 生成页面主渲染器 |
-| [src/features/pages/parsePageSpec.ts](src/features/pages/parsePageSpec.ts) | 前端 JSON 解析与修复 |
-| [src/features/pages/modelSafePageSpec.ts](src/features/pages/modelSafePageSpec.ts) | 发送给模型的 PageSpec 脱敏版本 |
-| [src/features/pages/useGeneratedPageActions.ts](src/features/pages/useGeneratedPageActions.ts) | 页面 API 调用逻辑 |
-| [src/features/workbench/Workbench.tsx](src/features/workbench/Workbench.tsx) | 应用根组件 |
-| [src-tauri/src/services/model_provider.rs](src-tauri/src/services/model_provider.rs) | LLM 调用 + PageSpec 生成 |
-| [src-tauri/src/services/business_api.rs](src-tauri/src/services/business_api.rs) | 业务 API 执行 + 安全校验 |
-| [src-tauri/src/domain/page_schema.rs](src-tauri/src/domain/page_schema.rs) | PageSpec JSON Schema 定义 + 归一化 |
-| [src-tauri/src/domain/page_spec.rs](src-tauri/src/domain/page_spec.rs) | PageSpec 结构体 + 校验逻辑 |
+| 文件                                                                                           | 作用                                 |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------ |
+| [src/types/domain.ts](src/types/domain.ts)                                                     | 类型定义（PageSpec、ModelConfig 等） |
+| [src/features/pages/GeneratedPage.tsx](src/features/pages/GeneratedPage.tsx)                   | 生成页面主渲染器                     |
+| [src/features/pages/parsePageSpec.ts](src/features/pages/parsePageSpec.ts)                     | 前端 JSON 解析与修复                 |
+| [src/features/pages/modelSafePageSpec.ts](src/features/pages/modelSafePageSpec.ts)             | 发送给模型的 PageSpec 脱敏版本       |
+| [src/features/pages/useGeneratedPageActions.ts](src/features/pages/useGeneratedPageActions.ts) | 页面 API 调用逻辑                    |
+| [src/features/workbench/Workbench.tsx](src/features/workbench/Workbench.tsx)                   | 应用根组件                           |
+| [src-tauri/src/services/model_provider.rs](src-tauri/src/services/model_provider.rs)           | LLM 调用 + PageSpec 生成             |
+| [src-tauri/src/services/business_api.rs](src-tauri/src/services/business_api.rs)               | 业务 API 执行 + 安全校验             |
+| [src-tauri/src/domain/page_schema.rs](src-tauri/src/domain/page_schema.rs)                     | PageSpec JSON Schema 定义 + 归一化   |
+| [src-tauri/src/domain/page_spec.rs](src-tauri/src/domain/page_spec.rs)                         | PageSpec 结构体 + 校验逻辑           |
 
 ### B. 变更影响范围预估
 
-| 优化项 | 涉及文件数 | 预估改动量 |
-|--------|-----------|-----------|
-| 流式渲染 | 4（新增 2） | 中 |
-| Schema 字段渲染 | 3（新增 1） | 中 |
-| 代码结构重构 | 5 | 小（纯重构，无功能变化） |
-| 多视图扩展 | 5（新增 3） | 大 |
-| 列自定义 | 2（新增 1） | 小 |
-| Prompt 模板 | 2（新增 1） | 小 |
+| 优化项          | 涉及文件数  | 预估改动量               |
+| --------------- | ----------- | ------------------------ |
+| 流式渲染        | 4（新增 2） | 中                       |
+| Schema 字段渲染 | 3（新增 1） | 中                       |
+| 代码结构重构    | 5           | 小（纯重构，无功能变化） |
+| 多视图扩展      | 5（新增 3） | 大                       |
+| 列自定义        | 2（新增 1） | 小                       |
+| Prompt 模板     | 2（新增 1） | 小                       |
 
 ---
 
@@ -614,15 +622,15 @@ Week 7+     迭代功能
 
 本轮以第 3 节的可运行优化项为验收范围。第 4 节是后续产品路线图，其中的关联数据、批量操作、版本 Diff、多数据源与插件系统仍需要单独的交互和数据契约设计，不计入本轮实现缺口。
 
-| 优化项 | 状态 | 已落地内容 |
-|--------|------|------------|
-| 3.1 流式 UI 渲染 | 已完成 | Rust 流式请求与 SSE 增量解码、Tauri requestId 隔离事件、前端增量 Parser、草稿预览、完成前禁用业务操作 |
-| 3.2 Schema 字段渲染 | 已完成 | OpenAPI 参数与 requestBody 字段提取、文本/数字/整数/布尔/日期/枚举控件、新增与行编辑表单校验及序列化 |
-| 3.3 代码结构重构 | 已完成 | 路由 Map；PageHeader、FilterBar、StatsPanel、DataTableView、MutationPanel 等组件拆分；查询/详情/变更/删除 actions 迁入 Zustand store |
-| 3.4 多视图 PageSpec | 已完成 | TypeScript/Rust DSL、Schema 与向后兼容解析；List/Bar/Line/Pie/Kanban；同类型多 Tab；图表分组与看板本地拖放 |
-| 3.5 列配置与虚拟滚动 | 已完成 | 列排序、显隐、列宽调节；200 行以上原生虚拟滚动；API 完整结果保留；300ms 防抖与过期请求结果隔离 |
-| 3.6 Prompt 模板引擎 | 已完成 | 四种内置场景、自定义模板新增/编辑/删除、本地持久化、模型默认模板绑定、生成与修改请求注入 |
-| 3.7 样式与交互 | 已完成 | 统一 LoadingState、生成/查询/变更状态、流式状态、统一自定义下拉控件、小屏表格边界及视图/表单/导航响应式布局 |
+| 优化项               | 状态   | 已落地内容                                                                                                                           |
+| -------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 3.1 流式 UI 渲染     | 已完成 | Rust 流式请求与 SSE 增量解码、Tauri requestId 隔离事件、前端增量 Parser、草稿预览、完成前禁用业务操作                                |
+| 3.2 Schema 字段渲染  | 已完成 | OpenAPI 参数与 requestBody 字段提取、文本/数字/整数/布尔/日期/枚举控件、新增与行编辑表单校验及序列化                                 |
+| 3.3 代码结构重构     | 已完成 | 路由 Map；PageHeader、FilterBar、StatsPanel、DataTableView、MutationPanel 等组件拆分；查询/详情/变更/删除 actions 迁入 Zustand store |
+| 3.4 多视图 PageSpec  | 已完成 | TypeScript/Rust DSL、Schema 与向后兼容解析；List/Bar/Line/Pie/Kanban；同类型多 Tab；图表分组与看板本地拖放                           |
+| 3.5 列配置与虚拟滚动 | 已完成 | 列排序、显隐、列宽调节；200 行以上原生虚拟滚动；API 完整结果保留；300ms 防抖与过期请求结果隔离                                       |
+| 3.6 Prompt 模板引擎  | 已完成 | 四种内置场景、自定义模板新增/编辑/删除、本地持久化、模型默认模板绑定、生成与修改请求注入                                             |
+| 3.7 样式与交互       | 已完成 | 统一 LoadingState、生成/查询/变更状态、流式状态、统一自定义下拉控件、小屏表格边界及视图/表单/导航响应式布局                          |
 
 ### 8.1 实现差异说明
 
@@ -633,16 +641,16 @@ Week 7+     迭代功能
 
 ### 8.2 验证结果
 
-| 检查 | 结果 |
-|------|------|
-| `npm run build` | 通过 |
-| `npm test` | 40 passed，0 failed；包含 4 项窄视口下拉定位边界测试 |
-| `cargo fmt --all -- --check` | 通过 |
-| `cargo test` | 51 passed，0 failed |
-| 真实模型一致性验收 | 未达 95%：正式 50 次验收运行到 8 次时已出现 3 个 `invalid-output`（5/8 schema-pass），理论最高合规率降至 94%，因此提前停止以避免无效调用；随后 Dashboard / CRUD / enterprise-theme 各 1 条最小诊断均通过，说明链路可用但供应商输出稳定性仍不足 |
-| 响应式下拉 | 触发器与选项统一为 26px；Portal 菜单在 320 / 520 / 1280px 均位于可视区内，320px 下可自动向上展开且无水平溢出 |
-| `git diff --check` | 通过（仅 Git 的 LF/CRLF 提示） |
-| `npm run validate:updater` | 未通过：缺少真实发布文件 `src-tauri/tauri.updater.release.json`；仓库只有模板，不能生成真实签名配置 |
+| 检查                         | 结果                                                                                                                                                                                                                                           |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run build`              | 通过                                                                                                                                                                                                                                           |
+| `npm test`                   | 40 passed，0 failed；包含 4 项窄视口下拉定位边界测试                                                                                                                                                                                           |
+| `cargo fmt --all -- --check` | 通过                                                                                                                                                                                                                                           |
+| `cargo test`                 | 51 passed，0 failed                                                                                                                                                                                                                            |
+| 真实模型一致性验收           | 未达 95%：正式 50 次验收运行到 8 次时已出现 3 个 `invalid-output`（5/8 schema-pass），理论最高合规率降至 94%，因此提前停止以避免无效调用；随后 Dashboard / CRUD / enterprise-theme 各 1 条最小诊断均通过，说明链路可用但供应商输出稳定性仍不足 |
+| 响应式下拉                   | 触发器与选项统一为 26px；Portal 菜单在 320 / 520 / 1280px 均位于可视区内，320px 下可自动向上展开且无水平溢出                                                                                                                                   |
+| `git diff --check`           | 通过（仅 Git 的 LF/CRLF 提示）                                                                                                                                                                                                                 |
+| `npm run validate:updater`   | 未通过：缺少真实发布文件 `src-tauri/tauri.updater.release.json`；仓库只有模板，不能生成真实签名配置                                                                                                                                            |
 
 ### 8.3 后续独立迭代
 

@@ -6,3 +6,4 @@ src-tauri/target/
 *.local
 src-tauri/tauri.updater.release.json
 .codegraph
+.eslint-report.json

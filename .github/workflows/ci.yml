@@ -26,7 +26,10 @@ jobs:
         with:
           components: rustfmt
       - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
       - run: npm run build
+      - run: npm test
       - run: npm audit --audit-level=high
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib

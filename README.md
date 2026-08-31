@@ -42,22 +42,22 @@ Model Provider ─────┘         │                              │
 
 ### 客户端预览
 
-| 桌面工作台 | 移动端适配 |
-| --- | --- |
+| 桌面工作台                                                                            | 移动端适配                                                                           |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | <img src="artifacts/crud-layout-desktop.png" alt="Forge UI 桌面工作台" width="720" /> | <img src="artifacts/app-shell-mobile.png" alt="Forge UI 移动端工作台" width="250" /> |
 
 ### 核心能力
 
-| 能力 | 说明 |
-| --- | --- |
-| 模型服务 | 配置和测试 OpenAI Compatible 或 Anthropic Compatible 服务，支持 Base URL、模型、密钥、自定义 Header 与生成参数。 |
-| API 连接 | 从规范 URL、Swagger UI 地址或本地 JSON/YAML 导入 Swagger 2.0、OpenAPI 3.0/3.1 文档。 |
-| API 感知生成 | 根据用户目标筛选匹配的已授权 operation；请求的业务资源或能力不存在时停止生成，不以其他资源的数据替代。 |
-| 受控页面 | 使用 `PageSpec` DSL 渲染筛选、表格、统计、图表、详情和 CRUD，不执行模型返回的 HTML、CSS 或 JavaScript。 |
-| CRUD 工作流 | CRUD 页面提供真实 API 对应的筛选项、命令栏、表格与分页；新增、编辑、详情和删除通过弹窗完成，删除需确认。 |
-| 模板与历史 | 保存页面为模板，支持搜索、固定、重命名、版本恢复、导入导出和生成历史。 |
-| 数据导出 | 支持 CSV/XLSX 导出，模板与导出内容不包含密钥或真实业务响应数据。 |
-| 本地优先 | SQLite 保存配置和页面元数据；模型密钥、业务 Token 与敏感 Header 仅写入系统钥匙串。 |
+| 能力         | 说明                                                                                                             |
+| ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| 模型服务     | 配置和测试 OpenAI Compatible 或 Anthropic Compatible 服务，支持 Base URL、模型、密钥、自定义 Header 与生成参数。 |
+| API 连接     | 从规范 URL、Swagger UI 地址或本地 JSON/YAML 导入 Swagger 2.0、OpenAPI 3.0/3.1 文档。                             |
+| API 感知生成 | 根据用户目标筛选匹配的已授权 operation；请求的业务资源或能力不存在时停止生成，不以其他资源的数据替代。           |
+| 受控页面     | 使用 `PageSpec` DSL 渲染筛选、表格、统计、图表、详情和 CRUD，不执行模型返回的 HTML、CSS 或 JavaScript。          |
+| CRUD 工作流  | CRUD 页面提供真实 API 对应的筛选项、命令栏、表格与分页；新增、编辑、详情和删除通过弹窗完成，删除需确认。         |
+| 模板与历史   | 保存页面为模板，支持搜索、固定、重命名、版本恢复、导入导出和生成历史。                                           |
+| 数据导出     | 支持 CSV/XLSX 导出，模板与导出内容不包含密钥或真实业务响应数据。                                                 |
+| 本地优先     | SQLite 保存配置和页面元数据；模型密钥、业务 Token 与敏感 Header 仅写入系统钥匙串。                               |
 
 ### 从 API 到页面
 
@@ -93,30 +93,30 @@ npm run tauri:dev
 
 ### 常用命令
 
-| 命令 | 说明 |
-| --- | --- |
-| `npm run dev` | 启动 Vite 浏览器预览。 |
-| `npm run tauri:dev` | 启动桌面客户端开发模式。 |
-| `npm test` | 运行前端单元测试。 |
-| `npm run build` | 执行 TypeScript 检查并构建前端。 |
-| `npm run preview` | 预览前端生产构建。 |
-| `npm run tauri:build` | 构建桌面客户端安装包。 |
-| `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` | 检查 Rust 格式。 |
-| `cargo test --manifest-path src-tauri/Cargo.toml --lib` | 运行 Rust 单元测试。 |
-| `cargo check --manifest-path src-tauri/Cargo.toml --features updater` | 检查带更新器功能的 Rust 编译。 |
+| 命令                                                                  | 说明                             |
+| --------------------------------------------------------------------- | -------------------------------- |
+| `npm run dev`                                                         | 启动 Vite 浏览器预览。           |
+| `npm run tauri:dev`                                                   | 启动桌面客户端开发模式。         |
+| `npm test`                                                            | 运行前端单元测试。               |
+| `npm run build`                                                       | 执行 TypeScript 检查并构建前端。 |
+| `npm run preview`                                                     | 预览前端生产构建。               |
+| `npm run tauri:build`                                                 | 构建桌面客户端安装包。           |
+| `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`           | 检查 Rust 格式。                 |
+| `cargo test --manifest-path src-tauri/Cargo.toml --lib`               | 运行 Rust 单元测试。             |
+| `cargo check --manifest-path src-tauri/Cargo.toml --features updater` | 检查带更新器功能的 Rust 编译。   |
 
 ### 技术栈
 
-| 层级 | 技术 |
-| --- | --- |
-| 桌面运行时 | Tauri 2 |
-| 前端 | React、TypeScript、Vite、Ant Design、Recharts |
-| Rust 核心 | Rust、Serde、Reqwest、rustls |
-| 本地数据 | SQLite、rusqlite |
-| 凭证存储 | Windows Credential Manager、macOS Keychain |
-| 数据导出 | CSV、rust_xlsxwriter |
-| 图标 | Lucide React |
-| 自动化 | GitHub Actions |
+| 层级       | 技术                                          |
+| ---------- | --------------------------------------------- |
+| 桌面运行时 | Tauri 2                                       |
+| 前端       | React、TypeScript、Vite、Ant Design、Recharts |
+| Rust 核心  | Rust、Serde、Reqwest、rustls                  |
+| 本地数据   | SQLite、rusqlite                              |
+| 凭证存储   | Windows Credential Manager、macOS Keychain    |
+| 数据导出   | CSV、rust_xlsxwriter                          |
+| 图标       | Lucide React                                  |
+| 自动化     | GitHub Actions                                |
 
 ### 安全边界
 

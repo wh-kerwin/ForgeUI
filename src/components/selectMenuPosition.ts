@@ -31,7 +31,12 @@ const OPTION_HEIGHT = 26;
 const MENU_GAP = 4;
 const MENU_MAX_HEIGHT = 208;
 
-export function getSelectMenuLayout({ trigger, viewport, optionCount, measuredHeight = 0 }: SelectMenuLayoutInput): SelectMenuLayout {
+export function getSelectMenuLayout({
+  trigger,
+  viewport,
+  optionCount,
+  measuredHeight = 0,
+}: SelectMenuLayoutInput): SelectMenuLayout {
   const viewportWidth = Math.max(1, Number.isFinite(viewport.width) ? viewport.width : 1);
   const viewportHeight = Math.max(1, Number.isFinite(viewport.height) ? viewport.height : 1);
   const marginX = Math.min(8, viewportWidth / 4);
@@ -53,7 +58,11 @@ export function getSelectMenuLayout({ trigger, viewport, optionCount, measuredHe
   const availableHeight = opensUp ? spaceAbove : spaceBelow;
   const viewportMaxHeight = Math.max(1, viewportHeight - marginY * 2);
   const minimumVisibleHeight = Math.min(OPTION_HEIGHT + 8, desiredHeight, viewportMaxHeight);
-  const maxHeight = Math.min(desiredHeight, Math.max(availableHeight, minimumVisibleHeight), viewportMaxHeight);
+  const maxHeight = Math.min(
+    desiredHeight,
+    Math.max(availableHeight, minimumVisibleHeight),
+    viewportMaxHeight,
+  );
   const idealTop = opensUp ? trigger.top - MENU_GAP - maxHeight : trigger.bottom + MENU_GAP;
   const minTop = viewport.top + marginY;
   const maxTop = Math.max(minTop, viewportBottom - marginY - maxHeight);

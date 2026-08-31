@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ApiDocument, BusinessAuth, OpenApiSummary, Project } from "../../types/domain";
+import { reportError, toUserMessage } from "../../lib/errors";
 import {
   createProject as createProjectRecord,
   deleteApiDocument as deleteApiDocumentRecord,
@@ -42,7 +43,9 @@ export function useProjectWorkspace(onNotice: (message: string) => void) {
 
   const activeProject = projects.find((project) => project.id === activeProjectId);
   const activeDocument = documents.find((document) => document.id === activeDocumentId) ?? null;
-  const selectedDocuments = documents.filter((document) => document.enabled && selectedDocumentIds.includes(document.id));
+  const selectedDocuments = documents.filter(
+    (document) => document.enabled && selectedDocumentIds.includes(document.id),
+  );
   const grantedRoles = useMemo(
     () => [...new Set(documents.flatMap((document) => document.auth.grantedRoles ?? []))],
     [documents],
@@ -51,8 +54,11 @@ export function useProjectWorkspace(onNotice: (message: string) => void) {
   async function refreshProjects(preferredId?: string) {
     const rows = await listProjects();
     setProjects(rows);
-    const requested = preferredId || activeProjectId || window.localStorage.getItem(ACTIVE_PROJECT_KEY) || "";
-    const nextId = rows.some((project) => project.id === requested) ? requested : rows[0]?.id ?? "";
+    const requested =
+      preferredId || activeProjectId || window.localStorage.getItem(ACTIVE_PROJECT_KEY) || "";
+    const nextId = rows.some((project) => project.id === requested)
+      ? requested
+      : (rows[0]?.id ?? "");
     setActiveProjectIdState(nextId);
     if (nextId) window.localStorage.setItem(ACTIVE_PROJECT_KEY, nextId);
     return { rows, nextId };
@@ -67,18 +73,27 @@ export function useProjectWorkspace(onNotice: (message: string) => void) {
     }
     const rows = await listApiDocuments(projectId);
     setDocuments(rows);
-    setActiveDocumentId((current) => rows.some((document) => document.id === current) ? current : rows[0]?.id ?? "");
+    setActiveDocumentId((current) =>
+      rows.some((document) => document.id === current) ? current : (rows[0]?.id ?? ""),
+    );
     const project = projectRows.find((item) => item.id === projectId);
     const remembered = project?.selectedApiDocumentIds ?? [];
-    setSelectedDocumentIdsState(remembered.filter((id) => rows.some((document) => document.id === id && document.enabled)));
+    setSelectedDocumentIdsState(
+      remembered.filter((id) => rows.some((document) => document.id === id && document.enabled)),
+    );
     setSecret("");
     return rows;
   }
 
+  // Runs once on mount to bootstrap the workspace. Previously the catch was
+  // silent, so a SQLite/Tauri failure left the user on an empty screen with no
+  // explanation at all.
   useEffect(() => {
     refreshProjects()
       .then(({ rows, nextId }) => refreshDocuments(nextId, rows))
-      .catch(() => undefined);
+      .catch((error) => onNotice(`初始化项目工作区失败：${reportError("workspace.init", error)}`));
+    // Mount-only by design; every dependency here is recreated each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function selectProject(projectId: string) {
@@ -97,7 +112,9 @@ export function useProjectWorkspace(onNotice: (message: string) => void) {
       const { rows } = await refreshProjects(id);
       await refreshDocuments(id, rows);
       onNotice(`项目「${name}」已创建`);
-    } catch (error) { onNotice(String(error)); }
+    } catch (error) {
+      onNotice(toUserMessage(error));
+    }
   }
 
   async function renameProject() {
@@ -108,17 +125,25 @@ export function useProjectWorkspace(onNotice: (message: string) => void) {
       await renameProjectRecord(activeProject.id, name);
       await refreshProjects(activeProject.id);
       onNotice("项目已重命名");
-    } catch (error) { onNotice(String(error)); }
+    } catch (error) {
+      onNotice(toUserMessage(error));
+    }
   }
 
   async function deleteProject() {
-    if (!activeProject || !window.confirm(`删除项目「${activeProject.name}」？只有空项目可以删除。`)) return;
+    if (
+      !activeProject ||
+      !window.confirm(`删除项目「${activeProject.name}」？只有空项目可以删除。`)
+    )
+      return;
     try {
       await deleteProjectRecord(activeProject.id);
       const { rows, nextId } = await refreshProjects();
       await refreshDocuments(nextId, rows);
       onNotice("项目已删除");
-    } catch (error) { onNotice(String(error)); }
+    } catch (error) {
+      onNotice(toUserMessage(error));
+    }
   }
 
   async function persistImportedSpec(imported: OpenApiSummary) {
@@ -146,29 +171,45 @@ export function useProjectWorkspace(onNotice: (message: string) => void) {
     onNotice("正在获取 OpenAPI 文档…");
     try {
       const candidates = await invoke<string[]>("discover_openapi_candidates", { url });
-      const selectedIndexText = candidates.length < 2 ? "1" : window.prompt(`发现 ${candidates.length} 个 Swagger/OpenAPI 规范，请输入要导入的编号：\n${candidates.map((candidate, index) => `${index + 1}. ${candidate}`).join("\n")}`, "1");
+      const selectedIndexText =
+        candidates.length < 2
+          ? "1"
+          : window.prompt(
+              `发现 ${candidates.length} 个 Swagger/OpenAPI 规范，请输入要导入的编号：\n${candidates.map((candidate, index) => `${index + 1}. ${candidate}`).join("\n")}`,
+              "1",
+            );
       if (!selectedIndexText) return;
       const selectedUrl = candidates[Number(selectedIndexText) - 1];
       if (!selectedUrl) return onNotice("选择的 OpenAPI 规范编号无效");
       const imported = await invoke<OpenApiSummary>("import_openapi_url", { url: selectedUrl });
       await persistImportedSpec(imported);
       onNotice(`已导入 ${imported.title}，发现 ${imported.operation_count} 个接口`);
-    } catch (error) { onNotice(String(error)); }
+    } catch (error) {
+      onNotice(toUserMessage(error));
+    }
   }
 
   async function importOpenApiFile(file: File) {
     try {
-      const imported = await invoke<OpenApiSummary>("parse_openapi_file", { content: await file.text() });
+      const imported = await invoke<OpenApiSummary>("parse_openapi_file", {
+        content: await file.text(),
+      });
       await persistImportedSpec(imported);
       onNotice(`已从本地文件导入 ${imported.title}，发现 ${imported.operation_count} 个接口`);
-    } catch (error) { onNotice(String(error)); }
+    } catch (error) {
+      onNotice(toUserMessage(error));
+    }
   }
 
   function setAuth(next: SetStateAction<BusinessAuth>) {
     if (!activeDocument) return;
-    setDocuments((current) => current.map((document) => document.id === activeDocument.id
-      ? { ...document, auth: applyState(document.auth, next) }
-      : document));
+    setDocuments((current) =>
+      current.map((document) =>
+        document.id === activeDocument.id
+          ? { ...document, auth: applyState(document.auth, next) }
+          : document,
+      ),
+    );
   }
 
   async function saveAuth() {
@@ -185,7 +226,9 @@ export function useProjectWorkspace(onNotice: (message: string) => void) {
       await refreshDocuments();
       setActiveDocumentId(document.id);
       onNotice("API 文档配置已保存");
-    } catch (error) { onNotice(String(error)); }
+    } catch (error) {
+      onNotice(toUserMessage(error));
+    }
   }
 
   async function renameDocument(document: ApiDocument) {
@@ -196,18 +239,24 @@ export function useProjectWorkspace(onNotice: (message: string) => void) {
       await refreshDocuments();
       setActiveDocumentId(document.id);
       onNotice("API 文档已重命名");
-    } catch (error) { onNotice(String(error)); }
+    } catch (error) {
+      onNotice(toUserMessage(error));
+    }
   }
 
   async function toggleDocument(document: ApiDocument) {
     try {
       await setApiDocumentEnabled(activeProjectId, document.id, !document.enabled);
-      const nextSelected = document.enabled ? selectedDocumentIds.filter((id) => id !== document.id) : selectedDocumentIds;
+      const nextSelected = document.enabled
+        ? selectedDocumentIds.filter((id) => id !== document.id)
+        : selectedDocumentIds;
       if (document.enabled) await saveProjectDocumentSelection(activeProjectId, nextSelected);
       const { rows } = await refreshProjects(activeProjectId);
       await refreshDocuments(activeProjectId, rows);
       onNotice(document.enabled ? "API 文档已停用" : "API 文档已启用");
-    } catch (error) { onNotice(String(error)); }
+    } catch (error) {
+      onNotice(toUserMessage(error));
+    }
   }
 
   async function deleteDocument(document: ApiDocument) {
@@ -218,16 +267,27 @@ export function useProjectWorkspace(onNotice: (message: string) => void) {
       const { rows } = await refreshProjects(activeProjectId);
       await refreshDocuments(activeProjectId, rows);
       onNotice("API 文档已删除");
-    } catch (error) { onNotice(String(error)); }
+    } catch (error) {
+      onNotice(toUserMessage(error));
+    }
   }
 
   async function setSelectedDocumentIds(ids: string[]) {
     if (!activeProjectId) return;
-    const unique = [...new Set(ids)].filter((id) => documents.some((document) => document.id === id && document.enabled));
+    const unique = [...new Set(ids)].filter((id) =>
+      documents.some((document) => document.id === id && document.enabled),
+    );
     setSelectedDocumentIdsState(unique);
-    setProjects((current) => current.map((project) => project.id === activeProjectId ? { ...project, selectedApiDocumentIds: unique } : project));
-    try { await saveProjectDocumentSelection(activeProjectId, unique); }
-    catch (error) { onNotice(String(error)); }
+    setProjects((current) =>
+      current.map((project) =>
+        project.id === activeProjectId ? { ...project, selectedApiDocumentIds: unique } : project,
+      ),
+    );
+    try {
+      await saveProjectDocumentSelection(activeProjectId, unique);
+    } catch (error) {
+      onNotice(toUserMessage(error));
+    }
   }
 
   return {

@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 export type Language = "zh" | "en";
 type LanguageContextValue = {
@@ -35,16 +28,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }),
     [language],
   );
-  return (
-    <LanguageContext.Provider value={value}>
-      {children}
-    </LanguageContext.Provider>
-  );
+  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
 
 export function useLanguage() {
   const value = useContext(LanguageContext);
-  if (!value)
-    throw new Error("useLanguage must be used inside LanguageProvider");
+  if (!value) throw new Error("useLanguage must be used inside LanguageProvider");
   return value;
 }

@@ -1,9 +1,9 @@
 const EXACT_ID_COLUMNS = ["id", "_id", "uuid", "guid"];
 
 export function recordIdColumn(columns: readonly string[]) {
-  const exact = EXACT_ID_COLUMNS
-    .map((name) => columns.findIndex((column) => column.toLocaleLowerCase() === name))
-    .find((index) => index >= 0);
+  const exact = EXACT_ID_COLUMNS.map((name) =>
+    columns.findIndex((column) => column.toLocaleLowerCase() === name),
+  ).find((index) => index >= 0);
   if (exact !== undefined) return exact;
 
   const suffixed = columns
@@ -14,7 +14,7 @@ export function recordIdColumn(columns: readonly string[]) {
 
 export function recordId(columns: readonly string[], row: readonly string[]) {
   const index = recordIdColumn(columns);
-  return index === undefined ? "" : row[index]?.trim() ?? "";
+  return index === undefined ? "" : (row[index]?.trim() ?? "");
 }
 
 export function withRecordIdFirst(columns: string[]) {

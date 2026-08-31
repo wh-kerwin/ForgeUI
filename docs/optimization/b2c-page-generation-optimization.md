@@ -126,6 +126,7 @@ const FEW_SHOT_DASHBOARD = `{
 #### 2.2.1 问题现状
 
 [streamingPageParser.ts](../../src/features/pages/streamingPageParser.ts) 的 `repairJson` 只做括号匹配，无法处理：
+
 - JSONC 风格的注释（`//` 和 `/* */`）
 - 字符串未闭合（模型中途输出被截断）
 - 尾逗号（`"value": "x",`）
@@ -190,13 +191,13 @@ private toPartialPageSpec(value: unknown): Partial<PageSpec> | null {
 export type ColumnMeta = {
   name: string;
   type: "string" | "number" | "date" | "datetime" | "enum" | "boolean" | "money";
-  format?: string;                // "YYYY-MM-DD" | "¥#,##0.00"
-  enumLabels?: Record<string, string>;  // 枚举值 → 显示名映射
+  format?: string; // "YYYY-MM-DD" | "¥#,##0.00"
+  enumLabels?: Record<string, string>; // 枚举值 → 显示名映射
   sortable?: boolean;
   filterable?: boolean;
   searchMode?: "exact" | "fuzzy" | "range";
-  width?: string;                 // "120px" | "auto" | "15%"
-  visible?: boolean;              // 默认是否显示（用于隐藏敏感列）
+  width?: string; // "120px" | "auto" | "15%"
+  visible?: boolean; // 默认是否显示（用于隐藏敏感列）
 };
 ```
 
@@ -210,14 +211,14 @@ export type OperationBinding = {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   role: "list" | "detail" | "create" | "update" | "delete" | "stat" | "export";
-  bodySchema?: FieldSchema[];         // 新增/编辑时的表单结构
+  bodySchema?: FieldSchema[]; // 新增/编辑时的表单结构
   pagination?: {
     pageParam: string;
     sizeParam: string;
     defaultSize: number;
   };
   sortParam?: string;
-  confirmMessage?: string;            // 删除确认文案
+  confirmMessage?: string; // 删除确认文案
 };
 ```
 
@@ -228,9 +229,9 @@ export type OperationBinding = {
 ```typescript
 export type PageSpec = {
   // ... 现有字段保持不变
-  layout?: "sidebar" | "full" | "modal";   // 页面布局
-  breadcrumb?: string[];                   // 面包屑路径
-  permissionRole?: string;                 // 所需角色（前端权限控制）
+  layout?: "sidebar" | "full" | "modal"; // 页面布局
+  breadcrumb?: string[]; // 面包屑路径
+  permissionRole?: string; // 所需角色（前端权限控制）
   createdAt?: string;
   updatedAt?: string;
 };
@@ -249,10 +250,17 @@ export type PageSpec = {
 ```typescript
 export type PageView =
   | { type: "list"; title?: string; defaultSort?: { column: string; order: "asc" | "desc" } }
-  | { type: "chart"; title: string; chartType: "bar" | "line" | "pie"; xAxisColumn: string; yAxisColumn: string; groupByColumn?: string }
+  | {
+      type: "chart";
+      title: string;
+      chartType: "bar" | "line" | "pie";
+      xAxisColumn: string;
+      yAxisColumn: string;
+      groupByColumn?: string;
+    }
   | { type: "kanban"; title: string; groupColumn: string; cardFields: string[] }
-  | { type: "tabs"; items: { key: string; label: string; view: PageView }[] }   // 新增 Tab 组合
-  | { type: "split"; left: PageView; right: PageView; splitRatio?: number };    // 新增左右分栏
+  | { type: "tabs"; items: { key: string; label: string; view: PageView }[] } // 新增 Tab 组合
+  | { type: "split"; left: PageView; right: PageView; splitRatio?: number }; // 新增左右分栏
 ```
 
 #### 2.4.2 智能操作角色推断
@@ -264,11 +272,13 @@ function inferOperationRoles(operations: AllowedOperation[]): Record<string, str
   const roles: Record<string, string[]> = {};
   for (const op of operations) {
     const parts = op.path.split("/");
-    const hasIdParam = parts.some(p => p.startsWith(":") || p === "{id}" || /^\{\w+\}$/.test(p));
+    const hasIdParam = parts.some((p) => p.startsWith(":") || p === "{id}" || /^\{\w+\}$/.test(p));
     if (op.method === "GET" && hasIdParam) roles[op.operation_id].push("detail");
     else if (op.method === "GET") roles[op.operation_id].push("list", "stat");
-    else if (op.method === "POST" && /\/(create|add|batch)/i.test(op.path)) roles[op.operation_id].push("create");
-    else if (["PUT", "PATCH"].includes(op.method) && hasIdParam) roles[op.operation_id].push("update");
+    else if (op.method === "POST" && /\/(create|add|batch)/i.test(op.path))
+      roles[op.operation_id].push("create");
+    else if (["PUT", "PATCH"].includes(op.method) && hasIdParam)
+      roles[op.operation_id].push("update");
     else if (op.method === "DELETE" && hasIdParam) roles[op.operation_id].push("delete");
   }
   return roles;
@@ -299,14 +309,14 @@ export type BatchAction = {
 
 C 端（消费者端）用户与普通 B 端管理后台用户的行为模式不同：
 
-| 对比维度 | B 端用户 | C 端用户 |
-|---------|---------|---------|
-| 操作频率 | 高频、重复 | 低频、偶发 |
-| 操作时长 | 长时间停留在页面 | 快速完成即离开 |
-| 表单复杂度 | 字段多、结构复杂 | 字段少、轻量 |
-| 导航偏好 | 页面内操作 | 弹窗/抽屉不跳转 |
-| 容错要求 | 可接受稍慢 | 要求即时反馈 |
-| 数据敏感度 | 高（企业数据） | 中（个人数据） |
+| 对比维度   | B 端用户         | C 端用户        |
+| ---------- | ---------------- | --------------- |
+| 操作频率   | 高频、重复       | 低频、偶发      |
+| 操作时长   | 长时间停留在页面 | 快速完成即离开  |
+| 表单复杂度 | 字段多、结构复杂 | 字段少、轻量    |
+| 导航偏好   | 页面内操作       | 弹窗/抽屉不跳转 |
+| 容错要求   | 可接受稍慢       | 要求即时反馈    |
+| 数据敏感度 | 高（企业数据）   | 中（个人数据）  |
 
 **核心目标**：让同一份 `PageSpec` 能同时适配 B 端管理后台和 C 端消费者界面，通过 DSL 中的 `layout`、`interaction` 等字段控制渲染行为，而不是生成两套页面。
 
@@ -314,13 +324,13 @@ C 端（消费者端）用户与普通 B 端管理后台用户的行为模式不
 
 当前 [MutationPanel.tsx](../../src/features/pages/MutationPanel.tsx) 已有基础弹窗能力：
 
-| 功能 | 实现状态 | 问题 |
-|------|---------|------|
-| 编辑行内弹窗 | ✅ 已有（editingRow 触发） | 仅支持单行，无字段校验联动 |
-| 删除确认弹窗 | ✅ 已有（deletingRow 触发） | 仅展示行 ID，无前后对比 |
-| 新增表单弹窗 | ❌ 未实现（MutationPanel 中的 create 是内联 box） | C 端用户不习惯在列表下方找表单 |
-| 详情弹窗 | ⚠️ 部分实现（detailOperation 需手动输入 ID） | 无快捷入口，不支持从列表行一键打开 |
-| 关闭遮罩层点击 | ✅ 已有 | 无 ESC 键关闭支持 |
+| 功能           | 实现状态                                          | 问题                               |
+| -------------- | ------------------------------------------------- | ---------------------------------- |
+| 编辑行内弹窗   | ✅ 已有（editingRow 触发）                        | 仅支持单行，无字段校验联动         |
+| 删除确认弹窗   | ✅ 已有（deletingRow 触发）                       | 仅展示行 ID，无前后对比            |
+| 新增表单弹窗   | ❌ 未实现（MutationPanel 中的 create 是内联 box） | C 端用户不习惯在列表下方找表单     |
+| 详情弹窗       | ⚠️ 部分实现（detailOperation 需手动输入 ID）      | 无快捷入口，不支持从列表行一键打开 |
+| 关闭遮罩层点击 | ✅ 已有                                           | 无 ESC 键关闭支持                  |
 
 ### 3.3 C 端弹窗交互规范
 
@@ -329,6 +339,7 @@ C 端（消费者端）用户与普通 B 端管理后台用户的行为模式不
 **改造前现状**：[MutationPanel.tsx](../../src/features/pages/MutationPanel.tsx) 的新增表单位于页面底部内联 box，C 端用户不容易注意到。
 
 **优化方案**：增加"新增"按钮触发全屏弹窗（Modal），弹窗内容包含：
+
 - 标题（页面名 + "新增"）
 - 表单字段（基于 `fieldSchemas` 渲染，与编辑弹窗一致）
 - 提交 / 取消按钮
@@ -336,33 +347,48 @@ C 端（消费者端）用户与普通 B 端管理后台用户的行为模式不
 
 ```tsx
 // 在 GeneratedPage.tsx 的页面头部增加"新增"按钮
-{createOperation && (
-  <button className="primary add-btn" onClick={() => setCreating(true)}>
-    <Plus size={14} />
-    {zh ? "新增" : "New"}
-  </button>
-)}
+{
+  createOperation && (
+    <button className="primary add-btn" onClick={() => setCreating(true)}>
+      <Plus size={14} />
+      {zh ? "新增" : "New"}
+    </button>
+  );
+}
 
 // 新增弹窗
-{creating && createOperation && (
-  <Modal onClose={() => setCreating(false)} title={zh ? "新增记录" : "Create Record"}>
-    <Form fields={createFields} values={formValues} onChange={setFormValues} onError={setFormError} />
-    <ModalActions>
-      <button className="secondary" onClick={() => setCreating(false)}>{zh ? "取消" : "Cancel"}</button>
-      <button className="primary" onClick={submitCreate}>{zh ? "提交" : "Submit"}</button>
-    </ModalActions>
-  </Modal>
-)}
+{
+  creating && createOperation && (
+    <Modal onClose={() => setCreating(false)} title={zh ? "新增记录" : "Create Record"}>
+      <Form
+        fields={createFields}
+        values={formValues}
+        onChange={setFormValues}
+        onError={setFormError}
+      />
+      <ModalActions>
+        <button className="secondary" onClick={() => setCreating(false)}>
+          {zh ? "取消" : "Cancel"}
+        </button>
+        <button className="primary" onClick={submitCreate}>
+          {zh ? "提交" : "Submit"}
+        </button>
+      </ModalActions>
+    </Modal>
+  );
+}
 ```
 
 #### 3.3.2 编辑操作：保持弹窗，增加字段联动
 
 **改造前现状**：[MutationPanel.tsx](../../src/features/pages/MutationPanel.tsx) 已有编辑弹窗，但：
+
 - 无字段类型联动（如修改"状态"后其他字段自动隐藏/显示）
 - 无必填字段实时校验
 - 无操作前后的数据对比预览
 
 **优化方案**：
+
 1. 实时字段校验（失焦时校验，错误时即时提示）
 2. 增删字段联动（根据枚举值动态显示/隐藏关联字段）
 3. 操作前数据对比（显示变更项高亮）
@@ -373,14 +399,15 @@ const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
 // 实时校验
 function onFieldChange(fieldName: string, value: string) {
-  setEditValues(prev => ({ ...prev, [fieldName]: value }));
+  setEditValues((prev) => ({ ...prev, [fieldName]: value }));
   // 失焦时校验
 }
 
 function validateField(field: FieldSchema, value: string): string | null {
   if (field.required && !value) return `${field.name} 为必填项`;
   if (field.type === "number" && value && isNaN(Number(value))) return `${field.name} 必须是数字`;
-  if (field.type === "enum" && field.enumValues && !field.enumValues.includes(value)) return `请选择有效的 ${field.name}`;
+  if (field.type === "enum" && field.enumValues && !field.enumValues.includes(value))
+    return `请选择有效的 ${field.name}`;
   return null;
 }
 ```
@@ -390,6 +417,7 @@ function validateField(field: FieldSchema, value: string): string | null {
 **改造前现状**：[MutationPanel.tsx](../../src/features/pages/MutationPanel.tsx) 的删除确认弹窗只显示行 ID。
 
 **优化方案**：
+
 - 显示删除对象的完整信息（从 rowRecord 获取）
 - 显示关联数据风险（如果有外键关联）
 - 二次确认文案定制（来自 `OperationBinding.confirmMessage`）
@@ -433,6 +461,7 @@ function validateField(field: FieldSchema, value: string): string | null {
 **改造前现状**：详情操作需手动输入 ID（[MutationPanel.tsx](../../src/features/pages/MutationPanel.tsx)），C 端用户极不方便。
 
 **优化方案**：
+
 - 表格行操作列增加"查看"按钮，点击直接打开详情弹窗
 - 弹窗支持从 row 数据预填充（如果模型已生成 rows）
 
@@ -472,8 +501,15 @@ type ModalProps = {
 };
 
 export function Modal({
-  open, onClose, title, subtitle, variant = "default", size = "md",
-  children, closeOnBackdropClick = true, closeOnEscape = true,
+  open,
+  onClose,
+  title,
+  subtitle,
+  variant = "default",
+  size = "md",
+  children,
+  closeOnBackdropClick = true,
+  closeOnEscape = true,
 }: ModalProps) {
   useEffect(() => {
     if (!open) return;
@@ -495,7 +531,10 @@ export function Modal({
 
   return (
     <div className="modal-backdrop" onClick={closeOnBackdropClick ? onClose : undefined}>
-      <div className={`modal ${sizeClasses[size]} ${variant !== "default" ? `modal--${variant}` : ""}`} onClick={e => e.stopPropagation()}>
+      <div
+        className={`modal ${sizeClasses[size]} ${variant !== "default" ? `modal--${variant}` : ""}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         {(title || subtitle) && (
           <div className="modal-header">
             <div>
@@ -518,23 +557,47 @@ export function Modal({
 
 ```css
 /* 弹窗尺寸 */
-.modal--sm { max-width: 400px; }
-.modal--md { max-width: 560px; }
-.modal--lg { max-width: 720px; }
+.modal--sm {
+  max-width: 400px;
+}
+.modal--md {
+  max-width: 560px;
+}
+.modal--lg {
+  max-width: 720px;
+}
 
 /* 危险弹窗（删除确认） */
-.modal--danger .modal-header h2 { color: #ff9aa0; }
-.modal--danger .modal-actions .danger { background: #ff7f86; color: #fff; }
+.modal--danger .modal-header h2 {
+  color: #ff9aa0;
+}
+.modal--danger .modal-actions .danger {
+  background: #ff7f86;
+  color: #fff;
+}
 
 /* 成功弹窗（提交成功反馈） */
-.modal--success .modal-header h2 { color: #9ddc5b; }
+.modal--success .modal-header h2 {
+  color: #9ddc5b;
+}
 
 /* 弹窗 body 滚动 */
-.modal-body { max-height: calc(90vh - 140px); overflow-y: auto; }
+.modal-body {
+  max-height: calc(90vh - 140px);
+  overflow-y: auto;
+}
 
 /* 表单字段布局 */
-.modal-form-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
-.modal-form-field label { font-size: 12px; color: #9da8ba; }
+.modal-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.modal-form-field label {
+  font-size: 12px;
+  color: #9da8ba;
+}
 .modal-form-field input,
 .modal-form-field select,
 .modal-form-field textarea {
@@ -546,13 +609,31 @@ export function Modal({
   font-size: 14px;
 }
 .modal-form-field input:focus,
-.modal-form-field select:focus { border-color: #9bbd54; outline: none; }
-.modal-form-field .field-error { font-size: 11px; color: #ff9aa0; }
+.modal-form-field select:focus {
+  border-color: #9bbd54;
+  outline: none;
+}
+.modal-form-field .field-error {
+  font-size: 11px;
+  color: #ff9aa0;
+}
 
 /* 删除预览 */
-.delete-preview { margin: 16px 0; padding: 12px; background: #1a1f28; border-radius: 8px; }
-.delete-preview dt { font-size: 11px; color: #768195; margin-top: 8px; }
-.delete-preview dd { font-size: 14px; color: #e8edf6; }
+.delete-preview {
+  margin: 16px 0;
+  padding: 12px;
+  background: #1a1f28;
+  border-radius: 8px;
+}
+.delete-preview dt {
+  font-size: 11px;
+  color: #768195;
+  margin-top: 8px;
+}
+.delete-preview dd {
+  font-size: 14px;
+  color: #e8edf6;
+}
 ```
 
 ### 3.5 C 端弹窗时机控制
@@ -561,10 +642,10 @@ export function Modal({
 
 ```typescript
 export type InteractionMode =
-  | "modal"      // 弹窗（C 端推荐）
-  | "drawer"     // 右侧抽屉（适合长表单）
-  | "inline"     // 页面内展开（B 端推荐）
-  | "redirect";  // 跳转新页面（传统 B 端）
+  | "modal" // 弹窗（C 端推荐）
+  | "drawer" // 右侧抽屉（适合长表单）
+  | "inline" // 页面内展开（B 端推荐）
+  | "redirect"; // 跳转新页面（传统 B 端）
 
 export type PageSpec = {
   // ... 现有字段
@@ -578,10 +659,12 @@ export type PageSpec = {
 ```
 
 **默认值**（向后兼容）：
+
 - B 端场景：`create: "inline"`, `update: "inline"`, `delete: "modal"`, `detail: "inline"`
 - C 端场景：`create: "modal"`, `update: "modal"`, `delete: "modal"`, `detail: "modal"`
 
 系统提示词中增加规则：
+
 > 当用户描述 C 端/消费者应用场景时，将 interaction 各字段设为 "modal"；当描述 B 端管理后台时，保持默认 inline 模式。
 
 `redirect` 使用客户端受控子路由 `/generate/{action}/{id?}` 展示独立操作页，并通过浏览器历史返回列表。operation 中的 API `path` 绝不作为前端导航地址。
@@ -600,12 +683,12 @@ PageSpec DSL ──► 固定 className ──► 硬编码 CSS 变量 ──►
 
 **模型无法控制任何视觉属性**。即使用户在 prompt 中说"用 Ant Design 风格"或"浅色主题"，模型只能生成数据，渲染逻辑是前端写死的。具体表现：
 
-| 层 | 现状 | 问题 |
-|---|---|---|
-| **CSS 变量** | `route.css:15` 固定了颜色、圆角、间距 | 没有主题变量切换机制 |
-| **组件样式** | `generated.css` 所有组件用固定 className 写死样式 | 无法按框架/主题替换 |
-| **PageSpec DSL** | 只有数据字段，无 `theme` / `styleOverrides` | 模型输出无法携带视觉指令 |
-| **Prompt** | 系统提示词没有视觉约束部分 | 模型不知道要遵循哪个风格 |
+| 层               | 现状                                              | 问题                     |
+| ---------------- | ------------------------------------------------- | ------------------------ |
+| **CSS 变量**     | `route.css:15` 固定了颜色、圆角、间距             | 没有主题变量切换机制     |
+| **组件样式**     | `generated.css` 所有组件用固定 className 写死样式 | 无法按框架/主题替换      |
+| **PageSpec DSL** | 只有数据字段，无 `theme` / `styleOverrides`       | 模型输出无法携带视觉指令 |
+| **Prompt**       | 系统提示词没有视觉约束部分                        | 模型不知道要遵循哪个风格 |
 
 ### 5.2 设计目标
 
@@ -623,30 +706,30 @@ PageSpec DSL ──► 固定 className ──► 硬编码 CSS 变量 ──►
 ```typescript
 /** 内置主题风格 */
 export type ThemeStyle =
-  | "forge-default"   // 现有暗色风格（默认）
+  | "forge-default" // 现有暗色风格（默认）
   | "enterprise-blue" // 企业蓝白，类 Ant Design Pro
-  | "clean-light"     // 干净浅色，类 Element Plus
-  | "minimal-dark"    // 极简深色，类 shadcn/ui
-  | "custom";         // 用户自定义 token（通过 styleTokens 传入）
+  | "clean-light" // 干净浅色，类 Element Plus
+  | "minimal-dark" // 极简深色，类 shadcn/ui
+  | "custom"; // 用户自定义 token（通过 styleTokens 传入）
 
 /** 主题 Token，可覆盖默认主题的任何视觉属性 */
 export type StyleToken = {
   // 颜色
-  primary?: string;       // --fg-primary（强调色，用于 pill、高亮文字）
-  primaryBg?: string;     // --fg-primary-bg（主按钮背景）
-  primaryBgHover?: string;// --fg-primary-bg-hover（主按钮悬停）
-  surface?: string;       // --fg-surface（页面背景）
-  surfaceAlt?: string;    // --fg-surface-alt（卡片/区块背景）
-  surfaceControl?: string;// --fg-surface-control（控件背景）
-  border?: string;        // --fg-border（边框色）
+  primary?: string; // --fg-primary（强调色，用于 pill、高亮文字）
+  primaryBg?: string; // --fg-primary-bg（主按钮背景）
+  primaryBgHover?: string; // --fg-primary-bg-hover（主按钮悬停）
+  surface?: string; // --fg-surface（页面背景）
+  surfaceAlt?: string; // --fg-surface-alt（卡片/区块背景）
+  surfaceControl?: string; // --fg-surface-control（控件背景）
+  border?: string; // --fg-border（边框色）
   borderControl?: string; // --fg-border-control（控件边框）
-  focusRing?: string;     // --fg-focus-ring（聚焦环/选中态）
-  text?: string;          // --fg-text（主文字）
-  textMuted?: string;     // --fg-text-muted（次要文字）
-  textSubtle?: string;    // --fg-text-subtle（提示文字）
-  danger?: string;        // --fg-danger（危险操作色）
-  dangerBg?: string;      // --fg-danger-bg（危险按钮背景）
-  success?: string;       // --fg-success（成功/通过色）
+  focusRing?: string; // --fg-focus-ring（聚焦环/选中态）
+  text?: string; // --fg-text（主文字）
+  textMuted?: string; // --fg-text-muted（次要文字）
+  textSubtle?: string; // --fg-text-subtle（提示文字）
+  danger?: string; // --fg-danger（危险操作色）
+  dangerBg?: string; // --fg-danger-bg（危险按钮背景）
+  success?: string; // --fg-success（成功/通过色）
   // 形状
   radius?: "none" | "sm" | "md" | "lg" | "full";
   // 密度
@@ -659,8 +742,8 @@ export type StyleToken = {
 ```typescript
 export type PageSpec = {
   // ... 现有字段保持不变
-  theme?: ThemeStyle;         // 主题风格，默认为 "forge-default"
-  styleTokens?: StyleToken;   // 覆盖默认 token（仅 theme="custom" 时有意义）
+  theme?: ThemeStyle; // 主题风格，默认为 "forge-default"
+  styleTokens?: StyleToken; // 覆盖默认 token（仅 theme="custom" 时有意义）
 };
 ```
 
@@ -754,7 +837,7 @@ export const THEME_PRESETS: Record<ThemeStyle, StyleToken> = {
     density: "comfortable",
   },
   // custom 不预设值，完全由 styleTokens 决定
-  "custom": {},
+  custom: {},
 };
 
 /** 将主题预设与用户自定义 token 合并 */
@@ -811,10 +894,14 @@ useEffect(() => {
 ```css
 :root {
   /* 原有变量保留，新增 theme token 前缀 */
-  --font-ui: 'Manrope', system-ui, sans-serif;
-  --font-mono: 'DM Mono', ui-monospace, monospace;
-  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
-  --space-5: 20px; --space-6: 24px;
+  --font-ui: "Manrope", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
   --control-h: 38px;
   --control-radius: 8px;
   --surface-control: var(--fg-surface-control, #101720);
@@ -824,17 +911,28 @@ useEffect(() => {
 }
 
 /* 密度映射 */
-:root:not([data-density]) { --density-scale: 1; }
-[data-density="compact"]    { --density-scale: 0.85; }
-[data-density="comfortable"]{ --density-scale: 1; }
-[data-density="relaxed"]    { --density-scale: 1.15; }
+:root:not([data-density]) {
+  --density-scale: 1;
+}
+[data-density="compact"] {
+  --density-scale: 0.85;
+}
+[data-density="comfortable"] {
+  --density-scale: 1;
+}
+[data-density="relaxed"] {
+  --density-scale: 1.15;
+}
 ```
 
 **`generated.css` 关键样式改造示例**（仅展示核心模式）：
 
 ```css
 /* 原来 */
-.generated-page { background: #0b0e13; color: #e9edf5; }
+.generated-page {
+  background: #0b0e13;
+  color: #e9edf5;
+}
 /* 改为 */
 .generated-page {
   background: var(--fg-surface, #0b0e13);
@@ -851,30 +949,40 @@ useEffect(() => {
   background: var(--fg-primary-bg, #d5fa61);
   color: var(--fg-surface, #10140e);
 }
-.primary:hover { background: var(--fg-primary-bg-hover, #e1ff83); }
+.primary:hover {
+  background: var(--fg-primary-bg-hover, #e1ff83);
+}
 
 .danger {
   background: var(--fg-danger-bg, #25171d);
   color: var(--fg-danger, #ff9aa0);
 }
-.danger:hover { border-color: var(--fg-danger, #ff7f86); }
+.danger:hover {
+  border-color: var(--fg-danger, #ff7f86);
+}
 
 /* 文字层级 */
-.eyebrow { color: var(--fg-text-muted, #768195); }
-.muted { color: var(--fg-text-subtle, #687187); }
+.eyebrow {
+  color: var(--fg-text-muted, #768195);
+}
+.muted {
+  color: var(--fg-text-subtle, #687187);
+}
 
 /* 边框 */
-.prompt-box { border-color: var(--fg-border-control, #354052); }
+.prompt-box {
+  border-color: var(--fg-border-control, #354052);
+}
 ```
 
 **改造覆盖范围**（预计约 80 处）：
 
-| CSS 文件 | 需改造的元素数 | 说明 |
-|---------|--------------|------|
-| `generated.css` | ~40 处 | 组件样式（mutation-box、pagination、view-tabs 等） |
-| `route.css` | ~25 处 | 按钮、输入框、modal 等通用样式 |
-| `styles.css` | ~15 处 | 全局变量和基础组件 |
-| `wide-layout.css` | ~5 处 | 响应式和弹窗样式 |
+| CSS 文件          | 需改造的元素数 | 说明                                               |
+| ----------------- | -------------- | -------------------------------------------------- |
+| `generated.css`   | ~40 处         | 组件样式（mutation-box、pagination、view-tabs 等） |
+| `route.css`       | ~25 处         | 按钮、输入框、modal 等通用样式                     |
+| `styles.css`      | ~15 处         | 全局变量和基础组件                                 |
+| `wide-layout.css` | ~5 处          | 响应式和弹窗样式                                   |
 
 #### 5.4.3 主题切换的触发时机
 
@@ -945,15 +1053,15 @@ useEffect(() => {
 
 Theme Token 与"使用 Ant Design / Element Plus 真实组件库"是两个不同层级的方案：
 
-| 维度 | Theme Token（本文档） | 框架组件映射（后续） |
-|------|----------------------|---------------------|
-| 改动层次 | 样式层 | 组件层 + 样式层 |
-| 是否引入新依赖 | 否 | 是（antd / element-plus） |
-| bundle 体积增量 | 0 | +150~200KB |
-| 视觉自由度 | 高（颜色/圆角/密度全可控） | 受限于框架组件默认样式 |
-| 交互自由度 | 受限于现有组件结构 | 可使用框架原生交互（如 Antd Table 的内置排序/筛选） |
-| 实施成本 | 小（约 1 天） | 大（约 2-3 周） |
-| 适用场景 | 快速视觉定制、多风格切换 | 需要框架级交互能力的复杂场景 |
+| 维度            | Theme Token（本文档）      | 框架组件映射（后续）                                |
+| --------------- | -------------------------- | --------------------------------------------------- |
+| 改动层次        | 样式层                     | 组件层 + 样式层                                     |
+| 是否引入新依赖  | 否                         | 是（antd / element-plus）                           |
+| bundle 体积增量 | 0                          | +150~200KB                                          |
+| 视觉自由度      | 高（颜色/圆角/密度全可控） | 受限于框架组件默认样式                              |
+| 交互自由度      | 受限于现有组件结构         | 可使用框架原生交互（如 Antd Table 的内置排序/筛选） |
+| 实施成本        | 小（约 1 天）              | 大（约 2-3 周）                                     |
+| 适用场景        | 快速视觉定制、多风格切换   | 需要框架级交互能力的复杂场景                        |
 
 **建议路线**：先落地 Theme Token，验证用户确实需要主题切换后，再评估是否需要引入框架映射作为第二阶段。
 
@@ -961,47 +1069,47 @@ Theme Token 与"使用 Ant Design / Element Plus 真实组件库"是两个不同
 
 ## 6. 实施优先级（含 Theme Token）
 
-| 优先级 | 优化项 | B/C 端 | 收益 | 工作量 | 建议实施阶段 | 当前状态 |
-|--------|--------|--------|------|--------|-------------|----------|
-| P0 | 系统提示词结构化 + Few-shot | B+C | ⭐⭐⭐⭐⭐ | 小 | Phase 1 | 已完成 |
-| P0 | JSON 多层修复策略 | B+C | ⭐⭐⭐⭐ | 小 | Phase 1 | 已完成 |
-| P0 | views 流式解析支持 | B+C | ⭐⭐⭐⭐ | 中 | Phase 1 | 已完成 |
-| P0 | Theme Token 系统（类型 + 预设 + CSS 变量化） | B+C | ⭐⭐⭐⭐⭐ | 中 | Phase 1 | 已完成 |
-| P1 | 新增操作改为弹窗 | C | ⭐⭐⭐⭐⭐ | 中 | Phase 1 | 已完成 |
-| P1 | 通用 Modal 组件 | C | ⭐⭐⭐⭐ | 小 | Phase 1 | 已完成 |
-| P1 | 删除确认增强（预览信息） | C | ⭐⭐⭐⭐ | 小 | Phase 1 | 已完成 |
-| P1 | 编辑弹窗字段实时校验 | B+C | ⭐⭐⭐⭐ | 中 | Phase 1 | 已完成 |
-| P1 | Prompt 增加视觉风格说明 | B+C | ⭐⭐⭐⭐ | 小 | Phase 1 | 已完成 |
-| P1 | ColumnMeta 字段增强 | B | ⭐⭐⭐⭐ | 中 | Phase 2 | 已完成 |
-| P1 | 操作角色智能推断 | B+C | ⭐⭐⭐⭐ | 中 | Phase 2 | 已完成 |
-| P2 | 多 View 组合（tabs/split） | B | ⭐⭐⭐ | 大 | Phase 2 | 已完成 |
-| P2 | 真实数据绑定（一键替换假数据） | B+C | ⭐⭐⭐⭐ | 大 | Phase 2 | 已完成 |
-| P2 | 批量操作支持 | B | ⭐⭐⭐ | 中 | Phase 2 | 已完成 |
-| P2 | interaction 字段控制弹窗时机 | C | ⭐⭐⭐⭐ | 中 | Phase 2 | 已完成 |
-| P2 | 主题切换器 UI（页面右上角下拉） | B+C | ⭐⭐⭐ | 小 | Phase 2 | 已完成 |
-| P3 | B2B 场景预设库 | B | ⭐⭐⭐ | 小 | Phase 3 | 已完成 |
-| P3 | C 端专属场景预设（商城/内容/社交） | C | ⭐⭐⭐ | 小 | Phase 3 | 已完成 |
-| P3 | 框架组件映射（Ant Design / Element Plus adapter） | B+C | ⭐⭐⭐⭐ | 大 | Phase 3（按需） | 按需未启用 |
+| 优先级 | 优化项                                            | B/C 端 | 收益       | 工作量 | 建议实施阶段    | 当前状态   |
+| ------ | ------------------------------------------------- | ------ | ---------- | ------ | --------------- | ---------- |
+| P0     | 系统提示词结构化 + Few-shot                       | B+C    | ⭐⭐⭐⭐⭐ | 小     | Phase 1         | 已完成     |
+| P0     | JSON 多层修复策略                                 | B+C    | ⭐⭐⭐⭐   | 小     | Phase 1         | 已完成     |
+| P0     | views 流式解析支持                                | B+C    | ⭐⭐⭐⭐   | 中     | Phase 1         | 已完成     |
+| P0     | Theme Token 系统（类型 + 预设 + CSS 变量化）      | B+C    | ⭐⭐⭐⭐⭐ | 中     | Phase 1         | 已完成     |
+| P1     | 新增操作改为弹窗                                  | C      | ⭐⭐⭐⭐⭐ | 中     | Phase 1         | 已完成     |
+| P1     | 通用 Modal 组件                                   | C      | ⭐⭐⭐⭐   | 小     | Phase 1         | 已完成     |
+| P1     | 删除确认增强（预览信息）                          | C      | ⭐⭐⭐⭐   | 小     | Phase 1         | 已完成     |
+| P1     | 编辑弹窗字段实时校验                              | B+C    | ⭐⭐⭐⭐   | 中     | Phase 1         | 已完成     |
+| P1     | Prompt 增加视觉风格说明                           | B+C    | ⭐⭐⭐⭐   | 小     | Phase 1         | 已完成     |
+| P1     | ColumnMeta 字段增强                               | B      | ⭐⭐⭐⭐   | 中     | Phase 2         | 已完成     |
+| P1     | 操作角色智能推断                                  | B+C    | ⭐⭐⭐⭐   | 中     | Phase 2         | 已完成     |
+| P2     | 多 View 组合（tabs/split）                        | B      | ⭐⭐⭐     | 大     | Phase 2         | 已完成     |
+| P2     | 真实数据绑定（一键替换假数据）                    | B+C    | ⭐⭐⭐⭐   | 大     | Phase 2         | 已完成     |
+| P2     | 批量操作支持                                      | B      | ⭐⭐⭐     | 中     | Phase 2         | 已完成     |
+| P2     | interaction 字段控制弹窗时机                      | C      | ⭐⭐⭐⭐   | 中     | Phase 2         | 已完成     |
+| P2     | 主题切换器 UI（页面右上角下拉）                   | B+C    | ⭐⭐⭐     | 小     | Phase 2         | 已完成     |
+| P3     | B2B 场景预设库                                    | B      | ⭐⭐⭐     | 小     | Phase 3         | 已完成     |
+| P3     | C 端专属场景预设（商城/内容/社交）                | C      | ⭐⭐⭐     | 小     | Phase 3         | 已完成     |
+| P3     | 框架组件映射（Ant Design / Element Plus adapter） | B+C    | ⭐⭐⭐⭐   | 大     | Phase 3（按需） | 按需未启用 |
 
 ---
 
 ## 7. 关键文件变更清单（含 Theme Token）
 
-| 文件 | 变更类型 | 说明 |
-|------|---------|------|
-| [features/workbench/PromptComposer.ts](../../src/features/workbench/PromptComposer.ts) | 新增 | 分层 Prompt 组合器 |
-| [features/workbench/promptTemplates.ts](../../src/features/workbench/promptTemplates.ts) | 修改 | 引入 Few-shot 模板 + 视觉风格说明 |
-| [features/workbench/modelRequest.ts](../../src/features/workbench/modelRequest.ts) | 修改 | 接入 PromptComposer |
-| [features/pages/streamingPageParser.ts](../../src/features/pages/streamingPageParser.ts) | 修改 | 多层 JSON 修复 + views 解析 |
-| [features/pages/themePresets.ts](../../src/features/pages/themePresets.ts) | 新增 | 内置主题 Token 定义 + resolveThemeTokens() |
-| [features/pages/MutationPanel.tsx](../../src/features/pages/MutationPanel.tsx) | 修改 | 重构为通用 Modal 调用 |
-| [features/pages/Modal.tsx](../../src/features/pages/Modal.tsx) | 新增 | 通用弹窗组件 |
-| [types/domain.ts](../../src/types/domain.ts) | 修改 | 增加 ThemeStyle、StyleToken、InteractionMode、ColumnMeta |
-| [wide-layout.css](../../src/wide-layout.css) | 修改 | 集中补充响应式、弹窗样式和生成页面 theme token 覆盖 |
-| [features/pages/GeneratedPage.tsx](../../src/features/pages/GeneratedPage.tsx) | 修改 | 接入 theme 注入 effect + interaction 配置 |
-| [generated.css](../../src/generated.css) | 修改 | 保留结构与 forge-default fallback；由后加载 Token 层覆盖主题视觉 |
-| [route.css](../../src/route.css) | 保留 | 工作台外壳继续使用固定品牌基线，避免生成页主题污染全局导航与配置页 |
-| [styles.css](../../src/styles.css) | 保留 | 全局基础样式继续作为 forge-default 与非生成页面 fallback |
+| 文件                                                                                     | 变更类型 | 说明                                                               |
+| ---------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------ |
+| [features/workbench/PromptComposer.ts](../../src/features/workbench/PromptComposer.ts)   | 新增     | 分层 Prompt 组合器                                                 |
+| [features/workbench/promptTemplates.ts](../../src/features/workbench/promptTemplates.ts) | 修改     | 引入 Few-shot 模板 + 视觉风格说明                                  |
+| [features/workbench/modelRequest.ts](../../src/features/workbench/modelRequest.ts)       | 修改     | 接入 PromptComposer                                                |
+| [features/pages/streamingPageParser.ts](../../src/features/pages/streamingPageParser.ts) | 修改     | 多层 JSON 修复 + views 解析                                        |
+| [features/pages/themePresets.ts](../../src/features/pages/themePresets.ts)               | 新增     | 内置主题 Token 定义 + resolveThemeTokens()                         |
+| [features/pages/MutationPanel.tsx](../../src/features/pages/MutationPanel.tsx)           | 修改     | 重构为通用 Modal 调用                                              |
+| [features/pages/Modal.tsx](../../src/features/pages/Modal.tsx)                           | 新增     | 通用弹窗组件                                                       |
+| [types/domain.ts](../../src/types/domain.ts)                                             | 修改     | 增加 ThemeStyle、StyleToken、InteractionMode、ColumnMeta           |
+| [wide-layout.css](../../src/wide-layout.css)                                             | 修改     | 集中补充响应式、弹窗样式和生成页面 theme token 覆盖                |
+| [features/pages/GeneratedPage.tsx](../../src/features/pages/GeneratedPage.tsx)           | 修改     | 接入 theme 注入 effect + interaction 配置                          |
+| [generated.css](../../src/generated.css)                                                 | 修改     | 保留结构与 forge-default fallback；由后加载 Token 层覆盖主题视觉   |
+| [route.css](../../src/route.css)                                                         | 保留     | 工作台外壳继续使用固定品牌基线，避免生成页主题污染全局导航与配置页 |
+| [styles.css](../../src/styles.css)                                                       | 保留     | 全局基础样式继续作为 forge-default 与非生成页面 fallback           |
 
 ---
 
@@ -1044,17 +1152,17 @@ Theme Token 与"使用 Ant Design / Element Plus 真实组件库"是两个不同
 
 本轮已完成提案中的可本地验证实现项：分层 Prompt 与场景 Few-shot、JSON 多层修复及可读失败、递归 View、ColumnMeta、操作角色与 `bodySchema`、字段联动、页面元数据、批量操作、真实数据映射、通用 Modal、C 端 CRUD 弹窗、Theme Token 与主题切换、B2B/C 端预设、`permissionRole` 可见性控制、`sidebar/full/modal` 真实布局、`sortParam` 服务端查询联动、`redirect` 客户端子路由，以及响应式下拉和小屏布局。
 
-| 检查 | 当前证据 |
-|------|----------|
-| 前端单元测试 | `npm test`：40 passed，覆盖场景差异、B2B/C 端预设、解析修复、字段联动、真实数据映射、主题精确值、安全 token、权限、排序查询、redirect 路由契约及 4 项窄视口下拉定位边界 |
-| 前端构建 | `npm run build`：通过 |
-| Rust 权威校验 | `cargo test`：51 passed，覆盖 PageSpec、OpenAPI 字段联动、操作授权、主题 token、模型输出有界规范化、项目与 API 文档隔离及引用保护 |
-| Rust 格式 | `cargo fmt --all -- --check`：通过 |
-| 响应式下拉 | Edge/CDP 在 320 / 520 / 1280px 验证；触发器与选项统一为 26px；菜单打开前即获得有效位置，挂载后按真实高度校正并 Portal 到 `BODY`。三个宽度下菜单均可见且四向溢出为 0，320px 下保持触发器宽度并自动向上展开 |
-| Theme Token 运行时 | Edge/CDP 对 clean-light / minimal-dark 的内联表单、详情、错误态、弹窗、删除预览、按钮、排序图标与 Portal 下拉读取计算样式，均跟随当前 Token |
-| 真实模型一致性 | 正式 50 次分层验收运行到 8 次时出现第 3 个 `invalid-output`，当时 schema-pass 为 5/8；即使后续全通过，最高也只有 47/50（94%），因此提前停止。随后以 Dashboard / CRUD / enterprise-theme 各 1 条执行最小诊断，3/3 均通过；链路和三类语义均可用，但当前供应商输出稳定性尚不足以勾选 95% 验收项 |
-| DSL 运行时语义 | Edge/Playwright 在 1280 / 320px 验证：sidebar 两栏自动回落单栏、full 单栏、modal 桌面宽 820px/移动端自适应；四类 redirect 子路由可见且可返回；权限拒绝态可见；320px `scrollWidth === clientWidth` |
-| UI 静态检测 | Impeccable detector：0 findings |
+| 检查               | 当前证据                                                                                                                                                                                                                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 前端单元测试       | `npm test`：40 passed，覆盖场景差异、B2B/C 端预设、解析修复、字段联动、真实数据映射、主题精确值、安全 token、权限、排序查询、redirect 路由契约及 4 项窄视口下拉定位边界                                                                                                                      |
+| 前端构建           | `npm run build`：通过                                                                                                                                                                                                                                                                        |
+| Rust 权威校验      | `cargo test`：51 passed，覆盖 PageSpec、OpenAPI 字段联动、操作授权、主题 token、模型输出有界规范化、项目与 API 文档隔离及引用保护                                                                                                                                                            |
+| Rust 格式          | `cargo fmt --all -- --check`：通过                                                                                                                                                                                                                                                           |
+| 响应式下拉         | Edge/CDP 在 320 / 520 / 1280px 验证；触发器与选项统一为 26px；菜单打开前即获得有效位置，挂载后按真实高度校正并 Portal 到 `BODY`。三个宽度下菜单均可见且四向溢出为 0，320px 下保持触发器宽度并自动向上展开                                                                                    |
+| Theme Token 运行时 | Edge/CDP 对 clean-light / minimal-dark 的内联表单、详情、错误态、弹窗、删除预览、按钮、排序图标与 Portal 下拉读取计算样式，均跟随当前 Token                                                                                                                                                  |
+| 真实模型一致性     | 正式 50 次分层验收运行到 8 次时出现第 3 个 `invalid-output`，当时 schema-pass 为 5/8；即使后续全通过，最高也只有 47/50（94%），因此提前停止。随后以 Dashboard / CRUD / enterprise-theme 各 1 条执行最小诊断，3/3 均通过；链路和三类语义均可用，但当前供应商输出稳定性尚不足以勾选 95% 验收项 |
+| DSL 运行时语义     | Edge/Playwright 在 1280 / 320px 验证：sidebar 两栏自动回落单栏、full 单栏、modal 桌面宽 820px/移动端自适应；四类 redirect 子路由可见且可返回；权限拒绝态可见；320px `scrollWidth === clientWidth`                                                                                            |
+| UI 静态检测        | Impeccable detector：0 findings                                                                                                                                                                                                                                                              |
 
 真实模型调用已获授权并实际执行，但两项 95% 验收仍未通过：正式抽样在第 8 次出现第 3 个无效输出后已无法达到 95%，因此没有用继续调用或补抽样掩盖失败。企业蓝在正式样本中 2/3 通过，最小诊断样本也通过，说明确定性主题意图解析已经生效，但还不能证明供应商输出达到稳定验收阈值。
 
@@ -1066,16 +1174,16 @@ P3 的框架组件映射在提案中标注为“按需”，本轮未引入 Ant 
 
 ## 9. 风险与缓解
 
-| 风险 | 说明 | 缓解措施 |
-|------|------|----------|
-| LLM 输出 Few-shot 格式漂移 | 模型可能将示例当成输出的一部分 | 在 system prompt 中明确"以下为示例，不要复述" |
-| 弹窗组件引入新的 focus trap 问题 | 弹窗打开后焦点可能泄漏 | 使用 `useFocusTrap` 或手动管理 tabbable 元素 |
-| C 端弹窗在移动端显示异常 | 全屏弹窗在小屏可能遮挡内容 | 小屏自动切换为底部抽屉（drawer）模式 |
-| interaction 字段向后兼容 | 旧 PageSpec 无此字段 | 渲染器检测到 undefined 时使用默认 inline 模式 |
-| 真实数据绑定性能 | 多接口并发查询可能导致页面闪烁 | 使用请求合并 + 占位骨架屏，完成后整体替换 |
-| CSS 变量 fallback 缺失导致白屏 | 若所有 `var()` 均无 fallback 且变量未设置 | 每个 `var()` 必须带 fallback 值（如 `var(--fg-text, #e9edf5)`） |
-| 浅色主题下对比度不足 | enterprise-blue 的 muted 文字可能不够清晰 | 浅色主题中 textMuted 使用 `#00000073` 而非灰色，确保 WCAG AA |
-| 主题切换时已有操作状态丢失 | 切换主题不影响功能但可能让用户困惑 | 主题切换仅修改 CSS 变量，不重置任何 state，需明确告知用户 |
+| 风险                             | 说明                                      | 缓解措施                                                        |
+| -------------------------------- | ----------------------------------------- | --------------------------------------------------------------- |
+| LLM 输出 Few-shot 格式漂移       | 模型可能将示例当成输出的一部分            | 在 system prompt 中明确"以下为示例，不要复述"                   |
+| 弹窗组件引入新的 focus trap 问题 | 弹窗打开后焦点可能泄漏                    | 使用 `useFocusTrap` 或手动管理 tabbable 元素                    |
+| C 端弹窗在移动端显示异常         | 全屏弹窗在小屏可能遮挡内容                | 小屏自动切换为底部抽屉（drawer）模式                            |
+| interaction 字段向后兼容         | 旧 PageSpec 无此字段                      | 渲染器检测到 undefined 时使用默认 inline 模式                   |
+| 真实数据绑定性能                 | 多接口并发查询可能导致页面闪烁            | 使用请求合并 + 占位骨架屏，完成后整体替换                       |
+| CSS 变量 fallback 缺失导致白屏   | 若所有 `var()` 均无 fallback 且变量未设置 | 每个 `var()` 必须带 fallback 值（如 `var(--fg-text, #e9edf5)`） |
+| 浅色主题下对比度不足             | enterprise-blue 的 muted 文字可能不够清晰 | 浅色主题中 textMuted 使用 `#00000073` 而非灰色，确保 WCAG AA    |
+| 主题切换时已有操作状态丢失       | 切换主题不影响功能但可能让用户困惑        | 主题切换仅修改 CSS 变量，不重置任何 state，需明确告知用户       |
 
 ---
 

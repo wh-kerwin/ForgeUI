@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createApiFallbackPage, isPageSpecGenerationError } from "../src/features/workbench/apiFallbackPage";
+import {
+  createApiFallbackPage,
+  isPageSpecGenerationError,
+} from "../src/features/workbench/apiFallbackPage";
 import type { ApiDocument } from "../src/types/domain";
 
 const listKey = "GET /employees · listEmployees";
@@ -51,7 +54,13 @@ test("fallback page binds every authorized operation to its selected API documen
 
   assert.equal(page.title, "生成员工管理界面");
   assert.deepEqual(page.operations, [
-    { apiDocumentId: "employees-api", operation_id: "listEmployees", method: "GET", path: "/employees", role: "list" },
+    {
+      apiDocumentId: "employees-api",
+      operation_id: "listEmployees",
+      method: "GET",
+      path: "/employees",
+      role: "list",
+    },
     {
       apiDocumentId: "employees-api",
       operation_id: "updateEmployee",
@@ -68,9 +77,11 @@ test("fallback page binds every authorized operation to its selected API documen
 });
 
 test("fallback columns come only from authorized operation schemas and retain an id column", () => {
-  const page = createApiFallbackPage("", [document({
-    auth: { ...document().auth, authorizedOperations: [createKey, updateKey] },
-  })]);
+  const page = createApiFallbackPage("", [
+    document({
+      auth: { ...document().auth, authorizedOperations: [createKey, updateKey] },
+    }),
+  ]);
 
   assert.equal(page.title, "Employees 管理");
   assert.deepEqual(page.columns, ["id", "name", "status", "age"]);
@@ -93,7 +104,11 @@ test("fallback narrows an order request to the matching selected API document", 
   const customer = document({
     id: "customers-api",
     name: "Customer API",
-    spec: { ...document().spec, title: "Customers", operations: ["GET /customers · listCustomers"] },
+    spec: {
+      ...document().spec,
+      title: "Customers",
+      operations: ["GET /customers · listCustomers"],
+    },
     auth: { ...document().auth, authorizedOperations: ["GET /customers · listCustomers"] },
   });
   const order = document({
@@ -104,7 +119,15 @@ test("fallback narrows an order request to the matching selected API document", 
   });
 
   const page = createApiFallbackPage("生成订单管理界面", [customer, order]);
-  assert.deepEqual(page.operations, [{ apiDocumentId: "orders-api", operation_id: "listOrders", method: "GET", path: "/orders", role: "list" }]);
+  assert.deepEqual(page.operations, [
+    {
+      apiDocumentId: "orders-api",
+      operation_id: "listOrders",
+      method: "GET",
+      path: "/orders",
+      role: "list",
+    },
+  ]);
   assert.match(page.description, /Orders/);
   assert.doesNotMatch(page.description, /Customers/);
 });
@@ -120,7 +143,9 @@ test("fallback remains usable with no schemas and does not mutate imported field
 
   assert.deepEqual(createApiFallbackPage("", [noSchema]).columns, ["id"]);
   const page = createApiFallbackPage("", [source]);
-  page.operations?.find((operation) => operation.operation_id === "createEmployee")?.bodySchema?.[1].enumValues?.push("pending");
+  page.operations
+    ?.find((operation) => operation.operation_id === "createEmployee")
+    ?.bodySchema?.[1].enumValues?.push("pending");
   assert.deepEqual(source.spec.fieldSchemas, before);
 });
 

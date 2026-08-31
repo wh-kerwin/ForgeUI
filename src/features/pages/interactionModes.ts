@@ -1,6 +1,9 @@
 import type { InteractionMode, PageSpec } from "../../types/domain";
 
-export type ResolvedInteraction = Record<"create" | "update" | "delete" | "detail", InteractionMode>;
+export type ResolvedInteraction = Record<
+  "create" | "update" | "delete" | "detail",
+  InteractionMode
+>;
 
 const DEFAULT_INTERACTION: ResolvedInteraction = {
   create: "inline",
@@ -16,7 +19,10 @@ const CRUD_MODAL_INTERACTION: ResolvedInteraction = {
   detail: "modal",
 };
 
-export function resolveInteraction(page: Pick<PageSpec, "interaction">, isCrudPage = false): ResolvedInteraction {
+export function resolveInteraction(
+  page: Pick<PageSpec, "interaction">,
+  isCrudPage = false,
+): ResolvedInteraction {
   if (isCrudPage) return CRUD_MODAL_INTERACTION;
   return { ...DEFAULT_INTERACTION, ...page.interaction };
 }

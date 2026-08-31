@@ -42,13 +42,24 @@ export type PageSpec = {
   styleTokens?: StyleToken;
 };
 
-export type ThemeStyle = "forge-default" | "enterprise-blue" | "clean-light" | "minimal-dark" | "custom";
+export type ThemeStyle =
+  "forge-default" | "enterprise-blue" | "clean-light" | "minimal-dark" | "custom";
 export type StyleToken = {
-  primary?: string; primaryBg?: string; primaryBgHover?: string;
-  surface?: string; surfaceAlt?: string; surfaceControl?: string;
-  border?: string; borderControl?: string; focusRing?: string;
-  text?: string; textMuted?: string; textSubtle?: string;
-  danger?: string; dangerBg?: string; success?: string;
+  primary?: string;
+  primaryBg?: string;
+  primaryBgHover?: string;
+  surface?: string;
+  surfaceAlt?: string;
+  surfaceControl?: string;
+  border?: string;
+  borderControl?: string;
+  focusRing?: string;
+  text?: string;
+  textMuted?: string;
+  textSubtle?: string;
+  danger?: string;
+  dangerBg?: string;
+  success?: string;
   radius?: "none" | "sm" | "md" | "lg" | "full";
   density?: "compact" | "comfortable" | "relaxed";
 };
@@ -88,12 +99,25 @@ export type OperationBinding = {
   sortParam?: string;
 };
 
-export type PromptTemplate = { id: string; name: string; scene: "dashboard" | "crud" | "report" | "kanban" | "shop" | "content" | "social"; systemPrompt: string; isDefault?: boolean };
+export type PromptTemplate = {
+  id: string;
+  name: string;
+  scene: "dashboard" | "crud" | "report" | "kanban" | "shop" | "content" | "social";
+  systemPrompt: string;
+  isDefault?: boolean;
+};
 export type LoadingState = "idle" | "generating" | "querying" | "mutating" | "saving";
 
 export type PageView =
   | { type: "list"; title?: string; defaultSort?: { column: string; order: "asc" | "desc" } }
-  | { type: "chart"; title: string; chartType: "bar" | "line" | "pie"; xAxisColumn: string; yAxisColumn: string; groupByColumn?: string }
+  | {
+      type: "chart";
+      title: string;
+      chartType: "bar" | "line" | "pie";
+      xAxisColumn: string;
+      yAxisColumn: string;
+      groupByColumn?: string;
+    }
   | { type: "kanban"; title: string; groupColumn: string; cardFields: string[] }
   | { type: "tabs"; items: { key: string; label: string; view: PageView }[] }
   | { type: "split"; left: PageView; right: PageView; splitRatio?: number };
@@ -138,7 +162,12 @@ export type FieldSchema = {
   visibleWhen?: { field: string; equals: string | string[] };
 };
 
-export type AllowedOperation = { api_document_id?: string; operation_id: string; method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; path: string };
+export type AllowedOperation = {
+  api_document_id?: string;
+  operation_id: string;
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  path: string;
+};
 
 export type BusinessAuth = {
   type: string;

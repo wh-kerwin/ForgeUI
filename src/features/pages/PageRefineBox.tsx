@@ -24,11 +24,15 @@ export function PageRefineBox({ onRefine, refining }: Props) {
         <input
           value={instruction}
           onChange={(event) => setInstruction(event.target.value)}
-          placeholder={zh ? "例如：增加按负责人筛选，并把状态列移到第一列" : "e.g. Add an owner filter and move the status column first"}
+          placeholder={
+            zh
+              ? "例如：增加按负责人筛选，并把状态列移到第一列"
+              : "e.g. Add an owner filter and move the status column first"
+          }
         />
         <button className="secondary" disabled={refining} onClick={submit}>
           <Sparkles size={14} />
-          {refining ? (zh ? "修改中…" : "Updating…") : (zh ? "应用修改" : "Apply changes")}
+          {refining ? (zh ? "修改中…" : "Updating…") : zh ? "应用修改" : "Apply changes"}
         </button>
       </div>
     </div>
