@@ -29,6 +29,7 @@ async function loadDataTableStateHelpers() {
       indexes: readonly number[],
       defaultHiddenIndexes: readonly number[],
     ) => Set<number>;
+    compareCellValues: (a: string | undefined, b: string | undefined) => number;
   };
 }
 
@@ -49,4 +50,22 @@ test("DataTable optional collection defaults use stable module constants", async
   assert.doesNotMatch(source, /columnMeta\s*=\s*\[\]/);
   assert.doesNotMatch(source, /batchActions\s*=\s*\[\]/);
   assert.doesNotMatch(source, /selectedRows\s*=\s*new Set\(\)/);
+});
+
+test("DataTable sorts numeric cells numerically instead of lexicographically", async () => {
+  const { compareCellValues } = await loadDataTableStateHelpers();
+  // "100" < "20" as strings, but 100 > 20 as numbers.
+  assert.ok(compareCellValues("20", "100") < 0);
+  assert.ok(compareCellValues("100", "20") > 0);
+  assert.equal(compareCellValues("20", "20"), 0);
+});
+
+test("DataTable cell comparison handles empty and non-numeric values", async () => {
+  const { compareCellValues } = await loadDataTableStateHelpers();
+  assert.ok(compareCellValues(undefined, "a") < 0);
+  assert.ok(compareCellValues("", "a") < 0);
+  assert.equal(compareCellValues(undefined, undefined), 0);
+  assert.ok(compareCellValues("a", "b") < 0);
+  // Numeric fallback keeps alphanumeric ordering stable ("item2" before "item10").
+  assert.ok(compareCellValues("item2", "item10") < 0);
 });
