@@ -74,6 +74,11 @@ async fn execute_api(request: ApiRequest) -> Result<ApiResponse, String> {
 }
 
 #[tauri::command]
+fn cancel_query(request_id: String) -> u32 {
+    business_api::cancel_query(&request_id)
+}
+
+#[tauri::command]
 async fn import_openapi_url(url: String) -> Result<OpenApiSummary, String> {
     openapi::import_url(url).await
 }
@@ -366,6 +371,7 @@ pub fn run() {
             generate_page,
             generate_page_stream,
             execute_api,
+            cancel_query,
             import_openapi_url,
             discover_openapi_candidates,
             parse_openapi_file,

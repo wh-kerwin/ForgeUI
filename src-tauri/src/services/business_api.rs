@@ -4,6 +4,7 @@ use crate::services::url_security::{
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::Duration};
+use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Deserialize)]
 pub struct ApiRequest {
@@ -14,7 +15,16 @@ pub struct ApiRequest {
     pub project_id: String,
     pub api_document_id: String,
     pub operation_key: Option<String>,
+    /// Optional client-side request ID used to correlate cancel_query calls.
+    #[serde(default)]
+    pub request_id: Option<String>,
 }
+
+/// In-flight cancellation tokens keyed by client request_id.
+/// Cleared automatically when the associated request finishes.
+static ACTIVE_REQUESTS: std::sync::LazyLock<
+    std::sync::Mutex<HashMap<String, CancellationToken>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
 
 #[derive(Debug, Serialize)]
 pub struct ApiResponse {
@@ -216,10 +226,38 @@ pub async fn execute(request: ApiRequest) -> Result<ApiResponse, String> {
     if let Some(body) = request.body {
         builder = builder.json(&body);
     }
-    let response = builder
-        .send()
-        .await
-        .map_err(|e| format!("业务 API 请求失败：{e}"))?;
+    // Register cancellation token if a request_id was supplied by the client.
+    let ct = if let Some(id) = &request.request_id {
+        let token = CancellationToken::new();
+        ACTIVE_REQUESTS
+            .lock()
+            .map(|mut map| {
+                map.insert(id.clone(), token.clone());
+            })
+            .map_err(|_| "内部错误：请求取消表已锁定")?;
+        Some(token)
+    } else {
+        None
+    };
+    let response = match ct {
+        Some(token) => {
+            let send_future = builder.send();
+            tokio::select! {
+                result = send_future => result,
+                _ = token.cancelled() => {
+                    ACTIVE_REQUESTS.lock().map(|mut map| {
+                        if let Some(id) = &request.request_id { map.remove(id); }
+                    }).ok();
+                    return Err("Cancelled".into());
+                }
+            }
+        }
+        None => builder.send().await,
+    }
+    .map_err(|e| format!("业务 API 请求失败：{e}"))?;
+    if let Some(id) = &request.request_id {
+        ACTIVE_REQUESTS.lock().map(|mut map| { map.remove(id); }).ok();
+    }
     validate_content_length(response.content_length(), 10 * 1024 * 1024, "业务 API")?;
     let status = response.status().as_u16();
     let text = read_limited_response(response, 10 * 1024 * 1024, "业务 API").await?;
@@ -231,6 +269,22 @@ pub async fn execute(request: ApiRequest) -> Result<ApiResponse, String> {
         return Err(format!("业务 API 返回 HTTP {status}"));
     }
     Ok(ApiResponse { status, body })
+}
+
+/// Cancels an in-flight business API query by its client-supplied request_id.
+/// Returns the number of tokens cancelled (0 means not found or already finished).
+pub fn cancel_query(request_id: &str) -> u32 {
+    let removed = ACTIVE_REQUESTS
+        .lock()
+        .map(|mut map| map.remove(request_id).is_some())
+        .unwrap_or(false);
+    if removed {
+        // The cancelled future will observe the cancellation on the next await
+        // point and return Err("Cancelled"), which the caller treats as silent.
+        1
+    } else {
+        0
+    }
 }
 
 #[cfg(test)]

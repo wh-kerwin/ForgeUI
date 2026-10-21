@@ -2,6 +2,11 @@ import { withRecordIdFirst } from "../features/pages/recordIdentity";
 
 const LIST_KEYS = ["data", "items", "results", "records", "content"] as const;
 
+/** Maximum number of rows exposed to the generated page from a single API response. */
+export const MAX_MAPPED_ROWS = 100;
+/** Maximum number of columns exposed to the generated page from a single API response. */
+export const MAX_MAPPED_COLUMNS = 50;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -46,12 +51,13 @@ function toCell(value: unknown): string {
 
 export function mapRealDataResponse(
   body: unknown,
-): { columns: string[]; rows: string[][]; total?: number } | null {
+): { columns: string[]; rows: string[][]; total?: number; truncated?: boolean } | null {
   const list = unwrapList(body);
   if (!list?.length) return null;
-  const records = list.slice(0, 100).map((item) => (isRecord(item) ? item : { value: item }));
+  const rowsTruncated = list.length > MAX_MAPPED_ROWS;
+  const records = list.slice(0, MAX_MAPPED_ROWS).map((item) => (isRecord(item) ? item : { value: item }));
   const columns = withRecordIdFirst(
-    [...new Set(records.flatMap((record) => Object.keys(record)))].slice(0, 50),
+    [...new Set(records.flatMap((record) => Object.keys(record)))].slice(0, MAX_MAPPED_COLUMNS),
   );
   if (!columns.length) return null;
   const total = findTotal(body);
@@ -59,5 +65,6 @@ export function mapRealDataResponse(
     columns,
     rows: records.map((record) => columns.map((column) => toCell(record[column]))),
     ...(total !== undefined ? { total } : {}),
+    ...(rowsTruncated || columns.length === MAX_MAPPED_COLUMNS ? { truncated: true } : {}),
   };
 }

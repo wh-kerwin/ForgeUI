@@ -10,6 +10,18 @@ type StreamingPageParserOptions = {
   onDelta: (partial: Partial<PageSpec>) => void;
   onComplete: (spec: PageSpec) => void;
   mode?: "modelText" | "sse";
+  /**
+   * When true, delta events are coalesced into a single React update per frame
+   * (or per flush interval). This avoids redundant re-renders when the model
+   * emits many fine-grained chunks. When false, every parsed partial is
+   * forwarded immediately (original behavior).
+   */
+  coalesce?: boolean;
+  /**
+   * Maximum interval between coalesced flushes in milliseconds. Defaults to
+   * 100. Pass 0 to use requestAnimationFrame only.
+   */
+  flushIntervalMs?: number;
 };
 
 /**
@@ -22,11 +34,49 @@ export class StreamingPageParser {
   private transportMode: "modelText" | "sse";
   private readonly onComplete: (spec: PageSpec) => void;
   private readonly onDelta: (partial: Partial<PageSpec>) => void;
+  private readonly coalesce: boolean;
+  private readonly flushIntervalMs: number;
 
-  constructor({ onDelta, onComplete, mode = "modelText" }: StreamingPageParserOptions) {
+  /** Holds the latest merged partial while coalescing is active. */
+  private latestPartial: Partial<PageSpec> | null = null;
+  private rafId: number | null = null;
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor({
+    onDelta,
+    onComplete,
+    mode = "modelText",
+    coalesce = false,
+    flushIntervalMs = 100,
+  }: StreamingPageParserOptions) {
     this.onDelta = onDelta;
     this.onComplete = onComplete;
     this.transportMode = mode;
+    this.coalesce = coalesce;
+    this.flushIntervalMs = flushIntervalMs;
+  }
+
+  /**
+   * Cancels any pending coalesce flush and immediately emits the latest
+   * partial if one exists. Call this on completion, error, or unmount.
+   */
+  flush(): void {
+    this.cancelFlush();
+    if (this.latestPartial !== null) {
+      this.onDelta(this.latestPartial);
+      this.latestPartial = null;
+    }
+  }
+
+  private cancelFlush(): void {
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+    if (this.flushTimer !== null) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
   }
 
   push(chunk: string): void {
@@ -39,6 +89,7 @@ export class StreamingPageParser {
   }
 
   finish(): void {
+    this.cancelFlush();
     if (this.sseBuffer.trim()) this.consumeSseLine(this.sseBuffer.trimEnd());
     const complete = parsePageSpec(this.parseJson(repairModelJson(this.normalizedBuffer())));
     if (!complete) {
@@ -47,6 +98,11 @@ export class StreamingPageParser {
       throw new Error(`模型返回的${title}结构不完整，请重试或简化生成要求`);
     }
     this.onComplete(complete);
+  }
+
+  destroy(): void {
+    this.cancelFlush();
+    this.latestPartial = null;
   }
 
   private pushSse(chunk: string): void {
@@ -84,8 +140,30 @@ export class StreamingPageParser {
     const normalized = this.normalizedBuffer();
     const parsed = this.parseJson(repairModelJson(normalized));
     const partial = this.toPartialPageSpec(parsed) ?? extractStructuredPageFields(normalized);
-    if (partial) this.onDelta(partial);
+    if (!partial) return;
+    if (this.coalesce) {
+      this.latestPartial = { ...this.latestPartial, ...partial };
+      if (this.flushIntervalMs > 0 && this.flushTimer === null) {
+        this.flushTimer = setTimeout(() => this.emitCoalesced(), this.flushIntervalMs);
+      }
+      if (this.rafId === null) {
+        this.rafId = requestAnimationFrame(() => this.emitCoalesced());
+      }
+      return;
+    }
+    this.onDelta(partial);
   }
+
+  private emitCoalesced = (): void => {
+    this.rafId = null;
+    if (this.latestPartial === null) return;
+    this.onDelta(this.latestPartial);
+    // Reschedule a bounded flush timer so in-flight text that arrives after
+    // the RAF window still gets flushed within the configured interval.
+    if (this.flushIntervalMs > 0) {
+      this.flushTimer = setTimeout(() => this.emitCoalesced(), this.flushIntervalMs);
+    }
+  };
 
   private normalizedBuffer(): string {
     return normalizeModelJsonText(this.buffer);

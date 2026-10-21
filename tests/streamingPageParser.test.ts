@@ -71,3 +71,14 @@ test("irreparable final response throws a readable retry message", () => {
   parser.push('{"title":"Orders", broken');
   assert.throws(() => parser.finish(), /Orders.*请重试/);
 });
+
+test("flush and destroy are no-ops when no coalesced partial exists", () => {
+  const parser = new StreamingPageParser({
+    coalesce: true,
+    flushIntervalMs: 100,
+    onDelta: () => undefined,
+    onComplete: () => undefined,
+  });
+  assert.doesNotThrow(() => parser.flush());
+  assert.doesNotThrow(() => parser.destroy());
+});

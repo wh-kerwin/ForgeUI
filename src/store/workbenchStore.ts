@@ -11,7 +11,7 @@ type ApiContext = {
   onNotice: (message: string) => void;
 };
 
-export type QueryMeta = { total?: number };
+export type QueryMeta = { total?: number; truncated?: boolean };
 
 type WorkbenchState = {
   page: PageSpec | null;
@@ -35,6 +35,8 @@ type WorkbenchState = {
 let queryTimer: ReturnType<typeof setTimeout> | undefined;
 let queryDelayResolve: (() => void) | undefined;
 let querySequence = 0;
+/** UUID assigned to the current in-flight query; used by cancelQuery and the Rust side. */
+let activeQueryRequestId: string | null = null;
 
 type DocumentResolution =
   | { ok: true; document: ApiDocument; error?: never }
@@ -99,10 +101,12 @@ function request(
   document: ApiDocument,
   url: string,
   operation: RuntimeOperation,
+  requestId: string,
   body?: unknown,
 ) {
   return invoke<{ status: number; body: unknown }>("execute_api", {
     request: buildApiRequest(context.projectId, document.id, url, operation, body),
+    request_id: requestId,
   });
 }
 
@@ -155,9 +159,16 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     queryTimer = undefined;
     queryDelayResolve = undefined;
     querySequence += 1;
+    const cancelledId = activeQueryRequestId;
+    activeQueryRequestId = null;
+    if (cancelledId) invoke("cancel_query", { request_id: cancelledId }).catch(() => {});
     set({ querying: false, loadingState: "idle" });
   },
   query: async (filters = {}, operation) => {
+    // Cancel any currently in-flight request before starting a new one.
+    const previousId = activeQueryRequestId;
+    activeQueryRequestId = null;
+    if (previousId) invoke("cancel_query", { request_id: previousId }).catch(() => {});
     const sequence = ++querySequence;
     if (queryTimer) clearTimeout(queryTimer);
     queryDelayResolve?.();
@@ -175,6 +186,8 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       context?.onNotice(resolved.error);
       return;
     }
+    const requestId = crypto.randomUUID();
+    activeQueryRequestId = requestId;
     const queryString = new URLSearchParams(
       Object.entries(filters).filter(([, value]) => value.trim()),
     ).toString();
@@ -185,6 +198,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         resolved.document,
         `${resolved.url}${queryString ? `?${queryString}` : ""}`,
         resolved.operation,
+        requestId,
       );
       if (sequence !== querySequence) return;
       const mapped = mapRealDataResponse(response.body);
@@ -200,13 +214,24 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
               rows: mapped.rows,
             }
           : state.page,
-        queryMeta: { total: mapped.total },
+        queryMeta: { total: mapped.total, truncated: mapped.truncated },
       }));
-      resolved.context.onNotice(`已从真实业务 API 加载 ${mapped.rows.length} 条数据`);
+      if (mapped.truncated) {
+        resolved.context.onNotice(
+          `已从真实业务 API 加载 ${mapped.rows.length} 条数据（已截断，更多行请依赖服务端分页）`,
+        );
+      } else {
+        resolved.context.onNotice(`已从真实业务 API 加载 ${mapped.rows.length} 条数据`);
+      }
     } catch (error) {
-      if (sequence === querySequence) resolved.context.onNotice(toUserMessage(error));
+      if (sequence === querySequence) {
+        // Requests cancelled via cancel_query are expected and silent.
+        if ((error as Error & { code?: string }).code === "Cancelled") return;
+        resolved.context.onNotice(toUserMessage(error));
+      }
     } finally {
       if (sequence === querySequence) set({ querying: false, loadingState: "idle" });
+      if (activeQueryRequestId === requestId) activeQueryRequestId = null;
     }
   },
   loadDetail: async (operation, id) => {
@@ -220,6 +245,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         resolved.document,
         resolved.url.replace(/\{[^}]+\}/, encodeURIComponent(id)),
         operation,
+        "",
       );
       set({
         detail:
@@ -249,6 +275,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         resolved.document,
         resolved.url,
         operation,
+        "",
         body,
       );
       resolved.context.onNotice(`操作成功（HTTP ${response.status}）`);
@@ -271,6 +298,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         resolved.document,
         resolved.url.replace(/\{[^}]+\}/, encodeURIComponent(id)),
         operation,
+        "",
       );
       resolved.context.onNotice(`删除成功（HTTP ${response.status}）`);
     } catch (error) {

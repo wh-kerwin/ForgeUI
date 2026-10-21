@@ -164,7 +164,11 @@ export function Workbench() {
     setIsStreaming(true);
     setStreamingPage(previewPageSpec({}));
     let latestPartial: Partial<PageSpec> = {};
+    // Coalesce: emit at most once per RAF + bounded timer so React sees
+    // ~10 updates/sec instead of one per model token.
     const parser = new StreamingPageParser({
+      coalesce: true,
+      flushIntervalMs: 100,
       onDelta: (partial) => {
         latestPartial = { ...latestPartial, ...partial };
         if (activeRequestId.current === requestId) setStreamingPage(previewPageSpec(latestPartial));
@@ -196,6 +200,7 @@ export function Workbench() {
         setIsStreaming(false);
         setStreamingPage(null);
       }
+      parser.destroy();
     }
   }
 

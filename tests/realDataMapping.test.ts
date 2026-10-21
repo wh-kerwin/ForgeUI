@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mapRealDataResponse } from "../src/store/realDataMapping";
+import { mapRealDataResponse, MAX_MAPPED_ROWS, MAX_MAPPED_COLUMNS } from "../src/store/realDataMapping";
 import { recordId } from "../src/features/pages/recordIdentity";
 
 test("maps every row by column name when object key order changes", () => {
@@ -76,7 +76,13 @@ test("keeps mapped data within PageSpec row and column limits", () => {
     Object.fromEntries(Array.from({ length: 55 }, (__, column) => [`c${column}`, index + column])),
   );
   const mapped = mapRealDataResponse({ items: records });
-  assert.equal(mapped?.columns.length, 50);
-  assert.equal(mapped?.rows.length, 100);
+  assert.equal(mapped?.columns.length, MAX_MAPPED_COLUMNS);
+  assert.equal(mapped?.rows.length, MAX_MAPPED_ROWS);
   assert.equal(mapped?.rows[1][1], "2");
+  assert.equal(mapped?.truncated, true);
+});
+
+test("does not set truncated flag when within limits", () => {
+  const mapped = mapRealDataResponse({ items: [{ id: 1, name: "A" }] });
+  assert.equal(mapped?.truncated, undefined);
 });
