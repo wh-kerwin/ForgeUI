@@ -94,7 +94,7 @@ export function GeneratedPage({
     ? page.views
     : [{ type: "list" as const, title: zh ? "列表" : "List" }];
   const [activeViewIndex, setActiveViewIndex] = useState(0);
-  const [sort, setSort] = useState<PageSort | null>(null);
+  const [sort, setSort] = useState<PageSort | null | undefined>(undefined);
   const layout = resolvePageLayout(page, isStreaming);
   useEffect(() => {
     setLocalRows(page.rows);
@@ -102,7 +102,7 @@ export function GeneratedPage({
   }, [page.rows]);
   useEffect(() => {
     setActiveViewIndex(0);
-    setSort(null);
+    setSort(undefined);
   }, [page.views]);
   useEffect(() => setTheme(page.theme ?? "forge-default"), [page.theme]);
   const themeTokens = useMemo(
@@ -134,7 +134,7 @@ export function GeneratedPage({
   }, []);
   const activeView = views[Math.min(activeViewIndex, views.length - 1)];
   const runtimePage = alignListOperationWithPrompt(page, page.title, operations);
-  const boundOperations = pageOperations(runtimePage, operations);
+  const boundOperations = isStreaming ? [] : pageOperations(runtimePage, operations);
   const listOperation = operationForRole(runtimePage, boundOperations, "list", "GET");
   const listBinding = bindingForRole(runtimePage, "list", "GET");
   const pageParam = listBinding?.pagination?.pageParam ?? "page";
@@ -159,9 +159,10 @@ export function GeneratedPage({
   const rowRecord = (row: string[]) =>
     Object.fromEntries(page.columns.map((column, index) => [column, row[index] || ""]));
   const rowId = (row: string[]) => recordId(page.columns, row);
-  const batchActions = page.batchActions ?? [];
-  const activeSort = sort ?? firstListSort(activeView);
+  const batchActions = isStreaming ? [] : (page.batchActions ?? []);
+  const activeSort = sort === undefined ? firstListSort(activeView) : sort;
   const runListQuery = (nextPage: number, nextSort: PageSort | null = activeSort) =>
+    !isStreaming &&
     onQuery(
       buildListQuery({
         filters,
@@ -209,6 +210,7 @@ export function GeneratedPage({
     action: NonNullable<PageSpec["batchActions"]>[number],
     rowIndexes: number[],
   ) => {
+    if (isStreaming || querying || queryMeta.status === "error") return;
     const ids = rowIndexes.map((index) => rowId(localRows[index])).filter(Boolean);
     if (!ids.length) return;
     const message =
@@ -275,9 +277,15 @@ export function GeneratedPage({
       onCloseDelete={() => closeAction("delete", () => setDeletingRow(null))}
       onCloseDetail={() => closeAction("detail", () => setViewingRow(null))}
       onRowsChange={setLocalRows}
-      onDetail={onDetail}
-      onMutation={onMutation}
-      onDelete={onDelete}
+      onDetail={(...args) => {
+        if (!isStreaming) onDetail(...args);
+      }}
+      onMutation={(...args) => {
+        if (!isStreaming && !querying && queryMeta.status !== "error") onMutation(...args);
+      }}
+      onDelete={(...args) => {
+        if (!isStreaming && !querying && queryMeta.status !== "error") onDelete(...args);
+      }}
     />
   );
 
@@ -285,6 +293,7 @@ export function GeneratedPage({
     <section
       className={`generated-page generated-page--${layout}${isCrudPage ? " generated-page--crud" : ""}${isStreaming ? " is-streaming" : ""}`}
       data-layout={layout}
+      data-mode={isStreaming ? "preview" : "live"}
       data-permission-role={page.permissionRole || undefined}
       aria-busy={isStreaming}
     >
@@ -319,6 +328,21 @@ export function GeneratedPage({
             ? "正在接收并校验 PageSpec 草稿，完成前所有业务操作均已禁用。"
             : "Receiving and validating the PageSpec draft. Business actions remain disabled until completion."}
         </div>
+      )}
+      {queryMeta.status === "error" && <p role="alert">{queryMeta.error}</p>}
+      {queryMeta.status === "empty" && (
+        <p role="status">{zh ? "查询成功，没有匹配的数据" : "Query succeeded: no matching data"}</p>
+      )}
+      {queryMeta.status === "cancelled" && (
+        <p role="status">
+          {zh ? "查询已取消，请重新加载后操作" : "Query cancelled; reload before making changes"}
+        </p>
+      )}
+      {queryMeta.truncated && (
+        <p role="status">
+          当前加载结果已截断（{queryMeta.truncatedRows ? "行数超限" : ""}
+          {queryMeta.truncatedColumns ? " 字段超限" : ""}）。
+        </p>
       )}
       <fieldset className="streaming-content" disabled={isStreaming}>
         {redirectAction ? (
@@ -377,6 +401,7 @@ export function GeneratedPage({
                         type="primary"
                         icon={<Plus size={15} />}
                         onClick={() => {
+                          if (isStreaming || querying || queryMeta.status === "error") return;
                           setCreating(true);
                           if (usesRedirect(interaction.create)) openRedirect("create");
                         }}
@@ -398,7 +423,7 @@ export function GeneratedPage({
                       aria-selected={activeViewIndex === index}
                       onClick={() => {
                         setActiveViewIndex(index);
-                        setSort(null);
+                        setSort(undefined);
                       }}
                     >
                       {viewLabel(view, zh)}
@@ -423,6 +448,7 @@ export function GeneratedPage({
                   selectedRows={selectedRows}
                   onSelectionChange={setSelectedRows}
                   onBatchAction={onBatchAction}
+                  serverSort={Boolean(sortParam)}
                   onSortChange={(nextSort) => {
                     setSort(nextSort);
                     setPageNumber(1);
@@ -430,6 +456,7 @@ export function GeneratedPage({
                   }}
                   onRowsChange={setLocalRows}
                   onView={(row) => {
+                    if (isStreaming || querying || queryMeta.status === "error") return;
                     setLocalDetail(rowRecord(row));
                     if (usesOverlay(interaction.detail) || usesRedirect(interaction.detail)) {
                       setViewingRow(row);
@@ -438,12 +465,14 @@ export function GeneratedPage({
                     if (detailOperation && rowId(row)) onDetail(detailOperation, rowId(row));
                   }}
                   onEdit={(row) => {
+                    if (isStreaming || querying || queryMeta.status === "error") return;
                     setEditingRow(row);
                     if (usesRedirect(interaction.update)) openRedirect("update", rowId(row));
                   }}
                   onDelete={
                     deleteOperation
                       ? (row) => {
+                          if (isStreaming || querying || queryMeta.status === "error") return;
                           setDeletingRow(row);
                           if (usesRedirect(interaction.delete)) openRedirect("delete", rowId(row));
                         }

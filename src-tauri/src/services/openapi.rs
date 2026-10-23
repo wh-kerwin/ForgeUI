@@ -151,7 +151,11 @@ fn extract_query_parameters(
     let mut names = Vec::new();
     let mut seen = HashSet::new();
     for parameters in [path_item.get("parameters"), operation.get("parameters")] {
-        for parameter in parameters.and_then(|value| value.as_array()).into_iter().flatten() {
+        for parameter in parameters
+            .and_then(|value| value.as_array())
+            .into_iter()
+            .flatten()
+        {
             let parameter = resolve_parameter_reference(root, parameter);
             let name = parameter.get("name").and_then(|value| value.as_str());
             if parameter.get("in").and_then(|value| value.as_str()) == Some("query") {
@@ -166,7 +170,10 @@ fn extract_query_parameters(
     names
 }
 
-fn resolve_parameter_reference<'a>(root: &'a serde_json::Value, parameter: &'a serde_json::Value) -> &'a serde_json::Value {
+fn resolve_parameter_reference<'a>(
+    root: &'a serde_json::Value,
+    parameter: &'a serde_json::Value,
+) -> &'a serde_json::Value {
     parameter
         .get("$ref")
         .and_then(|value| value.as_str())
@@ -553,7 +560,10 @@ mod tests {
             }}
         }).to_string();
         let summary = parse(&document, "https://example.com/openapi.json").unwrap();
-        assert_eq!(summary.query_parameters["listProducts"], ["page", "pageSize", "keyword", "category", "minPrice", "maxPrice", "sort"]);
+        assert_eq!(
+            summary.query_parameters["listProducts"],
+            ["page", "pageSize", "keyword", "category", "minPrice", "maxPrice", "sort"]
+        );
     }
 
     #[test]

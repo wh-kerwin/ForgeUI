@@ -1,0 +1,302 @@
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, expect, it, vi } from "vitest";
+import { Workbench } from "../../src/features/workbench/Workbench";
+import { LanguageProvider } from "../../src/i18n/LanguageProvider";
+import { useWorkbenchStore } from "../../src/store/workbenchStore";
+import type { PageSpec } from "../../src/types/domain";
+
+// Keep Workbench, workspace, persistence, generated actions and the rendered UI real.
+// Only the desktop IPC/event boundaries are replaced with controllable promises.
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+const page = (title: string): PageSpec => ({
+  title,
+  description: "",
+  filters: [],
+  stats: [],
+  columns: ["id"],
+  rows: [],
+  operations: [
+    {
+      operation_id: "listOrders",
+      method: "GET",
+      path: "/orders",
+      role: "list",
+      apiDocumentId: "doc",
+    },
+  ],
+});
+type Response = { status: number; body: unknown };
+function fixture() {
+  const generations: ReturnType<typeof deferred<PageSpec>>[] = [];
+  const saves: ReturnType<typeof deferred<void>>[] = [];
+  const queries: ReturnType<typeof deferred<Response>>[] = [];
+  const listeners: {
+    ready: ReturnType<typeof deferred<() => void>>;
+    unlisten: ReturnType<typeof vi.fn<() => void>>;
+    emit: (event: { payload: { requestId: string; delta: string } }) => void;
+  }[] = [];
+  vi.mocked(listen).mockImplementation((_name, handler) => {
+    const ready = deferred<() => void>();
+    const unlisten = vi.fn<() => void>();
+    listeners.push({ ready, unlisten, emit: handler as (typeof listeners)[number]["emit"] });
+    return ready.promise;
+  });
+  vi.mocked(invoke).mockImplementation(async (command, args) => {
+    switch (command) {
+      case "list_projects":
+        return ["a", "b"].map((id) => ({
+          id,
+          name: `Project ${id}`,
+          selectedApiDocumentIds: ["doc"],
+        }));
+      case "list_api_documents":
+        return [
+          {
+            id: "doc",
+            projectId: args && "projectId" in args ? args.projectId : undefined,
+            name: "Orders API",
+            enabled: true,
+            payload: {
+              auth: {
+                type: "none",
+                apiBaseUrl: "http://localhost",
+                authorizedOperations: ["GET /orders · listOrders"],
+              },
+              spec: {
+                title: "Orders",
+                operation_count: 1,
+                operations: ["GET /orders · listOrders"],
+                fieldSchemas: {},
+              },
+            },
+          },
+        ];
+      case "load_templates":
+      case "load_generation_sessions":
+        return [];
+      case "generate_page_stream": {
+        const request = deferred<PageSpec>();
+        generations.push(request);
+        return request.promise;
+      }
+      case "save_generation_session": {
+        const request = deferred<void>();
+        saves.push(request);
+        return request.promise;
+      }
+      case "execute_api": {
+        const request = deferred<Response>();
+        queries.push(request);
+        return request.promise;
+      }
+      case "cancel_query":
+        return 1;
+      default:
+        throw new Error(`Unexpected IPC: ${command}`);
+    }
+  });
+  return { generations, saves, queries, listeners };
+}
+beforeEach(() => {
+  vi.mocked(invoke).mockReset();
+  vi.mocked(listen).mockReset();
+  window.history.replaceState({}, "", "/generate");
+  window.localStorage.setItem(
+    "forge-models",
+    JSON.stringify([
+      {
+        id: "model",
+        name: "Test model",
+        protocol: "openai",
+        baseUrl: "http://model.invalid",
+        model: "test",
+        apiKey: "test-key",
+        streaming: true,
+        enabled: true,
+      },
+    ]),
+  );
+  useWorkbenchStore.getState().setExecutionMode("live");
+  useWorkbenchStore.getState().setPage(null);
+});
+async function mount() {
+  const user = userEvent.setup();
+  render(<Workbench />, { wrapper: LanguageProvider });
+  await waitFor(() => expect(screen.getByRole("checkbox", { name: /Orders API/ })).toBeTruthy());
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "订单列表" } });
+  return user;
+}
+async function start(user: ReturnType<typeof userEvent.setup>, f: ReturnType<typeof fixture>) {
+  const count = f.listeners.length;
+  await user.click(screen.getByRole("button", { name: "生成页面" }));
+  await waitFor(() => expect(f.listeners).toHaveLength(count + 1));
+  return f.listeners[count];
+}
+async function switchProject(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "选择项目" }));
+  await user.click(screen.getByRole("option", { name: "Project b" }));
+  await waitFor(() => expect(useWorkbenchStore.getState().apiContext?.projectId).toBe("b"));
+  await waitFor(() => expect(screen.getByRole("checkbox", { name: /Orders API/ })).toBeTruthy());
+}
+async function commit(f: ReturnType<typeof fixture>, index: number, title: string) {
+  await act(async () => {
+    f.listeners[index].ready.resolve(f.listeners[index].unlisten);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(index + 1));
+  await act(async () => {
+    f.generations[index].resolve(page(title));
+  });
+  await waitFor(() => expect(f.saves).toHaveLength(index + 1));
+  await act(async () => {
+    f.saves[index].resolve();
+  });
+  await waitFor(() => expect(f.queries).toHaveLength(index + 1));
+}
+
+it("generation hands auto-query loading ownership to the store when a user query replaces it", async () => {
+  const f = fixture();
+  const user = await mount();
+  await start(user, f);
+  await commit(f, 0, "Generated orders");
+  expect(screen.getByRole("heading", { name: "Generated orders" })).toBeTruthy();
+  // The prompt is usable after commit even though the initial query is still pending.
+  expect((screen.getByRole("button", { name: "生成页面" }) as HTMLButtonElement).disabled).toBe(
+    false,
+  );
+  let replacement!: Promise<void>;
+  act(() => {
+    replacement = useWorkbenchStore.getState().query(
+      { keyword: "current" },
+      {
+        key: "GET /orders · listOrders",
+        method: "GET",
+        path: "/orders",
+        operationId: "listOrders",
+        apiDocumentId: "doc",
+      },
+    );
+  });
+  await waitFor(() => expect(f.queries).toHaveLength(2));
+  await act(async () => {
+    f.queries[0].resolve({ status: 200, body: [{ id: "stale" }] });
+  });
+  expect(useWorkbenchStore.getState().querying).toBe(true);
+  expect(useWorkbenchStore.getState().loadingState).toBe("querying");
+  expect(useWorkbenchStore.getState().page?.rows).toEqual([]);
+  await act(async () => {
+    f.queries[1].resolve({ status: 200, body: [{ id: "current" }] });
+    await replacement;
+  });
+  expect(useWorkbenchStore.getState().page?.rows).toEqual([["current"]]);
+  expect(useWorkbenchStore.getState().querying).toBe(false);
+  expect(useWorkbenchStore.getState().loadingState).toBe("idle");
+});
+
+it("project switch during listen prevents old invoke and old finally cannot clear a new generation", async () => {
+  const f = fixture();
+  const user = await mount();
+  const old = await start(user, f);
+  await switchProject(user);
+  const current = await start(user, f);
+  await act(async () => {
+    old.ready.resolve(old.unlisten);
+  });
+  expect(old.unlisten).toHaveBeenCalledTimes(1);
+  expect(f.generations).toHaveLength(0);
+  expect(useWorkbenchStore.getState().loadingState).toBe("generating");
+  expect((screen.getByRole("button", { name: "生成中…" }) as HTMLButtonElement).disabled).toBe(
+    true,
+  );
+  await act(async () => {
+    current.ready.resolve(current.unlisten);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(1));
+  await act(async () => {
+    f.generations[0].reject(new Error("current model failure"));
+  });
+  expect(useWorkbenchStore.getState().loadingState).toBe("idle");
+  expect(screen.getByText("current model failure")).toBeTruthy();
+});
+
+it("project switch during model generation ignores the old result and preserves the new generation", async () => {
+  const f = fixture();
+  const user = await mount();
+  const old = await start(user, f);
+  await act(async () => {
+    old.ready.resolve(old.unlisten);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(1));
+  await switchProject(user);
+  const current = await start(user, f);
+  await act(async () => {
+    f.generations[0].resolve(page("Obsolete model result"));
+  });
+  expect(f.saves).toHaveLength(0);
+  expect(useWorkbenchStore.getState().page).toBeNull();
+  expect(useWorkbenchStore.getState().loadingState).toBe("generating");
+  expect(screen.queryByText("Obsolete model result")).toBeNull();
+  await act(async () => {
+    current.ready.resolve(current.unlisten);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(2));
+  await act(async () => {
+    f.generations[1].reject(new Error("new model failure"));
+  });
+  expect(useWorkbenchStore.getState().loadingState).toBe("idle");
+  expect(screen.getByText("new model failure")).toBeTruthy();
+});
+
+it("project switch while saving a session prevents stale commit and old finally preserves new querying", async () => {
+  const f = fixture();
+  const user = await mount();
+  const old = await start(user, f);
+  await act(async () => {
+    old.ready.resolve(old.unlisten);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(1));
+  await act(async () => {
+    f.generations[0].resolve(page("Old project page"));
+  });
+  await waitFor(() => expect(f.saves).toHaveLength(1));
+  await switchProject(user);
+  await start(user, f);
+  await act(async () => {
+    f.listeners[1].ready.resolve(f.listeners[1].unlisten);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(2));
+  await act(async () => {
+    f.generations[1].resolve(page("Current project page"));
+  });
+  await waitFor(() => expect(f.saves).toHaveLength(2));
+  await act(async () => {
+    f.saves[1].resolve();
+  });
+  await waitFor(() => expect(f.queries).toHaveLength(1));
+  await act(async () => {
+    f.saves[0].resolve();
+  });
+  expect(useWorkbenchStore.getState().page?.title).toBe("Current project page");
+  expect(useWorkbenchStore.getState().querying).toBe(true);
+  expect(useWorkbenchStore.getState().loadingState).toBe("querying");
+  expect(screen.queryByText("Old project page")).toBeNull();
+  expect(f.queries).toHaveLength(1);
+  await act(async () => {
+    f.queries[0].resolve({ status: 200, body: [{ id: "b" }] });
+  });
+  expect(useWorkbenchStore.getState().page?.rows).toEqual([["b"]]);
+  expect(useWorkbenchStore.getState().loadingState).toBe("idle");
+});

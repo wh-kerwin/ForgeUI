@@ -4,14 +4,28 @@ import type { ApiDocument, LoadingState, PageSpec } from "../types/domain";
 import type { RuntimeOperation } from "../features/pages/pageOperations";
 import { mapRealDataResponse } from "./realDataMapping";
 import { toUserMessage } from "../lib/errors";
+import {
+  executeBusinessApi,
+  cancelBusinessQuery,
+  type BusinessApiInvoke,
+} from "../lib/tauri/businessApi";
+import { createRequestScope, type RequestScope } from "../features/pages/requestContext";
 
 type ApiContext = {
   projectId: string;
   apiDocuments: ApiDocument[];
   onNotice: (message: string) => void;
+  requestScope?: RequestScope;
 };
 
-export type QueryMeta = { total?: number; truncated?: boolean };
+export type QueryMeta = {
+  total?: number;
+  truncated?: boolean;
+  truncatedRows?: boolean;
+  truncatedColumns?: boolean;
+  status?: "idle" | "loading" | "success" | "empty" | "error" | "cancelled";
+  error?: string;
+};
 
 type WorkbenchState = {
   page: PageSpec | null;
@@ -20,6 +34,9 @@ type WorkbenchState = {
   queryMeta: QueryMeta;
   loadingState: LoadingState;
   apiContext: ApiContext | null;
+  executionMode: "live" | "preview";
+  mutationStatus: "idle" | "submitting" | "success" | "error" | "unknown";
+  setExecutionMode: (mode: "live" | "preview") => void;
   setPage: (page: PageSpec | null | ((current: PageSpec | null) => PageSpec | null)) => void;
   setDetail: (detail: Record<string, unknown> | null) => void;
   setQuerying: (querying: boolean) => void;
@@ -31,12 +48,6 @@ type WorkbenchState = {
   mutate: (operation: RuntimeOperation, text: string) => Promise<void>;
   deleteRecord: (operation: RuntimeOperation, id: string, confirmed?: boolean) => Promise<void>;
 };
-
-let queryTimer: ReturnType<typeof setTimeout> | undefined;
-let queryDelayResolve: (() => void) | undefined;
-let querySequence = 0;
-/** UUID assigned to the current in-flight query; used by cancelQuery and the Rust side. */
-let activeQueryRequestId: string | null = null;
 
 type DocumentResolution =
   | { ok: true; document: ApiDocument; error?: never }
@@ -54,9 +65,8 @@ export function resolveApiDocument(
     document = projectDocuments.find((candidate) => candidate.id === operation.apiDocumentId);
     if (!document)
       return { ok: false, error: "当前项目中找不到页面绑定的 API 文档，请重新绑定接口" };
-    if (!document.auth.authorizedOperations?.includes(operation.key)) {
+    if (!document.auth.authorizedOperations?.includes(operation.key))
       return { ok: false, error: `API 文档“${document.name}”未授权接口“${operation.key}”` };
-    }
   } else {
     const matches = projectDocuments.filter((candidate) =>
       candidate.auth.authorizedOperations?.includes(operation.key),
@@ -96,20 +106,6 @@ export function buildApiRequest(
   };
 }
 
-function request(
-  context: ApiContext,
-  document: ApiDocument,
-  url: string,
-  operation: RuntimeOperation,
-  requestId: string,
-  body?: unknown,
-) {
-  return invoke<{ status: number; body: unknown }>("execute_api", {
-    request: buildApiRequest(context.projectId, document.id, url, operation, body),
-    request_id: requestId,
-  });
-}
-
 export function operationUrl(document: ApiDocument, path: string) {
   const base = (document.auth.apiBaseUrl || document.spec.api_base_url || "").replace(/\/$/, "");
   if (!base) return "";
@@ -125,7 +121,7 @@ type RequestResolution =
       url: string;
       error?: never;
     }
-  | { ok: false; error: string; context?: never; document?: never; operation?: never; url?: never };
+  | { ok: false; error: string };
 
 function resolveRequest(
   context: ApiContext | null,
@@ -140,171 +136,334 @@ function resolveRequest(
   return { ok: true, context, document: resolution.document, operation, url };
 }
 
-export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
-  page: null,
-  detail: null,
-  querying: false,
-  queryMeta: {},
-  loadingState: "idle",
-  apiContext: null,
-  setPage: (page) =>
-    set((state) => ({ page: typeof page === "function" ? page(state.page) : page })),
-  setDetail: (detail) => set({ detail }),
-  setQuerying: (querying) => set({ querying }),
-  setLoadingState: (loadingState) => set({ loadingState, querying: loadingState === "querying" }),
-  configureApi: (apiContext) => set({ apiContext }),
-  cancelPendingQuery: () => {
-    if (queryTimer) clearTimeout(queryTimer);
-    queryDelayResolve?.();
+export function createWorkbenchStore(
+  options: { invoke?: BusinessApiInvoke; debounceMs?: number } = {},
+) {
+  const invokeApi = options.invoke ?? invoke;
+  const debounceMs = options.debounceMs ?? 300;
+  let queryTimer: ReturnType<typeof setTimeout> | undefined;
+  let queryDelayResolve: (() => void) | undefined;
+  let sequence = 0;
+  let revision = 0;
+  let busySequence = 0;
+  let detailSequence = 0;
+  let activeQueryRequestId: string | null = null;
+  let scope = createRequestScope();
+  let unsubscribe: (() => void) | undefined;
+
+  function cancelPending() {
+    if (queryTimer !== undefined) clearTimeout(queryTimer);
     queryTimer = undefined;
-    queryDelayResolve = undefined;
-    querySequence += 1;
-    const cancelledId = activeQueryRequestId;
-    activeQueryRequestId = null;
-    if (cancelledId) invoke("cancel_query", { request_id: cancelledId }).catch(() => {});
-    set({ querying: false, loadingState: "idle" });
-  },
-  query: async (filters = {}, operation) => {
-    // Cancel any currently in-flight request before starting a new one.
-    const previousId = activeQueryRequestId;
-    activeQueryRequestId = null;
-    if (previousId) invoke("cancel_query", { request_id: previousId }).catch(() => {});
-    const sequence = ++querySequence;
-    if (queryTimer) clearTimeout(queryTimer);
     queryDelayResolve?.();
-    await new Promise<void>((resolve) => {
-      queryDelayResolve = resolve;
-      queryTimer = setTimeout(resolve, 300);
-    });
-    if (sequence !== querySequence) return;
     queryDelayResolve = undefined;
-    queryTimer = undefined;
-    const context = get().apiContext;
-    const resolved = resolveRequest(context, operation);
-    if (!resolved.ok) {
-      set({ querying: false, loadingState: "idle" });
-      context?.onNotice(resolved.error);
-      return;
+    sequence++;
+    const id = activeQueryRequestId;
+    activeQueryRequestId = null;
+    if (id) void cancelBusinessQuery(id, invokeApi).catch(() => undefined);
+  }
+
+  return create<WorkbenchState>((set, get) => {
+    function snapshot() {
+      const owner = scope;
+      const context = owner.capture();
+      const pageRevision = revision;
+      return () =>
+        owner === scope &&
+        owner.isCurrent(context) &&
+        pageRevision === revision &&
+        get().executionMode === "live";
     }
-    const requestId = crypto.randomUUID();
-    activeQueryRequestId = requestId;
-    const queryString = new URLSearchParams(
-      Object.entries(filters).filter(([, value]) => value.trim()),
-    ).toString();
-    set({ querying: true, loadingState: "querying" });
-    try {
-      const response = await request(
-        resolved.context,
-        resolved.document,
-        `${resolved.url}${queryString ? `?${queryString}` : ""}`,
-        resolved.operation,
-        requestId,
+    function execute(
+      resolved: Extract<RequestResolution, { ok: true }>,
+      url: string,
+      requestId?: string,
+      body?: unknown,
+    ) {
+      return executeBusinessApi(
+        buildApiRequest(
+          resolved.context.projectId,
+          resolved.document.id,
+          url,
+          resolved.operation,
+          body,
+        ),
+        {
+          invoke: invokeApi,
+          kind: ["GET", "HEAD"].includes(resolved.operation.method) ? "query" : "mutation",
+          ...(requestId ? { newRequestId: () => requestId } : {}),
+        },
       );
-      if (sequence !== querySequence) return;
-      const mapped = mapRealDataResponse(response.body);
-      if (!mapped) return resolved.context.onNotice("业务 API 返回空数据");
+    }
+    function queryFailure(message: string) {
       set((state) => ({
-        page: state.page
-          ? {
-              ...state.page,
-              columns: mapped.columns,
-              columnMeta: state.page.columnMeta?.filter((meta) =>
-                mapped.columns.includes(meta.name),
-              ),
-              rows: mapped.rows,
-            }
-          : state.page,
-        queryMeta: { total: mapped.total, truncated: mapped.truncated },
+        page: state.page ? { ...state.page, rows: [] } : null,
+        detail: null,
+        queryMeta: { status: "error", error: message },
       }));
-      if (mapped.truncated) {
-        resolved.context.onNotice(
-          `已从真实业务 API 加载 ${mapped.rows.length} 条数据（已截断，更多行请依赖服务端分页）`,
+    }
+    async function write(
+      operation: RuntimeOperation,
+      text?: string,
+      id?: string,
+      confirmed = false,
+    ) {
+      if (get().executionMode !== "live" || get().mutationStatus === "submitting") return;
+      const context = get().apiContext;
+      const resolved = resolveRequest(context, operation);
+      if (!resolved.ok) return context?.onNotice(resolved.error);
+      const valid = snapshot();
+      if (id !== undefined && !id.trim()) return context?.onNotice("请输入要删除的记录 ID");
+      if (
+        id !== undefined &&
+        !confirmed &&
+        !window.confirm("确定要删除这条记录吗？此操作不可撤销。")
+      )
+        return;
+      if (!valid()) return;
+      let body: unknown;
+      try {
+        body = text?.trim() ? JSON.parse(text) : undefined;
+      } catch {
+        return context?.onNotice("请求体必须是合法 JSON");
+      }
+      const busy = ++busySequence;
+      set({ loadingState: "mutating", mutationStatus: "submitting" });
+      try {
+        const response = await execute(
+          resolved,
+          id === undefined
+            ? resolved.url
+            : resolved.url.replace(/\{[^}]+\}/, encodeURIComponent(id)),
+          undefined,
+          body,
         );
-      } else {
-        resolved.context.onNotice(`已从真实业务 API 加载 ${mapped.rows.length} 条数据`);
+        if (!valid()) return;
+        set({ mutationStatus: "success" });
+        resolved.context.onNotice(`操作成功（HTTP ${response.status}）`);
+      } catch (error) {
+        if (!valid()) return;
+        const unknown = (error as Error & { kind?: string }).kind === "mutation-outcome-unknown";
+        set({ mutationStatus: unknown ? "unknown" : "error" });
+        resolved.context.onNotice(
+          unknown ? "写入结果尚未确认，请先刷新核对服务端状态，勿直接重试。" : toUserMessage(error),
+        );
+      } finally {
+        if (valid() && busy === busySequence)
+          set({ loadingState: get().querying ? "querying" : "idle" });
       }
-    } catch (error) {
-      if (sequence === querySequence) {
-        // Requests cancelled via cancel_query are expected and silent.
-        if ((error as Error & { code?: string }).code === "Cancelled") return;
-        resolved.context.onNotice(toUserMessage(error));
-      }
-    } finally {
-      if (sequence === querySequence) set({ querying: false, loadingState: "idle" });
-      if (activeQueryRequestId === requestId) activeQueryRequestId = null;
     }
-  },
-  loadDetail: async (operation, id) => {
-    const context = get().apiContext;
-    if (!id.trim()) return context?.onNotice("请输入详情记录 ID");
-    const resolved = resolveRequest(context, operation);
-    if (!resolved.ok) return context?.onNotice(resolved.error);
-    try {
-      const response = await request(
-        resolved.context,
-        resolved.document,
-        resolved.url.replace(/\{[^}]+\}/, encodeURIComponent(id)),
-        operation,
-        "",
-      );
-      set({
-        detail:
-          response.body && typeof response.body === "object"
-            ? (response.body as Record<string, unknown>)
-            : { value: response.body },
-      });
-      resolved.context.onNotice("详情加载成功");
-    } catch (error) {
-      resolved.context.onNotice(toUserMessage(error));
-    }
-  },
-  mutate: async (operation, text) => {
-    const context = get().apiContext;
-    const resolved = resolveRequest(context, operation);
-    if (!resolved.ok) return context?.onNotice(resolved.error);
-    let body: unknown;
-    try {
-      body = text.trim() ? JSON.parse(text) : undefined;
-    } catch {
-      return resolved.context.onNotice("请求体必须是合法 JSON");
-    }
-    set({ loadingState: "mutating" });
-    try {
-      const response = await request(
-        resolved.context,
-        resolved.document,
-        resolved.url,
-        operation,
-        "",
-        body,
-      );
-      resolved.context.onNotice(`操作成功（HTTP ${response.status}）`);
-    } catch (error) {
-      resolved.context.onNotice(toUserMessage(error));
-    } finally {
-      set({ loadingState: "idle" });
-    }
-  },
-  deleteRecord: async (operation, id, confirmed = false) => {
-    const context = get().apiContext;
-    if (!id.trim()) return context?.onNotice("请输入要删除的记录 ID");
-    const resolved = resolveRequest(context, operation);
-    if (!resolved.ok) return context?.onNotice(resolved.error);
-    if (!confirmed && !window.confirm("确定要删除这条记录吗？此操作不可撤销。")) return;
-    set({ loadingState: "mutating" });
-    try {
-      const response = await request(
-        resolved.context,
-        resolved.document,
-        resolved.url.replace(/\{[^}]+\}/, encodeURIComponent(id)),
-        operation,
-        "",
-      );
-      resolved.context.onNotice(`删除成功（HTTP ${response.status}）`);
-    } catch (error) {
-      resolved.context.onNotice(toUserMessage(error));
-    } finally {
-      set({ loadingState: "idle" });
-    }
-  },
-}));
+    return {
+      page: null,
+      detail: null,
+      querying: false,
+      queryMeta: {},
+      loadingState: "idle",
+      apiContext: null,
+      executionMode: "live",
+      mutationStatus: "idle",
+      setExecutionMode(mode) {
+        if (mode === get().executionMode) return;
+        cancelPending();
+        revision++;
+        busySequence++;
+        detailSequence++;
+        set({
+          executionMode: mode,
+          detail: null,
+          querying: false,
+          loadingState: "idle",
+          mutationStatus: "idle",
+        });
+      },
+      setPage(page) {
+        cancelPending();
+        revision++;
+        busySequence++;
+        detailSequence++;
+        set((state) => ({
+          page: typeof page === "function" ? page(state.page) : page,
+          detail: null,
+          queryMeta: { status: "idle" },
+          querying: false,
+          loadingState: "idle",
+          mutationStatus: "idle",
+        }));
+      },
+      setDetail: (detail) => set({ detail }),
+      setQuerying: (querying) => set({ querying }),
+      setLoadingState: (loadingState) =>
+        set({ loadingState, querying: loadingState === "querying" }),
+      configureApi(context) {
+        const previous = get().apiContext;
+        const changed =
+          !previous ||
+          previous.projectId !== context.projectId ||
+          previous.apiDocuments !== context.apiDocuments ||
+          previous.requestScope !== context.requestScope;
+        if (changed) {
+          cancelPending();
+          revision++;
+          busySequence++;
+          detailSequence++;
+          unsubscribe?.();
+          scope = context.requestScope ?? createRequestScope({ projectId: context.projectId });
+          unsubscribe = scope.subscribe(() => {
+            cancelPending();
+            revision++;
+            busySequence++;
+            detailSequence++;
+            set((state) => ({
+              detail: null,
+              querying: false,
+              loadingState: "idle",
+              queryMeta: { status: "idle" },
+              mutationStatus: "idle",
+              page: state.page ? { ...state.page, rows: [] } : null,
+            }));
+          });
+          set((state) => ({
+            detail: null,
+            querying: false,
+            loadingState: "idle",
+            queryMeta: { status: "idle" },
+            mutationStatus: "idle",
+            page: previous?.projectId === context.projectId ? state.page : null,
+          }));
+        }
+        set({ apiContext: context });
+      },
+      cancelPendingQuery() {
+        cancelPending();
+        set({
+          querying: false,
+          loadingState: get().mutationStatus === "submitting" ? "mutating" : "idle",
+          queryMeta: { ...get().queryMeta, status: "cancelled" },
+        });
+      },
+      async query(filters = {}, operation) {
+        if (get().executionMode !== "live") return;
+        cancelPending();
+        const current = sequence;
+        const valid = snapshot();
+        const context = get().apiContext;
+        const resolved = resolveRequest(context, operation);
+        if (!resolved.ok) {
+          set({
+            querying: false,
+            loadingState: get().mutationStatus === "submitting" ? "mutating" : "idle",
+          });
+          queryFailure(resolved.error);
+          context?.onNotice(resolved.error);
+          return;
+        }
+        const busy = ++busySequence;
+        set({
+          querying: true,
+          loadingState: "querying",
+          detail: null,
+          queryMeta: { status: "loading" },
+        });
+        await new Promise<void>((resolve) => {
+          queryDelayResolve = resolve;
+          queryTimer = setTimeout(resolve, debounceMs);
+        });
+        if (current !== sequence || !valid()) return;
+        queryTimer = undefined;
+        queryDelayResolve = undefined;
+        const requestId = crypto.randomUUID();
+        activeQueryRequestId = requestId;
+        const queryString = new URLSearchParams(
+          Object.entries(filters).filter(([, value]) => value.trim()),
+        ).toString();
+        try {
+          const response = await execute(
+            resolved,
+            `${resolved.url}${queryString ? `?${queryString}` : ""}`,
+            requestId,
+          );
+          if (current !== sequence || !valid()) return;
+          const mapped = mapRealDataResponse(response.body);
+          if (mapped.status === "invalid") throw new Error("业务 API 响应无法识别为列表数据");
+          if (mapped.status === "empty") {
+            set((state) => ({
+              page: state.page ? { ...state.page, rows: [] } : null,
+              queryMeta: { status: "empty", total: mapped.total },
+            }));
+            resolved.context.onNotice("查询成功，没有匹配的数据");
+          } else {
+            set((state) => ({
+              page: state.page
+                ? {
+                    ...state.page,
+                    columns: mapped.columns,
+                    columnMeta: state.page.columnMeta?.filter((meta) =>
+                      mapped.columns.includes(meta.name),
+                    ),
+                    rows: mapped.rows,
+                  }
+                : null,
+              queryMeta: {
+                status: "success",
+                total: mapped.total,
+                truncated: mapped.truncated,
+                truncatedRows: mapped.truncatedRows,
+                truncatedColumns: mapped.truncatedColumns,
+              },
+            }));
+            resolved.context.onNotice(
+              `当前加载结果：${mapped.rows.length} 条${mapped.truncated ? "（已截断，请使用服务端分页或调整字段）" : ""}`,
+            );
+          }
+        } catch (error) {
+          if (current !== sequence || !valid()) return;
+          if ((error as Error & { kind?: string }).kind === "cancelled") {
+            set({ queryMeta: { status: "cancelled" } });
+          } else {
+            const message = toUserMessage(error);
+            queryFailure(message);
+            resolved.context.onNotice(message);
+          }
+        } finally {
+          if (current === sequence && valid()) {
+            set({
+              querying: false,
+              ...(busy === busySequence ? { loadingState: "idle" as const } : {}),
+            });
+          }
+          if (activeQueryRequestId === requestId) activeQueryRequestId = null;
+        }
+      },
+      async loadDetail(operation, id) {
+        if (get().executionMode !== "live") return;
+        const context = get().apiContext;
+        if (!id.trim()) return context?.onNotice("请输入详情记录 ID");
+        const resolved = resolveRequest(context, operation);
+        if (!resolved.ok) return context?.onNotice(resolved.error);
+        const valid = snapshot();
+        const current = ++detailSequence;
+        set({ detail: null });
+        try {
+          const response = await execute(
+            resolved,
+            resolved.url.replace(/\{[^}]+\}/, encodeURIComponent(id)),
+          );
+          if (!valid() || current !== detailSequence) return;
+          set({
+            detail:
+              response.body && typeof response.body === "object"
+                ? (response.body as Record<string, unknown>)
+                : { value: response.body },
+          });
+          resolved.context.onNotice("详情加载成功");
+        } catch (error) {
+          if (valid() && current === detailSequence)
+            resolved.context.onNotice(toUserMessage(error));
+        }
+      },
+      mutate: (operation, text) => write(operation, text),
+      deleteRecord: (operation, id, confirmed) => write(operation, undefined, id, confirmed),
+    };
+  });
+}
+
+export const useWorkbenchStore = createWorkbenchStore();

@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
+import type { RequestScope } from "./requestContext";
 import type { ApiDocument } from "../../types/domain";
 import { useWorkbenchStore } from "../../store/workbenchStore";
 
@@ -6,9 +7,15 @@ type Options = {
   projectId: string;
   apiDocuments: ApiDocument[];
   onNotice: (message: string) => void;
+  requestScope?: RequestScope;
 };
 
-export function useGeneratedPageActions({ projectId, apiDocuments, onNotice }: Options) {
+export function useGeneratedPageActions({
+  projectId,
+  apiDocuments,
+  onNotice,
+  requestScope,
+}: Options) {
   const page = useWorkbenchStore((state) => state.page);
   const setPage = useWorkbenchStore((state) => state.setPage);
   const detail = useWorkbenchStore((state) => state.detail);
@@ -21,10 +28,10 @@ export function useGeneratedPageActions({ projectId, apiDocuments, onNotice }: O
   const mutate = useWorkbenchStore((state) => state.mutate);
   const deleteRecord = useWorkbenchStore((state) => state.deleteRecord);
 
-  useEffect(() => {
-    configureApi({ projectId, apiDocuments, onNotice });
+  useLayoutEffect(() => {
+    configureApi({ projectId, apiDocuments, onNotice, requestScope });
     return cancelPendingQuery;
-  }, [apiDocuments, cancelPendingQuery, configureApi, onNotice, projectId]);
+  }, [apiDocuments, cancelPendingQuery, configureApi, onNotice, projectId, requestScope]);
 
   return { page, setPage, detail, querying, queryMeta, query, loadDetail, mutate, deleteRecord };
 }

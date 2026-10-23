@@ -49,22 +49,42 @@ function toCell(value: unknown): string {
   return String(value);
 }
 
-export function mapRealDataResponse(
-  body: unknown,
-): { columns: string[]; rows: string[][]; total?: number; truncated?: boolean } | null {
+type MappedResponse = {
+  status: "mapped";
+  columns: string[];
+  rows: string[][];
+  total?: number;
+  truncated?: boolean;
+  truncatedRows?: boolean;
+  truncatedColumns?: boolean;
+};
+
+export type RealDataMapping =
+  MappedResponse | { status: "empty"; total: number } | { status: "invalid" };
+
+export function mapRealDataResponse(body: unknown): RealDataMapping {
   const list = unwrapList(body);
-  if (!list?.length) return null;
+  if (!list) return { status: "invalid" };
+  if (list.length === 0) return { status: "empty", total: findTotal(body) ?? 0 };
   const rowsTruncated = list.length > MAX_MAPPED_ROWS;
-  const records = list.slice(0, MAX_MAPPED_ROWS).map((item) => (isRecord(item) ? item : { value: item }));
-  const columns = withRecordIdFirst(
-    [...new Set(records.flatMap((record) => Object.keys(record)))].slice(0, MAX_MAPPED_COLUMNS),
-  );
-  if (!columns.length) return null;
+  const records = list
+    .slice(0, MAX_MAPPED_ROWS)
+    .map((item) => (isRecord(item) ? item : { value: item }));
+  const allColumns = [...new Set(records.flatMap((record) => Object.keys(record)))];
+  const columns = withRecordIdFirst(allColumns.slice(0, MAX_MAPPED_COLUMNS));
+  if (!columns.length) return { status: "invalid" };
   const total = findTotal(body);
   return {
+    status: "mapped",
     columns,
     rows: records.map((record) => columns.map((column) => toCell(record[column]))),
     ...(total !== undefined ? { total } : {}),
-    ...(rowsTruncated || columns.length === MAX_MAPPED_COLUMNS ? { truncated: true } : {}),
+    ...(rowsTruncated || allColumns.length > MAX_MAPPED_COLUMNS
+      ? {
+          truncated: true,
+          truncatedRows: rowsTruncated,
+          truncatedColumns: allColumns.length > MAX_MAPPED_COLUMNS,
+        }
+      : {}),
   };
 }

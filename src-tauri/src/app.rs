@@ -68,11 +68,14 @@ async fn generate_page_stream(
     .await
 }
 
+// IPC: { request: { ..., request_id?: string } }; nested fields use serde snake_case.
 #[tauri::command]
 async fn execute_api(request: ApiRequest) -> Result<ApiResponse, String> {
     business_api::execute(request).await
 }
 
+// Tauri's default top-level argument casing is camelCase: { requestId }.
+// Result: 1 signals cancellation; 0 is a missing/already-finished no-op.
 #[tauri::command]
 fn cancel_query(request_id: String) -> u32 {
     business_api::cancel_query(&request_id)

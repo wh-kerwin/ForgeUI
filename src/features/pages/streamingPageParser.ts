@@ -6,22 +6,28 @@ import {
   repairModelJson,
 } from "./modelJsonRepair";
 
+export type StreamingPageScheduler = {
+  setTimeout: (callback: () => void, delay: number) => ReturnType<typeof setTimeout>;
+  clearTimeout: (id: ReturnType<typeof setTimeout>) => void;
+};
+
 type StreamingPageParserOptions = {
   onDelta: (partial: Partial<PageSpec>) => void;
   onComplete: (spec: PageSpec) => void;
   mode?: "modelText" | "sse";
   /**
-   * When true, delta events are coalesced into a single React update per frame
-   * (or per flush interval). This avoids redundant re-renders when the model
-   * emits many fine-grained chunks. When false, every parsed partial is
-   * forwarded immediately (original behavior).
+   * When true, delta events are coalesced into one bounded timer window.
+   * When false, every parsed partial is forwarded immediately.
    */
   coalesce?: boolean;
-  /**
-   * Maximum interval between coalesced flushes in milliseconds. Defaults to
-   * 100. Pass 0 to use requestAnimationFrame only.
-   */
+  /** Maximum interval between coalesced flushes in milliseconds. */
   flushIntervalMs?: number;
+  scheduler?: StreamingPageScheduler;
+};
+
+const defaultScheduler: StreamingPageScheduler = {
+  setTimeout: (callback, delay) => setTimeout(callback, delay),
+  clearTimeout: (id) => clearTimeout(id),
 };
 
 /**
@@ -36,11 +42,13 @@ export class StreamingPageParser {
   private readonly onDelta: (partial: Partial<PageSpec>) => void;
   private readonly coalesce: boolean;
   private readonly flushIntervalMs: number;
+  private readonly scheduler: StreamingPageScheduler;
 
   /** Holds the latest merged partial while coalescing is active. */
   private latestPartial: Partial<PageSpec> | null = null;
-  private rafId: number | null = null;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private destroyed = false;
+  private finished = false;
 
   constructor({
     onDelta,
@@ -48,12 +56,14 @@ export class StreamingPageParser {
     mode = "modelText",
     coalesce = false,
     flushIntervalMs = 100,
+    scheduler = defaultScheduler,
   }: StreamingPageParserOptions) {
     this.onDelta = onDelta;
     this.onComplete = onComplete;
     this.transportMode = mode;
     this.coalesce = coalesce;
     this.flushIntervalMs = flushIntervalMs;
+    this.scheduler = scheduler;
   }
 
   /**
@@ -62,25 +72,38 @@ export class StreamingPageParser {
    */
   flush(): void {
     this.cancelFlush();
-    if (this.latestPartial !== null) {
-      this.onDelta(this.latestPartial);
-      this.latestPartial = null;
-    }
+    this.emitLatestPartial();
   }
 
   private cancelFlush(): void {
-    if (this.rafId !== null) {
-      cancelAnimationFrame(this.rafId);
-      this.rafId = null;
-    }
     if (this.flushTimer !== null) {
-      clearTimeout(this.flushTimer);
+      this.scheduler.clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
   }
 
+  private scheduleFlush(): void {
+    if (
+      this.coalesce &&
+      this.latestPartial !== null &&
+      !this.destroyed &&
+      !this.finished &&
+      this.flushTimer === null
+    ) {
+      this.flushTimer = this.scheduler.setTimeout(() => this.emitCoalesced(), this.flushIntervalMs);
+    }
+  }
+
+  private emitLatestPartial(): void {
+    if (this.destroyed || this.finished || this.latestPartial === null) return;
+    const partial = this.latestPartial;
+    this.latestPartial = null;
+    this.onDelta(partial);
+    this.scheduleFlush();
+  }
+
   push(chunk: string): void {
-    if (!chunk) return;
+    if (!chunk || this.destroyed || this.finished) return;
     if (this.transportMode === "sse") {
       this.pushSse(chunk);
       return;
@@ -89,8 +112,11 @@ export class StreamingPageParser {
   }
 
   finish(): void {
-    this.cancelFlush();
+    if (this.destroyed || this.finished) return;
     if (this.sseBuffer.trim()) this.consumeSseLine(this.sseBuffer.trimEnd());
+    this.finished = true;
+    this.cancelFlush();
+    this.latestPartial = null;
     const complete = parsePageSpec(this.parseJson(repairModelJson(this.normalizedBuffer())));
     if (!complete) {
       const fallback = extractStructuredPageFields(this.normalizedBuffer());
@@ -101,6 +127,8 @@ export class StreamingPageParser {
   }
 
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
     this.cancelFlush();
     this.latestPartial = null;
   }
@@ -143,26 +171,15 @@ export class StreamingPageParser {
     if (!partial) return;
     if (this.coalesce) {
       this.latestPartial = { ...this.latestPartial, ...partial };
-      if (this.flushIntervalMs > 0 && this.flushTimer === null) {
-        this.flushTimer = setTimeout(() => this.emitCoalesced(), this.flushIntervalMs);
-      }
-      if (this.rafId === null) {
-        this.rafId = requestAnimationFrame(() => this.emitCoalesced());
-      }
+      this.scheduleFlush();
       return;
     }
     this.onDelta(partial);
   }
 
   private emitCoalesced = (): void => {
-    this.rafId = null;
-    if (this.latestPartial === null) return;
-    this.onDelta(this.latestPartial);
-    // Reschedule a bounded flush timer so in-flight text that arrives after
-    // the RAF window still gets flushed within the configured interval.
-    if (this.flushIntervalMs > 0) {
-      this.flushTimer = setTimeout(() => this.emitCoalesced(), this.flushIntervalMs);
-    }
+    this.flushTimer = null;
+    this.emitLatestPartial();
   };
 
   private normalizedBuffer(): string {
@@ -285,7 +302,7 @@ export function previewPageSpec(partial: Partial<PageSpec>): PageSpec {
     views: partial.views,
     interaction: partial.interaction,
     columnMeta: partial.columnMeta,
-    batchActions: partial.batchActions,
+    batchActions: undefined,
     theme: partial.theme,
     styleTokens: partial.styleTokens,
   };

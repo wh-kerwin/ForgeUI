@@ -13,7 +13,10 @@ type Props = {
   selectedRows?: Set<number>;
   onSelectionChange?: (rows: Set<number>) => void;
   onBatchAction?: (action: BatchAction, rows: number[]) => void;
-  onSortChange?: (sort: NonNullable<Extract<PageView, { type: "list" }>["defaultSort"]>) => void;
+  onSortChange?: (
+    sort: NonNullable<Extract<PageView, { type: "list" }>["defaultSort"]> | null,
+  ) => void;
+  serverSort?: boolean;
   onRowsChange: (rows: string[][]) => void;
   onView: (row: string[]) => void;
   onEdit: (row: string[]) => void;
@@ -29,6 +32,7 @@ export function PageViewRenderer({
   selectedRows,
   onSelectionChange,
   onBatchAction,
+  serverSort,
   onSortChange,
   onRowsChange,
   onView,
@@ -46,6 +50,7 @@ export function PageViewRenderer({
         selectedRows={selectedRows}
         onSelectionChange={onSelectionChange}
         onBatchAction={onBatchAction}
+        serverSort={serverSort}
         onSortChange={onSortChange}
         onView={onView}
         onEdit={onEdit}
@@ -67,6 +72,7 @@ export function PageViewRenderer({
           selectedRows,
           onSelectionChange,
           onBatchAction,
+          serverSort,
           onSortChange,
           onRowsChange,
           onView,
@@ -91,6 +97,7 @@ export function PageViewRenderer({
             selectedRows,
             onSelectionChange,
             onBatchAction,
+            serverSort,
             onSortChange,
             onRowsChange,
             onView,
@@ -110,6 +117,7 @@ export function PageViewRenderer({
             selectedRows,
             onSelectionChange,
             onBatchAction,
+            serverSort,
             onSortChange,
             onRowsChange,
             onView,

@@ -10,6 +10,7 @@ export function DataTableView({
   selectedRows,
   onSelectionChange,
   onBatchAction,
+  serverSort,
   onSortChange,
   onView,
   onEdit,
@@ -23,7 +24,10 @@ export function DataTableView({
   selectedRows?: Set<number>;
   onSelectionChange?: (rows: Set<number>) => void;
   onBatchAction?: (action: BatchAction, rows: number[]) => void;
-  onSortChange?: (sort: NonNullable<Extract<PageView, { type: "list" }>["defaultSort"]>) => void;
+  serverSort?: boolean;
+  onSortChange?: (
+    sort: NonNullable<Extract<PageView, { type: "list" }>["defaultSort"]> | null,
+  ) => void;
   onView: (row: string[]) => void;
   onEdit: (row: string[]) => void;
   onDelete?: (row: string[]) => void;
@@ -38,6 +42,7 @@ export function DataTableView({
       selectedRows={selectedRows}
       onSelectionChange={onSelectionChange}
       onBatchAction={onBatchAction}
+      serverSort={serverSort}
       onSortChange={onSortChange}
       onView={onView}
       onEdit={onEdit}

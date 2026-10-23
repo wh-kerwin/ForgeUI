@@ -22,7 +22,8 @@ type Props = Pick<PageSpec, "columns" | "rows"> & {
   selectedRows?: Set<number>;
   onSelectionChange?: (rows: Set<number>) => void;
   onBatchAction?: (action: BatchAction, rows: number[]) => void;
-  onSortChange?: (sort: Sort) => void;
+  onSortChange?: (sort: Sort | null) => void;
+  serverSort?: boolean;
   onView?: (row: string[], rowIndex: number) => void;
   onEdit?: (row: string[], rowIndex: number) => void;
   onDelete?: (row: string[], rowIndex: number) => void;
@@ -103,6 +104,7 @@ export function DataTable({
   onSelectionChange,
   onBatchAction,
   onSortChange,
+  serverSort = false,
   onView,
   onEdit,
   onDelete,
@@ -140,7 +142,16 @@ export function DataTable({
     setHiddenColumns((current) => reconcileHiddenColumns(current, indexes, defaultHidden));
   }, [columnMetaByName, userTouchedColumns, visibleColumns]);
 
-  useEffect(() => setSort(defaultSort ?? null), [defaultSort]);
+  const defaultSortColumn = defaultSort?.column;
+  const defaultSortOrder = defaultSort?.order;
+  // Equivalent definitions from a host rerender must not undo a user's clear.
+  useEffect(() => {
+    setSort(
+      defaultSortColumn && defaultSortOrder
+        ? { column: defaultSortColumn, order: defaultSortOrder }
+        : null,
+    );
+  }, [defaultSortColumn, defaultSortOrder]);
 
   const displayedColumns = useMemo(
     () => visibleColumns.filter(({ index }) => !hiddenColumns.has(index)),
@@ -172,9 +183,12 @@ export function DataTable({
         width: meta?.width ?? 160,
         ellipsis: true,
         sorter: sortable
-          ? {
-              compare: (a: TableRow, b: TableRow) => compareCellValues(a.row[index], b.row[index]),
-            }
+          ? serverSort
+            ? true
+            : {
+                compare: (a: TableRow, b: TableRow) =>
+                  compareCellValues(a.row[index], b.row[index]),
+              }
           : false,
         sortOrder,
         render: (_: unknown, record: TableRow) => {
@@ -234,7 +248,17 @@ export function DataTable({
       });
     }
     return result;
-  }, [columnMetaByName, displayedColumns, hasActions, language, onDelete, onEdit, onView, sort]);
+  }, [
+    columnMetaByName,
+    displayedColumns,
+    hasActions,
+    language,
+    onDelete,
+    onEdit,
+    onView,
+    sort,
+    serverSort,
+  ]);
 
   const handleTableChange = useCallback<NonNullable<TableProps<TableRow>["onChange"]>>(
     (_, __, nextSorter) => {
@@ -246,6 +270,7 @@ export function DataTable({
       const column = Number.isInteger(index) ? columns[index] : undefined;
       if (!column || !order) {
         setSort(null);
+        onSortChange?.(null);
         return;
       }
       const next = { column, order } as Sort;

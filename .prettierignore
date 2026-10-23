@@ -3,6 +3,8 @@ dist/
 src-tauri/target/
 src-tauri/gen/
 .codegraph/
+.claude/worktrees/
+.superpowers/
 *.tsbuildinfo
 package-lock.json
 public/

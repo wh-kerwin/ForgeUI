@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import type { RequestContext } from "../pages/requestContext";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { X } from "lucide-react";
@@ -73,11 +74,50 @@ export function Workbench() {
     projectId: workspace.activeProjectId,
     apiDocuments: workspace.documents,
     onNotice: setNotice,
+    requestScope: workspace.requestScope,
   });
   const persistence = useWorkbenchPersistence({
     projectId: workspace.activeProjectId,
     onNotice: setNotice,
+    requestScope: workspace.requestScope,
   });
+  const generationScope = workspace.requestScope;
+  const generationCleanup = useRef<(() => void) | null>(null);
+  const generationTicket = useRef<RequestContext | null>(null);
+  const [pageRevision, setPageRevision] = useState(0);
+  const setExecutionMode = useWorkbenchStore((state) => state.setExecutionMode);
+  useLayoutEffect(() => {
+    const invalidate = () => {
+      generationCleanup.current?.();
+      generationCleanup.current = null;
+      generationTicket.current = null;
+      activeRequestId.current = null;
+      setGenerating(false);
+      setRefining(false);
+      setIsStreaming(false);
+      setStreamingPage(null);
+      setExecutionMode("live");
+      setLoadingState("idle");
+      setPageRevision((revision) => revision + 1);
+      setNotice("");
+    };
+    const unsubscribe = generationScope.subscribe(invalidate);
+    return () => {
+      unsubscribe();
+      generationCleanup.current?.();
+      generationTicket.current = null;
+    };
+  }, [generationScope, setExecutionMode, setLoadingState]);
+
+  function currentGeneration(context: RequestContext) {
+    return generationTicket.current === context && generationScope.isLatest("generation", context);
+  }
+  function replacePage(page: PageSpec | null) {
+    generationScope.update({
+      definitionRevision: generationScope.capture().definitionRevision + 1,
+    });
+    generated.setPage(page);
+  }
   const active = modelConfigs.activeModel;
   const selectedTemplate = persistence.templates.find(
     (template) => template.id === selectedTemplateId,
@@ -150,13 +190,17 @@ export function Workbench() {
   function useTemplate(template: TemplateRecord) {
     const page = parseTemplate(template);
     if (!page) return;
-    generated.setPage(page);
+    replacePage(page);
     setActivePageDocumentIds(pageApiDocumentIds(page, template.apiDocumentIds));
     setSelectedTemplateId(template.id);
     navigate("generate");
   }
 
-  async function requestPage(request: ReturnType<typeof buildModelRequest>): Promise<PageSpec> {
+  async function requestPage(
+    request: ReturnType<typeof buildModelRequest>,
+    context: RequestContext,
+  ): Promise<PageSpec> {
+    if (!currentGeneration(context)) throw new Error("生成上下文已失效");
     if (!request.streaming) return invoke<PageSpec>("generate_page", { input: request });
     if (activeRequestId.current) throw new Error("已有页面正在生成，请稍候");
     const requestId = crypto.randomUUID();
@@ -164,28 +208,37 @@ export function Workbench() {
     setIsStreaming(true);
     setStreamingPage(previewPageSpec({}));
     let latestPartial: Partial<PageSpec> = {};
-    // Coalesce: emit at most once per RAF + bounded timer so React sees
-    // ~10 updates/sec instead of one per model token.
+    // 单 timer 合并草稿；Rust 的最终校验结果才可提交。
     const parser = new StreamingPageParser({
       coalesce: true,
       flushIntervalMs: 100,
       onDelta: (partial) => {
         latestPartial = { ...latestPartial, ...partial };
-        if (activeRequestId.current === requestId) setStreamingPage(previewPageSpec(latestPartial));
+        if (currentGeneration(context) && activeRequestId.current === requestId)
+          setStreamingPage(previewPageSpec(latestPartial));
       },
-      onComplete: (complete) => {
-        if (activeRequestId.current === requestId) setStreamingPage(complete);
-      },
+      onComplete: () => undefined,
     });
     let unlisten: UnlistenFn | undefined;
+    const cleanup = () => {
+      parser.destroy();
+      unlisten?.();
+      unlisten = undefined;
+    };
+    generationCleanup.current = cleanup;
     try {
       unlisten = await listen<{ requestId: string; delta: string }>(
         "page-generation-delta",
         ({ payload }) => {
-          if (payload.requestId === requestId && activeRequestId.current === requestId)
+          if (
+            currentGeneration(context) &&
+            payload.requestId === requestId &&
+            activeRequestId.current === requestId
+          )
             parser.push(payload.delta);
         },
       );
+      if (!currentGeneration(context)) throw new Error("生成上下文已失效");
       const page = await invoke<PageSpec>("generate_page_stream", { input: request, requestId });
       try {
         parser.finish();
@@ -194,8 +247,9 @@ export function Workbench() {
       }
       return page;
     } finally {
-      unlisten?.();
-      if (activeRequestId.current === requestId) {
+      cleanup();
+      if (generationCleanup.current === cleanup) generationCleanup.current = null;
+      if (currentGeneration(context) && activeRequestId.current === requestId) {
         activeRequestId.current = null;
         setIsStreaming(false);
         setStreamingPage(null);
@@ -222,7 +276,12 @@ export function Workbench() {
         document.spec.queryParameters,
       ),
     );
+    const context = generationScope.begin("generation");
+    generationTicket.current = context;
+    setExecutionMode("preview");
     setGenerating(true);
+    setIsStreaming(true);
+    setStreamingPage(previewPageSpec({}));
     setLoadingState("generating");
     setNotice("模型正在生成受控 UI DSL…");
     try {
@@ -237,8 +296,10 @@ export function Workbench() {
             parseTemplate(selectedTemplate),
             selectedPromptTemplate,
           ),
+          context,
         );
       } catch (error) {
+        if (!currentGeneration(context)) return;
         if (!workspace.selectedDocuments.length || !isPageSpecGenerationError(error)) throw error;
         try {
           // Retry once without streaming so OpenAI-compatible providers can
@@ -251,20 +312,26 @@ export function Workbench() {
               parseTemplate(selectedTemplate),
               selectedPromptTemplate,
             ),
+            context,
           );
         } catch {
+          if (!currentGeneration(context)) return;
           page = createApiFallbackPage(prompt, generationDocuments);
           usedOpenApiFallback = true;
         }
       }
+      if (!currentGeneration(context)) return;
       page = alignListOperationWithPrompt(page, prompt, generationOperations);
       const apiDocumentIds = pageApiDocumentIds(
         page,
         generationDocuments.map((document) => document.id),
       );
+      await persistence.saveSession(active.id, prompt, page, apiDocumentIds, context);
+      if (!currentGeneration(context)) return;
+      setExecutionMode("live");
       generated.setPage(page);
+      setPageRevision((revision) => revision + 1);
       setActivePageDocumentIds(apiDocumentIds);
-      await persistence.saveSession(active.id, prompt, page, apiDocumentIds);
       const selectedRuntimeOperations = generationOperations.filter((operation) =>
         apiDocumentIds.includes(operation.apiDocumentId ?? ""),
       );
@@ -278,12 +345,25 @@ export function Workbench() {
           ? "模型输出无法解析，已根据所选 OpenAPI 生成基础页面"
           : "已生成真实模型 PageSpec 页面",
       );
-      if (listOperation) await generated.query({}, listOperation);
-    } catch (error) {
-      setNotice(toUserMessage(error));
-    } finally {
+      setIsStreaming(false);
+      setStreamingPage(null);
       setGenerating(false);
-      setLoadingState("idle");
+      if (listOperation) {
+        // The store owns query completion, including replacements of this auto-query.
+        generationTicket.current = null;
+        await generated.query({}, listOperation);
+      }
+    } catch (error) {
+      if (currentGeneration(context)) setNotice(toUserMessage(error));
+    } finally {
+      if (currentGeneration(context)) {
+        generationTicket.current = null;
+        setGenerating(false);
+        setIsStreaming(false);
+        setStreamingPage(null);
+        setExecutionMode("live");
+        setLoadingState("idle");
+      }
     }
   }
   // TODO(refine): fully implemented but currently unreachable — PageRefineBox
@@ -292,21 +372,31 @@ export function Workbench() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async function refinePage(instruction: string) {
     const current = generated.page;
-    if (!active || !current) return;
+    if (!active || !current || generationTicket.current) return;
+    const context = generationScope.begin("generation");
+    generationTicket.current = context;
+    setExecutionMode("preview");
     setRefining(true);
     setLoadingState("generating");
     try {
       const refinementPrompt = `Modify the existing PageSpec according to this instruction: ${instruction}\nExisting PageSpec structure (loaded rows and metrics intentionally excluded): ${JSON.stringify(toModelSafePageSpec(current))}`;
-      const refinementIds = new Set([...workspace.selectedDocumentIds, ...activePageDocumentIds]);
+      const refinementIds = new Set(pageApiDocumentIds(current, activePageDocumentIds));
       const refinedPage = await requestPage(
         buildModelRequest(
           active,
           refinementPrompt,
-          workspace.documents.filter((document) => refinementIds.has(document.id)),
+          workspace.documents.filter(
+            (document) =>
+              document.enabled &&
+              document.projectId === context.projectId &&
+              refinementIds.has(document.id),
+          ),
           current,
           selectedPromptTemplate,
         ),
+        context,
       );
+      if (!currentGeneration(context)) return;
       const refinementOperations = workspace.documents
         .filter((document) => refinementIds.has(document.id) && document.enabled)
         .flatMap((document) =>
@@ -322,19 +412,26 @@ export function Workbench() {
         refinementOperations,
       );
       const apiDocumentIds = pageApiDocumentIds(page, activePageDocumentIds);
+      await persistence.saveSession(active.id, instruction, page, apiDocumentIds, context);
+      if (!currentGeneration(context)) return;
+      setExecutionMode("live");
       generated.setPage(page);
+      setPageRevision((revision) => revision + 1);
       setActivePageDocumentIds(apiDocumentIds);
-      await persistence.saveSession(active.id, instruction, page, apiDocumentIds);
       setNotice("页面已按对话要求更新");
     } catch (error) {
-      setNotice(toUserMessage(error));
+      if (currentGeneration(context)) setNotice(toUserMessage(error));
     } finally {
-      setRefining(false);
-      setLoadingState("idle");
+      if (currentGeneration(context)) {
+        generationTicket.current = null;
+        setRefining(false);
+        setExecutionMode("live");
+        setLoadingState("idle");
+      }
     }
   }
   const openSession = (page: PageSpec, session: (typeof persistence.sessions)[number]) => {
-    generated.setPage(page);
+    replacePage(page);
     setSelectedTemplateId("");
     setActivePageDocumentIds(pageApiDocumentIds(page, session.apiDocumentIds));
   };
@@ -359,10 +456,11 @@ export function Workbench() {
         onApiDocumentSelectionChange={workspace.setSelectedDocumentIds}
       />
       <GeneratedWorkbenchView
+        key={`${workspace.activeProjectId}:${pageRevision}:${isStreaming ? "preview" : "live"}`}
         page={streamingPage ?? generated.page}
         projectId={workspace.activeProjectId}
         apiDocumentIds={activePageDocumentIds}
-        isStreaming={isStreaming}
+        isStreaming={generating || isStreaming}
         fieldSchemas={fieldSchemas}
         grantedRoles={workspace.grantedRoles}
         modelId={active?.id}
@@ -405,7 +503,7 @@ export function Workbench() {
         templates={persistence.templates}
         versions={persistence.versions}
         selectedTemplateId={persistence.versionTemplateId}
-        onOpen={generated.setPage}
+        onOpen={replacePage}
         onUse={useTemplate}
         onShowVersions={persistence.showVersions}
         onRestore={persistence.restoreVersion}

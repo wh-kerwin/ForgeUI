@@ -2,7 +2,58 @@ use rusqlite::{Connection, OpenFlags};
 use serde::Serialize;
 use std::path::PathBuf;
 
+// Pure validation keeps tests independent of process-global environment changes.
+#[cfg(debug_assertions)]
+fn test_db_path(value: Option<&std::ffi::OsStr>) -> Result<Option<PathBuf>, String> {
+    let Some(value) = value else { return Ok(None) };
+    let invalid = || "FORGE_UI_TEST_DATA_DIR 必须为有效的绝对本地目录".to_string();
+    let text = value.to_str().ok_or_else(invalid)?;
+    let path = PathBuf::from(value);
+    if text.trim().is_empty() || !path.is_absolute() {
+        return Err(invalid());
+    }
+    #[cfg(windows)]
+    {
+        // Accept drive-rooted local paths only; reject UNC/device paths and aliases.
+        let bytes = text.as_bytes();
+        if bytes.len() < 3
+            || !bytes[0].is_ascii_alphabetic()
+            || bytes[1] != b':'
+            || !matches!(bytes[2], b'/' | b'\\')
+        {
+            return Err(invalid());
+        }
+        for segment in text[3..].split(['/', '\\']).filter(|part| !part.is_empty()) {
+            let stem = segment.split('.').next().unwrap_or("").to_ascii_uppercase();
+            if segment == "."
+                || segment == ".."
+                || segment.ends_with(['.', ' '])
+                || segment
+                    .chars()
+                    .any(|c| c.is_control() || "<>:\"|?*".contains(c))
+                || matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+                || (stem.len() == 4
+                    && (stem.starts_with("COM") || stem.starts_with("LPT"))
+                    && matches!(stem.as_bytes()[3], b'1'..=b'9'))
+            {
+                return Err(invalid());
+            }
+        }
+    }
+    if path
+        .components()
+        .any(|part| matches!(part, std::path::Component::ParentDir))
+    {
+        return Err(invalid());
+    }
+    Ok(Some(path.join("forge.db")))
+}
+
 pub fn db_path() -> Result<PathBuf, String> {
+    #[cfg(debug_assertions)]
+    if let Some(path) = test_db_path(std::env::var_os("FORGE_UI_TEST_DATA_DIR").as_deref())? {
+        return Ok(path);
+    }
     Ok(dirs::data_local_dir()
         .ok_or("无法定位本地数据目录")?
         .join("ForgeUI")
@@ -145,6 +196,34 @@ fn is_valid_backup_name(file_name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::is_valid_backup_name;
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn explicit_test_directory_is_absolute_and_fail_closed() {
+        use super::test_db_path;
+        use std::ffi::OsStr;
+        assert_eq!(test_db_path(None).unwrap(), None);
+        let root = std::env::temp_dir().join("forge-path-test");
+        assert_eq!(
+            test_db_path(Some(root.as_os_str())).unwrap(),
+            Some(root.join("forge.db"))
+        );
+        for invalid in [
+            "",
+            " ",
+            "relative",
+            "C:relative",
+            "C:\\bad<name",
+            "C:\\bad.\\dir",
+            "C:\\good\\..\\other",
+            "\\\\server\\share",
+        ] {
+            assert!(
+                test_db_path(Some(OsStr::new(invalid))).is_err(),
+                "accepted {invalid:?}"
+            );
+        }
+    }
 
     #[test]
     fn backup_names_are_confined_to_expected_shape() {
