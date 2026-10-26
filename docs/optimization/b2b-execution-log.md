@@ -43,9 +43,9 @@
 | A0 | 已完成、已合并并推送 | Rust 依赖恢复，fmt、lib tests、updater check 已在 A 阶段通过；包含于 `d34e074`。 |
 | A1 | 已完成、已合并并推送 | 前后端取消契约、RAII 清理、headers/body 取消、写入 unknown 已验证；隔离真实 WebView → Tauri → Rust IPC 三项通过。 |
 | A2 | 已完成、已合并并推送 | 请求上下文、项目/授权隔离、会话归属及 loading 所有权修复已验证，针对性复审通过。 |
-| A3 | 已完成、已合并并推送 | 单 timer、finish/destroy 生命周期和只读草稿门禁已验证；B1 当前回归中的预览 UI 超时另列为 B1 阻塞，不改写 A 提交时的通过证据。 |
+| A3 | 已完成、已合并并推送 | 单 timer、finish/destroy 生命周期和只读草稿门禁已验证；后续B1预览UI回归超时已通过缩小DOM查询范围解决，全部零执行断言保留。 |
 | A4 | 已完成、已合并并推送 | 空/错误/截断状态、排序清除、服务端排序及等值 defaultSort 重渲染修复已验证。 |
-| B1 | 验证与审查修复已收口，准备提交合并推送 | 47 个共享 fixtures、49 项 parity/诊断测试、详细生成来源与 generate/refine 候选边界已实现。最终 Node 180/180、Rust 75/75、UI 16/16、build、Rust fmt/updater check 通过；非法 JSON 信封恢复可重试且不泄露正文，诊断使用 JSON Pointer。保留8条既有lint、7条Rust legacy dead-code及大chunk警告。 |
+| B1 | 已完成、已合并并推送（`c02cda6`） | 47 个共享 fixtures、49 项 parity/诊断测试、详细生成来源与 generate/refine 候选边界已实现。最终 Node 180/180、Rust 75/75、UI 16/16、build、Rust fmt/updater check 通过；非法 JSON 信封恢复可重试且不泄露正文，诊断使用 JSON Pointer。保留8条既有lint、7条Rust legacy dead-code及大chunk警告。 |
 | B2 | 待实施 | 等 B1 验证、审查、提交合并并推送成功后，再实施能力目录与 Prompt 收敛。 |
 | C1–C4 | 待实施 | 等 B 阶段；默认 v2 保持关闭，完整入口闭合前不启用。 |
 | D1–D3 | 待实施 | 等 C 阶段；仅最小 UI 测试设施已在 A 阶段提前建立，不代表 CRUD/refine/模板重绑定任务完成。 |
@@ -55,10 +55,10 @@
 ### 提交与恢复断点
 
 - A 阶段：`d34e074` 已合并本地 `main`，由用户推送；2026-10-26 已核实远程跟踪引用 `origin/main` 包含该提交。
-- B1：当前 `optimize/b2b-workbench` 上仍为未提交改动，包含代码、fixtures、测试和执行记录；用户原有 PRD/OPTIMIZATION/implementation-status 修改继续独立保留。
+- B1：已交付 `c02cda6` 并推送远程，当前返回 `optimize/b2b-workbench` 准备B2；用户原有 PRD/OPTIMIZATION/implementation-status 修改继续独立保留。
 - 已恢复核对上次中断改动：非法 JSON 信封可重试及 JSON Pointer 修复已在磁盘，新的只读核验确认正确，provider针对20/20、candidate3/3通过。
 - 预览 UI 测试将全页重复 role 扫描缩小到实际 header/fieldset/table/首行区域，仍使用真实组件/userEvent，保留全部零执行断言，未提高30秒超时、未跳过测试。主会话完整UI16/16通过。
-- 本轮主会话最终全量Node180/180、Rust75/75、build、fmt/updater check通过；lint0errors/8既有warnings。下一步提交、合并main并推送；确认远程成功后开始B2。
+- B1 已完成验证、审查、提交并推送：提交 `c02cda6`，已快进合并本地 `main`，远程 `origin/main` 已核对同一提交。包含共享fixtures、TS/Rust详细诊断、生成来源、候选绑定边界和UI门禁。
 
 ## 2026-10-23 接续核对与补充覆盖（历史过程记录）
 
