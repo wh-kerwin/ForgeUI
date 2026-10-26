@@ -1,0 +1,17 @@
+{
+  "title": "Orders",
+  "description": "",
+  "filters": [],
+  "stats": [],
+  "columns": ["id", "amount"],
+  "rows": [["1", "12"]],
+  "views": [
+    {
+      "type": "chart",
+      "title": "Amount",
+      "chartType": "bar",
+      "xAxisColumn": "id",
+      "yAxisColumn": "missing"
+    }
+  ]
+}

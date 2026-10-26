@@ -1,0 +1,32 @@
+{
+  "title": "Orders",
+  "description": "",
+  "filters": [],
+  "stats": [],
+  "columns": ["id", "amount"],
+  "rows": [["1", "12"]],
+  "operations": [
+    {
+      "operation_id": "update",
+      "method": "PATCH",
+      "path": "/orders",
+      "role": "update",
+      "bodySchema": [
+        {
+          "name": "status",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true,
+          "visibleWhen": {
+            "field": "status",
+            "equals": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        }
+      ]
+    }
+  ]
+}

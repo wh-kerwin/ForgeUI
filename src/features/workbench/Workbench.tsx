@@ -5,7 +5,15 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { X } from "lucide-react";
 import "../../styles.css";
 import "../../generated.css";
-import type { ModelConfig, PageSpec, PromptTemplate, TemplateRecord } from "../../types/domain";
+import type {
+  GenerationResult,
+  GenerationSource,
+  ModelConfig,
+  PageSpec,
+  PromptTemplate,
+  TemplateRecord,
+} from "../../types/domain";
+import type { PageIssue } from "../pages/pageIssues";
 import { useProjectWorkspace } from "../projects/useProjectWorkspace";
 import { useModelConfigurations } from "../models/useModelConfigurations";
 import { useGeneratedPageActions } from "../pages/useGeneratedPageActions";
@@ -14,6 +22,7 @@ import { WorkbenchSidebar } from "./WorkbenchSidebar";
 import { GeneratedWorkbenchView } from "./GeneratedWorkbenchView";
 import { TemplateRoute } from "./TemplateRoute";
 import { parsePageSpecJson } from "../pages/parsePageSpec";
+import { validateGenerationCandidate } from "./generationCandidate";
 import { toModelSafePageSpec } from "../pages/modelSafePageSpec";
 import { useWorkbenchPersistence } from "./useWorkbenchPersistence";
 import { buildModelRequest } from "./modelRequest";
@@ -35,17 +44,52 @@ import {
 } from "./promptTemplates";
 import { useWorkbenchStore } from "../../store/workbenchStore";
 import {
-  alignListOperationWithPrompt,
   documentsForPrompt,
   operationForRole,
   pageApiDocumentIds,
   runtimeOperations,
 } from "../pages/pageOperations";
-import { createApiFallbackPage, isPageSpecGenerationError } from "./apiFallbackPage";
-import { toUserMessage } from "../../lib/errors";
+import { createApiFallbackPage } from "./apiFallbackPage";
+
+function generationFailure(error: unknown): { issues: PageIssue[]; retryable: boolean } {
+  if (error && typeof error === "object" && "issues" in error && Array.isArray(error.issues)) {
+    const issues = error.issues as PageIssue[];
+    return { issues, retryable: "retryable" in error && error.retryable === true };
+  }
+  return {
+    retryable: false,
+    issues: [
+      {
+        code: "generation.request_failed",
+        path: "",
+        severity: "error",
+        stage: "permission",
+        message: "模型请求未完成，请检查连接与授权配置后重试",
+      },
+    ],
+  };
+}
+
+const sourceLabels: Record<GenerationSource, string> = {
+  model: "模型",
+  repaired: "安全格式修复",
+  retry: "重试",
+  apiFallback: "API 基础页面（非模型输出）",
+};
+const stageLabels: Record<string, string> = {
+  syntax: "格式解析",
+  schema: "结构校验",
+  reference: "字段引用",
+  binding: "API 绑定",
+  permission: "授权与连接",
+};
 
 export function Workbench() {
   const [notice, setNotice] = useState("");
+  const [generationStatus, setGenerationStatus] = useState("");
+  const [generationSource, setGenerationSource] = useState<GenerationSource | null>(null);
+  const [generationIssues, setGenerationIssues] = useState<PageIssue[]>([]);
+  const [generationFailed, setGenerationFailed] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [showEditor, setShowEditor] = useState(false);
   const [editorModel, setEditorModel] = useState<ModelConfig | undefined>();
@@ -100,6 +144,10 @@ export function Workbench() {
       setLoadingState("idle");
       setPageRevision((revision) => revision + 1);
       setNotice("");
+      setGenerationStatus("");
+      setGenerationSource(null);
+      setGenerationIssues([]);
+      setGenerationFailed(false);
     };
     const unsubscribe = generationScope.subscribe(invalidate);
     return () => {
@@ -199,9 +247,10 @@ export function Workbench() {
   async function requestPage(
     request: ReturnType<typeof buildModelRequest>,
     context: RequestContext,
-  ): Promise<PageSpec> {
+  ): Promise<GenerationResult> {
     if (!currentGeneration(context)) throw new Error("生成上下文已失效");
-    if (!request.streaming) return invoke<PageSpec>("generate_page", { input: request });
+    if (!request.streaming)
+      return invoke<GenerationResult>("generate_page_detailed", { input: request });
     if (activeRequestId.current) throw new Error("已有页面正在生成，请稍候");
     const requestId = crypto.randomUUID();
     activeRequestId.current = requestId;
@@ -239,7 +288,10 @@ export function Workbench() {
         },
       );
       if (!currentGeneration(context)) throw new Error("生成上下文已失效");
-      const page = await invoke<PageSpec>("generate_page_stream", { input: request, requestId });
+      const page = await invoke<GenerationResult>("generate_page_stream_detailed", {
+        input: request,
+        requestId,
+      });
       try {
         parser.finish();
       } catch {
@@ -283,12 +335,16 @@ export function Workbench() {
     setIsStreaming(true);
     setStreamingPage(previewPageSpec({}));
     setLoadingState("generating");
-    setNotice("模型正在生成受控 UI DSL…");
+    setNotice("");
+    setGenerationStatus("模型生成中");
+    setGenerationSource(null);
+    setGenerationIssues([]);
+    setGenerationFailed(false);
     try {
-      let page: PageSpec;
-      let usedOpenApiFallback = false;
+      let result: GenerationResult;
+      let attemptIssues: PageIssue[] = [];
       try {
-        page = await requestPage(
+        result = await requestPage(
           buildModelRequest(
             active,
             prompt,
@@ -300,11 +356,15 @@ export function Workbench() {
         );
       } catch (error) {
         if (!currentGeneration(context)) return;
-        if (!workspace.selectedDocuments.length || !isPageSpecGenerationError(error)) throw error;
+        const failure = generationFailure(error);
+        if (!failure.retryable) throw error;
+        attemptIssues = failure.issues;
+        setGenerationIssues(attemptIssues);
+        setGenerationStatus("结构化重试中（仅一次）");
         try {
           // Retry once without streaming so OpenAI-compatible providers can
           // enforce response_format=json_schema instead of relying on prompts.
-          page = await requestPage(
+          result = await requestPage(
             buildModelRequest(
               { ...active, streaming: false, structuredOutput: "jsonSchema" },
               prompt,
@@ -314,14 +374,22 @@ export function Workbench() {
             ),
             context,
           );
-        } catch {
+          result = { ...result, generationSource: "retry" };
+        } catch (retryError) {
           if (!currentGeneration(context)) return;
-          page = createApiFallbackPage(prompt, generationDocuments);
-          usedOpenApiFallback = true;
+          const failure = generationFailure(retryError);
+          if (!failure.retryable) throw retryError;
+          setGenerationStatus("根据授权 API 构建基础页面");
+          result = {
+            page: createApiFallbackPage(prompt, generationDocuments),
+            generationSource: "apiFallback",
+            issues: failure.issues,
+          };
         }
       }
       if (!currentGeneration(context)) return;
-      page = alignListOperationWithPrompt(page, prompt, generationOperations);
+      const page = validateGenerationCandidate(result.page, prompt, generationOperations);
+      const finalIssues = [...attemptIssues, ...result.issues];
       const apiDocumentIds = pageApiDocumentIds(
         page,
         generationDocuments.map((document) => document.id),
@@ -340,11 +408,9 @@ export function Workbench() {
       )
         ? operationForRole(page, selectedRuntimeOperations, "list", "GET")
         : undefined;
-      setNotice(
-        usedOpenApiFallback
-          ? "模型输出无法解析，已根据所选 OpenAPI 生成基础页面"
-          : "已生成真实模型 PageSpec 页面",
-      );
+      setGenerationSource(result.generationSource);
+      setGenerationIssues(finalIssues);
+      setGenerationStatus("校验通过，页面已采用");
       setIsStreaming(false);
       setStreamingPage(null);
       setGenerating(false);
@@ -354,7 +420,11 @@ export function Workbench() {
         await generated.query({}, listOperation);
       }
     } catch (error) {
-      if (currentGeneration(context)) setNotice(toUserMessage(error));
+      if (currentGeneration(context)) {
+        setGenerationIssues(generationFailure(error).issues);
+        setGenerationStatus("生成未完成，已保留上一有效页面");
+        setGenerationFailed(true);
+      }
     } finally {
       if (currentGeneration(context)) {
         generationTicket.current = null;
@@ -381,7 +451,7 @@ export function Workbench() {
     try {
       const refinementPrompt = `Modify the existing PageSpec according to this instruction: ${instruction}\nExisting PageSpec structure (loaded rows and metrics intentionally excluded): ${JSON.stringify(toModelSafePageSpec(current))}`;
       const refinementIds = new Set(pageApiDocumentIds(current, activePageDocumentIds));
-      const refinedPage = await requestPage(
+      const refinedResult = await requestPage(
         buildModelRequest(
           active,
           refinementPrompt,
@@ -396,6 +466,7 @@ export function Workbench() {
         ),
         context,
       );
+      const refinedPage = refinedResult.page;
       if (!currentGeneration(context)) return;
       const refinementOperations = workspace.documents
         .filter((document) => refinementIds.has(document.id) && document.enabled)
@@ -406,7 +477,7 @@ export function Workbench() {
             document.spec.queryParameters,
           ),
         );
-      const page = alignListOperationWithPrompt(
+      const page = validateGenerationCandidate(
         refinedPage,
         `${current.title} ${instruction}`,
         refinementOperations,
@@ -420,7 +491,11 @@ export function Workbench() {
       setActivePageDocumentIds(apiDocumentIds);
       setNotice("页面已按对话要求更新");
     } catch (error) {
-      if (currentGeneration(context)) setNotice(toUserMessage(error));
+      if (currentGeneration(context)) {
+        setGenerationIssues(generationFailure(error).issues);
+        setGenerationStatus("生成未完成，已保留上一有效页面");
+        setGenerationFailed(true);
+      }
     } finally {
       if (currentGeneration(context)) {
         generationTicket.current = null;
@@ -588,6 +663,29 @@ export function Workbench() {
         onProjectDelete={workspace.deleteProject}
       />
       {page}
+      {generationStatus && route === "generate" && (
+        <section className="toast" aria-label="页面生成诊断" aria-live="polite">
+          <div>
+            <strong>{generationStatus}</strong>
+            {generationSource && <p>来源：{sourceLabels[generationSource]}</p>}
+            {generationIssues.length > 0 && (
+              <ul>
+                {generationIssues.map((issue, index) => (
+                  <li key={index}>
+                    {stageLabels[issue.stage] ?? "页面校验"}：{issue.message}
+                    {issue.suggestedFix && <small> · {issue.suggestedFix}</small>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {(generationFailed || generationSource === "apiFallback") && (
+              <button type="button" disabled={generating} onClick={() => void generate()}>
+                重试生成
+              </button>
+            )}
+          </div>
+        </section>
+      )}
       {notice && (
         <div className="toast">
           {notice}

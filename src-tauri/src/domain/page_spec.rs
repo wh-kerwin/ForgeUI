@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PageSpec {
-    #[serde(default = "default_version")]
+    #[serde(default = "default_version", deserialize_with = "deserialize_version")]
     pub version: u32,
     pub title: String,
     pub description: String,
@@ -34,6 +34,83 @@ pub struct PageSpec {
     pub theme: Option<String>,
     #[serde(rename = "styleTokens", default)]
     pub style_tokens: Option<std::collections::HashMap<String, serde_json::Value>>,
+}
+
+/// Safe diagnostics: never include model payloads, record values or credentials.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageIssue {
+    pub code: String,
+    pub path: String,
+    pub severity: String,
+    pub stage: String,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggested_fix: Option<String>,
+}
+
+impl PageIssue {
+    pub fn error(code: &str, path: &str, stage: &str, message: &str) -> Self {
+        Self {
+            code: code.into(),
+            path: path.into(),
+            severity: "error".into(),
+            stage: stage.into(),
+            message: message.into(),
+            suggested_fix: None,
+        }
+    }
+}
+
+/// Preserve the existing v1 domain constraints; diagnostics do not normalize input.
+pub fn validate_detailed(spec: &PageSpec) -> Result<(), Vec<PageIssue>> {
+    validate(spec).map_err(|message| {
+        let (code, path, stage) = match message.as_str() {
+            "不支持的 PageSpec 版本" => ("PAGE_VERSION_UNSUPPORTED", "/version", "schema"),
+            "PageSpec 标题无效" => ("PAGE_TITLE_INVALID", "/title", "schema"),
+            "PageSpec 页面元数据无效" => ("PAGE_METADATA_INVALID", "", "schema"),
+            "PageSpec 超出组件或数据行限制" => {
+                let path = if spec.filters.len() > 20 {
+                    "/filters"
+                } else if spec.columns.len() > 50 {
+                    "/columns"
+                } else if spec.column_meta.len() > 50 {
+                    "/columnMeta"
+                } else {
+                    "/rows"
+                };
+                ("PAGE_LIMIT_EXCEEDED", path, "schema")
+            }
+            "PageSpec 行列数量不一致" => ("PAGE_ROW_WIDTH_MISMATCH", "/rows", "schema"),
+            "PageSpec theme token 无效" => ("PAGE_THEME_INVALID", "/theme", "schema"),
+            "PageSpec columnMeta 无效" => {
+                ("PAGE_COLUMN_META_INVALID", "/columnMeta", "reference")
+            }
+            "PageSpec view 结构无效" => ("PAGE_VIEW_INVALID", "/views", "reference"),
+            "PageSpec operation 绑定无效" => {
+                ("PAGE_OPERATION_INVALID", "/operations", "schema")
+            }
+            "PageSpec batch action 无效" => ("PAGE_BATCH_INVALID", "/batchActions", "schema"),
+            _ => ("PAGE_SHAPE_INVALID", "", "schema"),
+        };
+        vec![PageIssue::error(code, path, stage, &message)]
+    })
+}
+
+// JSON integers are mathematical values: 1, 1.0 and 1e0 denote v1.
+// Do not coerce strings, nulls, fractional or out-of-range numbers.
+fn deserialize_version<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<u32, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    value
+        .as_f64()
+        .filter(|number| {
+            number.is_finite()
+                && number.fract() == 0.0
+                && *number >= 0.0
+                && *number <= u32::MAX as f64
+        })
+        .map(|number| number as u32)
+        .ok_or_else(|| serde::de::Error::custom("PageSpec version must be an unsigned integer"))
 }
 
 fn default_version() -> u32 {
@@ -136,6 +213,7 @@ pub struct PayloadBuilder {
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct InteractionSpec {
     pub create: Option<InteractionMode>,
     pub update: Option<InteractionMode>,
@@ -509,6 +587,50 @@ fn validate_view(view: &PageView, columns: &[String], depth: usize) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_v1_manifest_matches_domain_rules() {
+        let root =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../contracts/fixtures/v1");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(root.join("manifest.json")).unwrap())
+                .unwrap();
+        for case in manifest["cases"].as_array().unwrap() {
+            let content =
+                std::fs::read_to_string(root.join(case["file"].as_str().unwrap())).unwrap();
+            let accepted = serde_json::from_str::<PageSpec>(&content)
+                .ok()
+                .is_some_and(|page| validate(&page).is_ok());
+            assert_eq!(
+                accepted,
+                case["accepted"].as_bool().unwrap(),
+                "{}",
+                case["id"]
+            );
+            let detailed = super::super::page_schema::decode_page_spec_detailed(&content);
+            assert_eq!(detailed.is_ok(), accepted, "detailed {}", case["id"]);
+            if let Some(path) = case["issuePath"].as_str() {
+                assert_eq!(detailed.unwrap_err()[0].path, path, "path {}", case["id"]);
+            }
+        }
+    }
+
+    #[test]
+    fn detailed_decode_reports_safe_repairs_and_rejects_lossy_rows() {
+        let payload = r#"{"title":"Page","description":"","filters":[],"stats":[],"columns":["id"],"rows":[["1"]]}"#;
+        let result = super::super::page_schema::decode_page_spec_detailed(&format!(
+            "```json\n{payload}\n```"
+        ))
+        .unwrap();
+        assert!(result.repaired);
+        assert_eq!(result.issues[0].severity, "warning");
+        let invalid = payload.replace("[\"1\"]", "[\"1\",\"secret-row\"]");
+        let issues = super::super::page_schema::decode_page_spec_detailed(&invalid).unwrap_err();
+        assert_eq!(issues[0].path, "/rows");
+        assert!(!serde_json::to_string(&issues)
+            .unwrap()
+            .contains("secret-row"));
+    }
 
     #[test]
     fn rejects_mismatched_rows() {

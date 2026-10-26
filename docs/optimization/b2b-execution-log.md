@@ -12,7 +12,7 @@
 - `rtk npm run build`：通过；JS chunk 1,495.45 kB，gzip 469.86 kB；保留 chunk size 警告，拆包后置。
 - CodeGraph MCP 与首次分支创建调用遇到自动审批服务超时；随后成功创建 `optimize/b2b-workbench` 分支，在当前工作区保留已有改动继续执行。避免把工具阻断当代码失败。
 - 用户追加授权：每个阶段完成、审查和验证后提交并合并到本地 main，再实施下一阶段。子任务代理不自行提交，由主会话统一核对提交范围。
-- 不推送、不部署、不调用付费模型，不修改同级 test-backend；用户原有文档修改不自动混入代码提交。
+- 初始边界为不推送；2026-10-23 用户说明已自行推送任务A，并追加授权：后续每个任务完成测试、验证和审查后提交、按既定流程合并本地 main、推送远程，确认成功后才继续下一任务。此授权替代此前不推送约束；不强推、不部署、不调用付费模型，不修改同级 test-backend；用户原有文档修改不自动混入代码提交。
 
 ## 计划核对
 
@@ -32,23 +32,37 @@
 
 2026-10-22 调度调整：用户要求 Rust 构建期间继续其他任务，因此 A3、A4 在互不重叠的前端文件范围并行实施；A1/A2 等待对应文件释放后接入。提前执行不代表跳过阶段依赖，A 阶段仍须整体验证及真实 IPC 证据。代价：任务集成后须再跑完整回归，防止上下文/预览/查询状态交互回归。
 
-真实 IPC 验收准备：只读核对确认数据库路径固定在 Windows LocalApplicationData/ForgeUI，启动即进行迁移/备份；identifier、WebView profile 或 LOCALAPPDATA 环境变量不能可靠隔离。禁止直接启动默认应用验收。增加 debug 专用测试数据目录和隔离 smoke 脚本，release 数据路径不变；临时项目使用无认证的本地 HTTP fixture，不调用模型/凭证接口。此项属于 A1 真实 IPC 门禁的必要测试基础设施，尚未执行桌面验收。
+真实 IPC 验收准备（历史记录，后续三项取消 IPC 已通过，见当前状态及验证记录）：只读核对确认数据库路径固定在 Windows LocalApplicationData/ForgeUI，启动即进行迁移/备份；identifier、WebView profile 或 LOCALAPPDATA 环境变量不能可靠隔离。禁止直接启动默认应用验收。增加 debug 专用测试数据目录和隔离 smoke 脚本，release 数据路径不变；临时项目使用无认证的本地 HTTP fixture，不调用模型/凭证接口。此项属于 A1 真实 IPC 门禁的必要测试基础设施，尚未执行桌面验收。
 
-## 状态
+## 当前任务状态（2026-10-26 更新）
 
-| 任务  | 状态                         | 结果                                                                                                                                                                         |
-| ----- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A0    | 依赖修复审查通过，格式待收口 | tokio-util 改 rt、补 tokio macros；cargo test --lib 52 passed，updater check 通过。依赖版本无无关升级、lock v4 兼容最低 Rust。fmt 既有差异在 A1 中收口，未宣称完整门禁通过。 |
-| A1    | Rust 实现待审查，前端待接入  | Rust RAII registry、headers/body 取消与超时、写结果 unknown 已实现；代理报告 cargo test --lib 66/66、updater check 通过。真实 IPC 未执行；前端等 A4 释放 store 接入。        |
-| A2    | 部分进行中                   | 项目 workspace/persistence hooks 与 RequestContext 先实施；Workbench/store 等 A3/A4 文件释放后集成。                                                                         |
-| A3    | 进行中                       | 流式单调度器、销毁/完成生命周期、只读草稿门禁及行为测试。                                                                                                                    |
-| A4    | 进行中                       | 空结果、无效响应、截断边界、排序清除及行为测试。                                                                                                                             |
-| B1–B2 | 待实施                       | 等待 A 阶段。                                                                                                                                                                |
-| C1–C4 | 待实施                       | 默认 v2 保持关闭。                                                                                                                                                           |
-| D1–D3 | 待实施                       | 等待 C 阶段。                                                                                                                                                                |
-| E1–E2 | 待实施                       | 真实模型不自动运行。                                                                                                                                                         |
+本表是当前状态入口；下方按时间保留的过程记录只代表当时状态。验证数量须与对应提交或工作区快照关联，不以早期通过结果替代最新复验。
 
-## 2026-10-23 接续核对与补充覆盖
+| 任务 | 当前状态 | 已完成内容及剩余门禁 |
+| --- | --- | --- |
+| A0 | 已完成、已合并并推送 | Rust 依赖恢复，fmt、lib tests、updater check 已在 A 阶段通过；包含于 `d34e074`。 |
+| A1 | 已完成、已合并并推送 | 前后端取消契约、RAII 清理、headers/body 取消、写入 unknown 已验证；隔离真实 WebView → Tauri → Rust IPC 三项通过。 |
+| A2 | 已完成、已合并并推送 | 请求上下文、项目/授权隔离、会话归属及 loading 所有权修复已验证，针对性复审通过。 |
+| A3 | 已完成、已合并并推送 | 单 timer、finish/destroy 生命周期和只读草稿门禁已验证；B1 当前回归中的预览 UI 超时另列为 B1 阻塞，不改写 A 提交时的通过证据。 |
+| A4 | 已完成、已合并并推送 | 空/错误/截断状态、排序清除、服务端排序及等值 defaultSort 重渲染修复已验证。 |
+| B1 | 验证与审查修复已收口，准备提交合并推送 | 47 个共享 fixtures、49 项 parity/诊断测试、详细生成来源与 generate/refine 候选边界已实现。最终 Node 180/180、Rust 75/75、UI 16/16、build、Rust fmt/updater check 通过；非法 JSON 信封恢复可重试且不泄露正文，诊断使用 JSON Pointer。保留8条既有lint、7条Rust legacy dead-code及大chunk警告。 |
+| B2 | 待实施 | 等 B1 验证、审查、提交合并并推送成功后，再实施能力目录与 Prompt 收敛。 |
+| C1–C4 | 待实施 | 等 B 阶段；默认 v2 保持关闭，完整入口闭合前不启用。 |
+| D1–D3 | 待实施 | 等 C 阶段；仅最小 UI 测试设施已在 A 阶段提前建立，不代表 CRUD/refine/模板重绑定任务完成。 |
+| E1 | 待实施，可按原计划延后 | 统计与报表语义尚未交付。 |
+| E2 | 待实施 | 完整交付回归、离线评测和文档收口未完成；真实模型评测不自动运行。 |
+
+### 提交与恢复断点
+
+- A 阶段：`d34e074` 已合并本地 `main`，由用户推送；2026-10-26 已核实远程跟踪引用 `origin/main` 包含该提交。
+- B1：当前 `optimize/b2b-workbench` 上仍为未提交改动，包含代码、fixtures、测试和执行记录；用户原有 PRD/OPTIMIZATION/implementation-status 修改继续独立保留。
+- 已恢复核对上次中断改动：非法 JSON 信封可重试及 JSON Pointer 修复已在磁盘，新的只读核验确认正确，provider针对20/20、candidate3/3通过。
+- 预览 UI 测试将全页重复 role 扫描缩小到实际 header/fieldset/table/首行区域，仍使用真实组件/userEvent，保留全部零执行断言，未提高30秒超时、未跳过测试。主会话完整UI16/16通过。
+- 本轮主会话最终全量Node180/180、Rust75/75、build、fmt/updater check通过；lint0errors/8既有warnings。下一步提交、合并main并推送；确认远程成功后开始B2。
+
+## 2026-10-23 接续核对与补充覆盖（历史过程记录）
+
+以下“尚未执行”“待接入”“未推送”等表述描述当时的执行阶段，并非当前任务状态；当前进度以顶部状态表为准。
 
 - 已恢复原工作区 `optimize/b2b-workbench`，未合并、移植或删除子代理隔离 worktree。该隔离树只含已提交基线，缺少原工作区未提交的 A1–A4；其中旧顶层 `request_id` 修改不适用于当前嵌套 IPC 契约。
 - 更正审查判断：mutation 省略 request ID 不会绕过 Rust 超时和 unknown 分类；`execute_registered` 在无 registry guard 时仍执行超时与 `interrupted(is_write, ...)`。不为未证实缺陷增加写入取消生命周期。排序清除回退仍待 UI 行为复现，不能作为已确认 P1；空响应显式非零 total 会被现有 `findTotal(body) ?? 0` 保留。
@@ -62,12 +76,33 @@
 
 ### A 阶段最终验证（2026-10-23）
 
-- A0–A4 代码、测试与两轮针对审查已收口；以本段为当前状态，上方表格及过程记录保留历史状态。Node 128/128、默认 `test:ui` 11/11、Rust 69/69、Rust fmt/updater check、前端 build 均通过。真实 IPC headers/body取消及完成后cancel=0通过；不外推为E2完整桌面业务场景通过。
+- A0–A4 代码、测试与两轮针对审查已收口；本段记录 A 阶段提交时的验证快照；当前任务状态以上方表格为准。Node 128/128、默认 `test:ui` 11/11、Rust 69/69、Rust fmt/updater check、前端 build 均通过。真实 IPC headers/body取消及完成后cancel=0通过；不外推为E2完整桌面业务场景通过。
 - 修复两项真实 loading 缺陷：生成自动query交接前释放generation ticket，旧finally不再清替代query；无效替代query的resolve失败提前出口清querying、并保留并行mutation的mutating状态。新增7项store deferred与4项真实Workbench集成测试；实现者观察正确红灯后修复，两项finding复审均ADDRESSED，无新重要问题。
 - UI共11项（7项页面/表格、4项Workbench）；补真实defaultSort方向/字段/移除正向用例。并行执行曾发生30秒超时，串行通过，默认配置fileParallelism=false，未提高30秒时限。主会话默认命令实测11/11通过。
 - 最终build通过，JS 1,507.07 kB / gzip 473.48 kB，chunk警告保留；lint 0 errors / 8既有warnings；npm audit 0漏洞。Node23 engine支持范围警告仍保留，未改系统Node。
 - 最终format:check仅旧历史 `docs/optimization/dynamic-page-generation-audit-2026-09-04.md` 不合格式；按计划不改旧报告。本轮文件格式检查通过，不将全仓格式门禁写成通过。
 - UI窄范围spec/quality审查PASS，loading修复scoped复审两项ADDRESSED。阶段提交仅含A代码、测试、必要依赖/检查配置及本执行记录；用户原有OPTIMIZATION/PRD/implementation-status和设计/研究文档不混入。B–E尚未实施，默认v2关闭。
+
+- 阶段A提交 `d34e074` 已快进合并本地main，已返回 `optimize/b2b-workbench`；用户原有文档与未跟踪设计/研究文档保持独立。当时未由助手推送；用户随后自行推送，2026-10-26 已核实 `origin/main` 为该提交。
+
+### B1 提交前收口（2026-10-26）
+
+- 用户明确要求先提交合并再继续下一任务；沿用完成测试/审查后合并本地main并推送远程的授权。当前暂存区为空，仍待UI超时修复及生成链路审查，不将未通过门禁的状态标完成。
+- 本轮主会话再次验证build、Rust fmt/updater check及Rust lib74/74通过；frontend原有8项warnings，UI诊断中的临时console额外warning须在交回前移除。旧normalize停用后的7项Rust dead_code warnings保留记录。
+- 核心scoped复审：数量诊断具体path、raw version1.0/1e0两项均ADDRESSED；equals单字符串domain/schema差异不擅自改契约，legacy normalize仅测试调用不误报为生成入口漏洞。
+- 两份数值词法fixture精确加入Prettier忽略：必须保留1.0/1e0，不允许格式化为1而削弱回归。其余B1提交文件定向Prettier通过；全仓另有旧历史文档与CRLF工作区格式差异，不全仓自动改写。
+
+### B1 实施中（过程记录）
+
+- 核心契约与共享fixtures、生成来源/UI诊断按互斥文件边界接续实施；契约部分负责TS parser/PageIssue与Rust domain/schema，生成部分负责model_provider/app/Workbench。不以已有重试/fallback布尔值替代可追溯来源，不调用真实模型。
+- A阶段验证结果保持有效；B1新增接口与fixtures尚未验收，不将计划或代理进行中状态写成完成。默认v2关闭。
+- B1核心契约代理已交回：43个共享fixture、45项parity/诊断测试、TS详细解析与绑定建议校验、Rust详细decode/validate已实现；代理报告Rust完整lib74/74、完整Node退出0（精确总数待主会话复核）。仅InteractionSpec新增deny_unknown_fields以对齐既有前端拒绝规则，未普遍扩大unknown策略。生成来源/UI/宿主共享授权fixture仍由生成链路代理补齐；这些不是B1整体验收证据。
+- 2026-10-23 用户要求日限额到达即暂停当前任务及所有子agent，保留断点，明天再继续；已通知两个B1实现者，不自动等待恢复续跑。分类服务超时不等同日限额，不能误报已触及限额。未完成验证不提交、不推送；任务完成后按最新授权推送成功再继续下一任务。
+
+- 2026-10-26 用户要求继续，已恢复B1；远程fetch确认origin/main为用户已推送的A提交d34e074。当前B1仍未提交或推送。
+- 核心审查修复：共享fixtures现47例/parity49项；Rust数量超限issuePath与TS对齐，raw JSON version 1.0/1e0按数学整数语义接受，先观察Rust fixture失败后修复反序列化。visibleWhen.equals单字符串120/121两端domain本来都接受，未擅自收紧（provider schema差异另记）；legacy normalize调用者仅旧测试，详细生成不调用，保留兼容，不将公开函数存在误报为可达漏洞。
+- generate/refine共用新增generationCandidate边界，拒绝未知版本及潜在静默改绑且不修改输入；Node3项先红后绿。详细IPC保持旧PageSpec命令兼容，生成来源model/repaired/retry/apiFallback已接线，本地HTTP fixture与跨文档host授权fixture通过，未调用live模型。
+- 主会话最新完整Node180/180、Rust74/74通过，build曾通过；最新全UI连续两次15/16，失败均为既有pageReliability草稿零执行用例30秒超时，单独串行仍可复现，不能再仅归因并发。已委派定位具体耗时步骤，不提高timeout或删除安全断言。生成链路独立review进行中，B1不标完成。
 
 ### UI 门禁与依赖安全收口（过程记录）
 

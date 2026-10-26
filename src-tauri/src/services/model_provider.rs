@@ -5,8 +5,7 @@ use crate::{
     domain::{
         page_schema,
         page_spec::{
-            valid_field_schema, validate, BatchAction, InteractionMode, InteractionSpec,
-            OperationBinding, PageSpec,
+            validate, BatchAction, InteractionMode, InteractionSpec, OperationBinding, PageSpec,
         },
     },
     repositories::secrets,
@@ -189,14 +188,129 @@ pub async fn validate_config(input: ModelConfigInput) -> Result<ValidationResult
     })
 }
 
-pub async fn generate_page(input: GenerateInput) -> Result<PageSpec, String> {
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerationResult {
+    pub page: PageSpec,
+    pub generation_source: String,
+    pub issues: Vec<crate::domain::page_spec::PageIssue>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerationFailure {
+    pub issues: Vec<crate::domain::page_spec::PageIssue>,
+    pub retryable: bool,
+}
+
+fn generation_issue(stage: &str, code: &str, message: &str) -> crate::domain::page_spec::PageIssue {
+    crate::domain::page_spec::PageIssue {
+        code: code.into(),
+        path: "".into(),
+        severity: "error".into(),
+        stage: stage.into(),
+        message: message.into(),
+        suggested_fix: Some("请检查配置或重新生成页面".into()),
+    }
+}
+
+impl From<String> for GenerationFailure {
+    fn from(_: String) -> Self {
+        Self {
+            issues: vec![generation_issue(
+                "permission",
+                "generation.request_failed",
+                "模型请求未完成，请检查连接与授权配置后重试",
+            )],
+            retryable: false,
+        }
+    }
+}
+
+fn finish_generation(
+    content: &str,
+    allowed: Option<&[AllowedOperation]>,
+    prompt: &str,
+) -> Result<GenerationResult, GenerationFailure> {
+    let decoded =
+        page_schema::decode_page_spec_detailed(content).map_err(|issues| GenerationFailure {
+            issues,
+            retryable: true,
+        })?;
+    let mut spec = decoded.page;
+    validate_operation_bindings(&spec.operations, &spec.batch_actions, allowed).map_err(|_| {
+        GenerationFailure {
+            issues: vec![generation_issue(
+                "permission",
+                "generation.unauthorized_binding",
+                "模型引用了未授权的 API 操作，页面未采用",
+            )],
+            retryable: true,
+        }
+    })?;
+    apply_explicit_page_intent(&mut spec, prompt);
+    if let Some(theme) = explicit_theme(prompt) {
+        spec.theme = Some(theme.into());
+    }
+    validate(&spec).map_err(|_| GenerationFailure {
+        issues: vec![generation_issue(
+            "schema",
+            "generation.invalid_intent",
+            "页面结构不符合 v1 契约，页面未采用",
+        )],
+        retryable: true,
+    })?;
+    Ok(GenerationResult {
+        page: spec,
+        generation_source: if decoded.repaired {
+            "repaired"
+        } else {
+            "model"
+        }
+        .into(),
+        issues: decoded.issues,
+    })
+}
+
+pub async fn generate_page_detailed(
+    input: GenerateInput,
+) -> Result<GenerationResult, GenerationFailure> {
     generate_page_with_delta(input, None::<fn(&str) -> Result<(), String>>).await
 }
 
-pub async fn generate_page_stream<F>(
+pub async fn generate_page(input: GenerateInput) -> Result<PageSpec, String> {
+    generate_page_detailed(input)
+        .await
+        .map(|result| result.page)
+        .map_err(|error| legacy_generation_error(&error))
+}
+
+fn legacy_generation_error(error: &GenerationFailure) -> String {
+    format!(
+        "模型输出不符合 PageSpec：{}",
+        error
+            .issues
+            .iter()
+            .map(|issue| issue.message.as_str())
+            .collect::<Vec<_>>()
+            .join("；")
+    )
+}
+
+pub async fn generate_page_stream<F>(input: GenerateInput, on_delta: F) -> Result<PageSpec, String>
+where
+    F: FnMut(&str) -> Result<(), String>,
+{
+    generate_page_stream_detailed(input, on_delta)
+        .await
+        .map(|result| result.page)
+        .map_err(|error| legacy_generation_error(&error))
+}
+
+pub async fn generate_page_stream_detailed<F>(
     mut input: GenerateInput,
     on_delta: F,
-) -> Result<PageSpec, String>
+) -> Result<GenerationResult, GenerationFailure>
 where
     F: FnMut(&str) -> Result<(), String>,
 {
@@ -207,12 +321,11 @@ where
 async fn generate_page_with_delta<F>(
     input: GenerateInput,
     mut on_delta: Option<F>,
-) -> Result<PageSpec, String>
+) -> Result<GenerationResult, GenerationFailure>
 where
     F: FnMut(&str) -> Result<(), String>,
 {
     validate_transport(&input.base_url, &input.protocol, &input.model)?;
-    let requested_theme = explicit_theme(&input.prompt).map(str::to_string);
     let key = resolve_api_key(input.api_key, input.secret_ref)?;
     let schema = page_schema::schema();
     let custom_prompt = input.system_prompt.unwrap_or_default();
@@ -267,11 +380,11 @@ where
     if !status.is_success() {
         let raw_body = read_limited_response(response, 8 * 1024 * 1024, "模型").await?;
         let detail = sanitize_provider_error(&raw_body);
-        return Err(if detail.is_empty() {
+        return Err(GenerationFailure::from(if detail.is_empty() {
             format!("模型服务返回 HTTP {}", status.as_u16())
         } else {
             format!("模型服务返回 HTTP {}：{}", status.as_u16(), detail)
-        });
+        }));
     }
     let (content, response_diagnostic) = if content_type.contains("text/event-stream") {
         if let Some(emitter) = on_delta.as_mut() {
@@ -286,34 +399,20 @@ where
     } else {
         let raw_body = read_limited_response(response, 8 * 1024 * 1024, "模型").await?;
         let raw: serde_json::Value =
-            serde_json::from_str(&raw_body).map_err(|e| format!("模型响应不是 JSON：{e}"))?;
+            serde_json::from_str(&raw_body).map_err(|_| GenerationFailure {
+                issues: vec![generation_issue(
+                    "syntax",
+                    "generation.response_json",
+                    "模型响应格式无法解析，请重试生成",
+                )],
+                retryable: true,
+            })?;
         let content = extract_response_text(&raw, &input.protocol);
         let diagnostic = response_diagnostic(&raw, &input.protocol, &content);
         (content, Some(diagnostic))
     };
-    let decoded = page_schema::decode_json(&content).map_err(|error| {
-        response_diagnostic
-            .as_deref()
-            .map_or(error.clone(), |diagnostic| {
-                format!("{error}（{diagnostic}）")
-            })
-    })?;
-    let value = page_schema::normalize_page_spec(decoded);
-    let mut spec: PageSpec =
-        serde_json::from_value(value).map_err(|e| format!("模型输出不符合 PageSpec：{e}"))?;
-    apply_explicit_page_intent(&mut spec, &input.prompt);
-    if requested_theme.is_some() {
-        spec.theme = requested_theme;
-    }
-    retain_allowed_model_bindings(&mut spec, input.allowed_operations.as_deref());
-    sanitize_model_operation_metadata(&mut spec);
-    validate(&spec)?;
-    validate_operation_bindings(
-        &spec.operations,
-        &spec.batch_actions,
-        input.allowed_operations.as_deref(),
-    )?;
-    Ok(spec)
+    let _ = response_diagnostic; // Shape diagnostics never cross the generation boundary.
+    finish_generation(&content, input.allowed_operations.as_deref(), &input.prompt)
 }
 
 async fn read_streaming_sse<F>(
@@ -596,35 +695,6 @@ fn validate_operation_bindings(
     Ok(())
 }
 
-fn retain_allowed_model_bindings(spec: &mut PageSpec, allowed: Option<&[AllowedOperation]>) {
-    let allowed = allowed.unwrap_or_default();
-    let is_allowed =
-        |api_document_id: Option<&str>, operation_id: &str, method: &str, path: &str| {
-            allowed.iter().any(|operation| {
-                operation.api_document_id.as_deref() == api_document_id
-                    && operation.operation_id == operation_id
-                    && operation.method == method
-                    && operation.path == path
-            })
-        };
-    spec.operations.retain(|binding| {
-        is_allowed(
-            binding.api_document_id.as_deref(),
-            &binding.operation_id,
-            &binding.method,
-            &binding.path,
-        )
-    });
-    spec.batch_actions.retain(|action| {
-        is_allowed(
-            action.api_document_id.as_deref(),
-            &action.operation_id,
-            &action.method,
-            &action.path,
-        )
-    });
-}
-
 fn explicit_layout(prompt: &str) -> &'static str {
     let normalized = prompt.to_lowercase();
     let layouts = [
@@ -791,76 +861,6 @@ fn mention_is_negated(prompt: &str, index: usize) -> bool {
     .any(|negation| prefix.ends_with(negation))
 }
 
-fn sanitize_model_operation_metadata(spec: &mut PageSpec) {
-    for operation in &mut spec.operations {
-        if !matches!(
-            operation.role.as_str(),
-            "list"
-                | "detail"
-                | "create"
-                | "update"
-                | "delete"
-                | "stat"
-                | "export"
-                | "stats"
-                | "read"
-        ) {
-            operation.role = match operation.method.as_str() {
-                "GET" if operation.path.contains('{') => "detail",
-                "GET" => "list",
-                "POST" => "create",
-                "PUT" | "PATCH" => "update",
-                "DELETE" => "delete",
-                _ => "read",
-            }
-            .into();
-        }
-        if operation
-            .body_schema
-            .as_ref()
-            .is_some_and(|fields| !valid_field_schema(fields))
-        {
-            operation.body_schema = None;
-        }
-        if operation.pagination.as_ref().is_some_and(|pagination| {
-            pagination.default_size == 0
-                || pagination.default_size > 1000
-                || pagination.page_param.trim().is_empty()
-                || pagination.size_param.trim().is_empty()
-        }) {
-            operation.pagination = None;
-        }
-        if let Some(message) = operation.confirm_message.as_mut() {
-            truncate_utf8_bytes(message, 500);
-        }
-    }
-
-    spec.batch_actions.retain_mut(|action| {
-        if let Some(message) = action.confirm_message.as_mut() {
-            truncate_utf8_bytes(message, 500);
-        }
-        matches!(action.method.as_str(), "POST" | "DELETE")
-            && matches!(action.payload_builder.r#type.as_str(), "ids" | "custom")
-            && (action.payload_builder.r#type != "custom"
-                || action
-                    .payload_builder
-                    .custom_payload
-                    .as_ref()
-                    .is_some_and(|payload| !payload.trim().is_empty()))
-    });
-}
-
-fn truncate_utf8_bytes(value: &mut String, max_bytes: usize) {
-    if value.len() <= max_bytes {
-        return;
-    }
-    let mut end = max_bytes;
-    while !value.is_char_boundary(end) {
-        end -= 1;
-    }
-    value.truncate(end);
-}
-
 fn parse_sse_content(body: &str, protocol: &str) -> Result<String, String> {
     let mut decoder = SseDecoder::default();
     decoder.push(body.as_bytes(), protocol, &mut |_| Ok(()))?;
@@ -871,9 +871,8 @@ fn parse_sse_content(body: &str, protocol: &str) -> Result<String, String> {
 mod tests {
     use super::{
         apply_explicit_page_intent, explicit_layout, explicit_modal_actions, explicit_theme,
-        parse_sse_content, response_diagnostic, retain_allowed_model_bindings,
-        sanitize_model_operation_metadata, validate_custom_header, validate_operation_bindings,
-        AllowedOperation, SseDecoder,
+        finish_generation, parse_sse_content, response_diagnostic, validate_custom_header,
+        validate_operation_bindings, AllowedOperation, GenerationFailure, SseDecoder,
     };
     use crate::domain::page_spec::{
         BatchAction, InteractionMode, OperationBinding, PageSpec, PayloadBuilder,
@@ -891,6 +890,193 @@ mod tests {
         let complete = "data: {\"choices\":[{\"delta\":{\"content\":\"{\"}}]}\ndata: {\"choices\":[{\"delta\":{\"content\":\"}\"}}]}\ndata: [DONE]";
         assert!(parse_sse_content(complete, "openai").is_ok());
         assert!(parse_sse_content("data: {\"choices\":[{\"delta\":{}}]}", "openai").is_err());
+    }
+
+    #[tokio::test]
+    async fn invalid_json_http_success_is_safe_and_retryable() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0u8; 4096];
+            loop {
+                let count = socket.read(&mut buffer).unwrap();
+                if count == 0 {
+                    break;
+                }
+                request.extend_from_slice(&buffer[..count]);
+                if let Some(header_end) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n")
+                {
+                    let headers = String::from_utf8_lossy(&request[..header_end]);
+                    let length = headers
+                        .lines()
+                        .find_map(|line| {
+                            line.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .and_then(|value| value.trim().parse::<usize>().ok())
+                        })
+                        .unwrap();
+                    if request.len() >= header_end + 4 + length {
+                        break;
+                    }
+                }
+            }
+            let body = "not-json";
+            write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+        });
+        let input = serde_json::from_value(serde_json::json!({"prompt":"订单列表", "base_url":format!("http://{address}"),"protocol":"openai","model":"fixture", "streaming":false,"structured_output":"jsonSchema"})).unwrap();
+        let failure = super::generate_page_detailed(input).await.err().unwrap();
+        assert!(failure.retryable);
+        assert_eq!(failure.issues[0].stage, "syntax");
+        assert_eq!(failure.issues[0].path, "");
+        assert!(!serde_json::to_string(&failure)
+            .unwrap()
+            .contains("not-json"));
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn generation_http_fixture_tracks_decode_and_keeps_legacy_page_shape() {
+        use std::io::{Read, Write};
+        let content = r#"{"title":"Orders","description":"","filters":[],"stats":[],"columns":["id"],"rows":[]}"#;
+        for detailed in [true, false] {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let address = listener.local_addr().unwrap();
+            let body = serde_json::json!({"choices":[{"message":{"content": format!("```json\n{content}\n```")}}]}).to_string();
+            let server = std::thread::spawn(move || {
+                let (mut socket, _) = listener.accept().unwrap();
+                socket
+                    .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+                    .unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0u8; 4096];
+                loop {
+                    let count = socket.read(&mut buffer).unwrap();
+                    if count == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&buffer[..count]);
+                    if let Some(header_end) =
+                        request.windows(4).position(|bytes| bytes == b"\r\n\r\n")
+                    {
+                        let headers = String::from_utf8_lossy(&request[..header_end]);
+                        let length = headers
+                            .lines()
+                            .find_map(|line| {
+                                line.to_ascii_lowercase()
+                                    .strip_prefix("content-length:")
+                                    .and_then(|value| value.trim().parse::<usize>().ok())
+                            })
+                            .unwrap();
+                        if request.len() >= header_end + 4 + length {
+                            break;
+                        }
+                    }
+                }
+                let request = String::from_utf8(request).unwrap();
+                assert!(request.starts_with("POST /chat/completions HTTP/1.1"));
+                assert!(request.contains("json_schema"));
+                assert!(request.contains("\"stream\":false"));
+                write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+            });
+            let input = serde_json::from_value(serde_json::json!({"prompt":"订单列表", "base_url":format!("http://{address}"),"protocol":"openai","model":"fixture", "streaming":false,"structured_output":"jsonSchema"})).unwrap();
+            if detailed {
+                let result = super::generate_page_detailed(input).await.unwrap();
+                assert_eq!(result.generation_source, "repaired");
+                assert_eq!(result.page.title, "Orders");
+            } else {
+                let page = super::generate_page(input).await.unwrap();
+                let value = serde_json::to_value(page).unwrap();
+                assert_eq!(value["title"], "Orders");
+                assert!(value.get("generationSource").is_none());
+            }
+            server.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn generation_rejects_lossy_normalization() {
+        let content = r#"{"title":"Orders","description":"","filters":[],"stats":[],"columns":[{"key":"id","label":"ID"}],"rows":[]}"#;
+        assert!(finish_generation(content, None, "").is_err());
+    }
+
+    #[test]
+    fn shared_fixture_authorization_preserves_document_identity() {
+        let root =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../contracts/fixtures/v1");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(root.join("manifest.json")).unwrap())
+                .unwrap();
+        let mut checked = 0;
+        for case in manifest["cases"].as_array().unwrap() {
+            let Some(expected) = case.get("authorized").and_then(serde_json::Value::as_bool) else {
+                continue;
+            };
+            let content =
+                std::fs::read_to_string(root.join(case["file"].as_str().unwrap())).unwrap();
+            let spec = crate::domain::page_schema::decode_page_spec_detailed(&content)
+                .unwrap()
+                .page;
+            let allowed = case["context"]["allowedOperations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| AllowedOperation {
+                    api_document_id: item["apiDocumentId"].as_str().map(str::to_string),
+                    operation_id: item["operation_id"].as_str().unwrap().into(),
+                    method: item["method"].as_str().unwrap().into(),
+                    path: item["path"].as_str().unwrap().into(),
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                validate_operation_bindings(&spec.operations, &spec.batch_actions, Some(&allowed))
+                    .is_ok(),
+                expected,
+                "{}",
+                case["id"]
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 2);
+    }
+
+    #[test]
+    fn generation_failure_never_serializes_provider_text() {
+        let failure = GenerationFailure::from("raw body SECRET prompt rows".to_string());
+        let encoded = serde_json::to_string(&failure).unwrap();
+        assert!(!encoded.contains("SECRET"));
+        assert!(!failure.retryable);
+        assert_eq!(failure.issues[0].stage, "permission");
+        assert_eq!(failure.issues[0].path, "");
+    }
+
+    #[test]
+    fn generation_candidate_rejects_invented_bindings_instead_of_dropping_them() {
+        let content = r#"{"title":"Orders","description":"","filters":[],"stats":[],"columns":["id"],"rows":[],"operations":[{"operation_id":"secret","method":"GET","path":"/secret","role":"list"}]}"#;
+        let failure = finish_generation(content, None, "").err().unwrap();
+        assert!(failure.retryable);
+        assert_eq!(failure.issues[0].stage, "permission");
+        assert!(!serde_json::to_string(&failure).unwrap().contains("/secret"));
+    }
+
+    #[test]
+    fn generation_source_tracks_only_actual_safe_decode_repairs() {
+        let content = r#"{"title":"Orders","description":"","filters":[],"stats":[],"columns":["id"],"rows":[]}"#;
+        assert_eq!(
+            finish_generation(content, None, "")
+                .unwrap()
+                .generation_source,
+            "model"
+        );
+        let fenced = format!("```json\n{content}\n```");
+        let repaired = finish_generation(&fenced, None, "").unwrap();
+        assert_eq!(repaired.generation_source, "repaired");
+        assert!(!repaired.issues.is_empty());
     }
 
     #[test]
@@ -1061,105 +1247,6 @@ mod tests {
             path: "/devices".into(),
         }];
         assert!(validate_operation_bindings(&[], &[action], Some(&allowed)).is_err());
-    }
-
-    #[test]
-    fn model_output_drops_hallucinated_bindings_without_weakening_strict_validation() {
-        let allowed = vec![AllowedOperation {
-            api_document_id: None,
-            operation_id: "listDevices".into(),
-            method: "GET".into(),
-            path: "/devices".into(),
-        }];
-        let mut page: PageSpec = serde_json::from_value(serde_json::json!({
-            "version": 1,
-            "title": "Devices",
-            "description": "",
-            "filters": [],
-            "stats": [],
-            "columns": ["ID"],
-            "rows": [["1"]],
-            "operations": [
-                {"operation_id": "listDevices", "method": "GET", "path": "/devices", "role": "list"},
-                {"operation_id": "inventedDelete", "method": "DELETE", "path": "/devices/{id}", "role": "delete"}
-            ],
-            "batchActions": [
-                {"operation_id": "inventedBatch", "method": "POST", "path": "/devices/batch", "payloadBuilder": {"type": "ids"}}
-            ]
-        }))
-        .unwrap();
-
-        assert!(
-            validate_operation_bindings(&page.operations, &page.batch_actions, Some(&allowed))
-                .is_err()
-        );
-        retain_allowed_model_bindings(&mut page, Some(&allowed));
-        assert_eq!(page.operations.len(), 1);
-        assert_eq!(page.operations[0].operation_id, "listDevices");
-        assert!(page.batch_actions.is_empty());
-        assert!(
-            validate_operation_bindings(&page.operations, &page.batch_actions, Some(&allowed))
-                .is_ok()
-        );
-    }
-
-    #[test]
-    fn model_output_without_an_allow_list_keeps_all_operations_local() {
-        let mut page: PageSpec = serde_json::from_value(serde_json::json!({
-            "version": 1,
-            "title": "Local preview",
-            "description": "",
-            "filters": [],
-            "stats": [],
-            "columns": ["ID"],
-            "rows": [["1"]],
-            "operations": [
-                {"operation_id": "invented", "method": "GET", "path": "/unknown", "role": "list"}
-            ]
-        }))
-        .unwrap();
-        retain_allowed_model_bindings(&mut page, None);
-        assert!(page.operations.is_empty());
-    }
-
-    #[test]
-    fn model_output_sanitizes_only_non_authoritative_operation_metadata() {
-        let mut page: PageSpec = serde_json::from_value(serde_json::json!({
-            "version": 1,
-            "title": "Devices",
-            "description": "",
-            "filters": [],
-            "stats": [],
-            "columns": ["ID"],
-            "rows": [["1"]],
-            "operations": [{
-                "operation_id": "createDevice",
-                "method": "POST",
-                "path": "/devices",
-                "role": "mutation",
-                "bodySchema": [{"name": "notes", "type": "textarea", "required": true}],
-                "pagination": {"pageParam": "", "sizeParam": "size", "defaultSize": 0},
-                "confirmMessage": "删".repeat(600)
-            }],
-            "batchActions": [{
-                "operation_id": "batchDevice",
-                "method": "POST",
-                "path": "/devices/batch",
-                "payloadBuilder": {"type": "custom", "customPayload": ""}
-            }]
-        }))
-        .unwrap();
-
-        sanitize_model_operation_metadata(&mut page);
-        assert_eq!(page.operations[0].role, "create");
-        assert!(page.operations[0].body_schema.is_none());
-        assert!(page.operations[0].pagination.is_none());
-        assert!(page.operations[0]
-            .confirm_message
-            .as_ref()
-            .is_some_and(|message| message.len() <= 500));
-        assert!(page.batch_actions.is_empty());
-        assert!(crate::domain::page_spec::validate(&page).is_ok());
     }
 
     #[test]

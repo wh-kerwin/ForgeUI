@@ -1,0 +1,20 @@
+{
+  "title": "Orders",
+  "description": "",
+  "filters": [],
+  "stats": [],
+  "columns": ["id", "amount"],
+  "rows": [["1", "12"]],
+  "theme": null,
+  "layout": null,
+  "interaction": null,
+  "operations": [
+    {
+      "operation_id": "list",
+      "method": "GET",
+      "path": "/orders",
+      "role": "list",
+      "bodySchema": null
+    }
+  ]
+}

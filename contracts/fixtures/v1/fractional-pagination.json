@@ -1,0 +1,21 @@
+{
+  "title": "Orders",
+  "description": "",
+  "filters": [],
+  "stats": [],
+  "columns": ["id", "amount"],
+  "rows": [["1", "12"]],
+  "operations": [
+    {
+      "operation_id": "list",
+      "method": "GET",
+      "path": "/orders",
+      "role": "list",
+      "pagination": {
+        "pageParam": "page",
+        "sizeParam": "size",
+        "defaultSize": 1.5
+      }
+    }
+  ]
+}

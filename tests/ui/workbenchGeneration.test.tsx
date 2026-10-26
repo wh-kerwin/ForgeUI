@@ -39,9 +39,27 @@ const page = (title: string): PageSpec => ({
     },
   ],
 });
+const result = (title: string, generationSource = "model") => ({
+  page: page(title),
+  generationSource,
+  issues: [],
+});
+const invalid = {
+  retryable: true,
+  issues: [
+    {
+      code: "schema.invalid",
+      path: "$",
+      severity: "error",
+      stage: "schema",
+      message: "页面结构不符合 v1 契约",
+    },
+  ],
+};
+
 type Response = { status: number; body: unknown };
 function fixture() {
-  const generations: ReturnType<typeof deferred<PageSpec>>[] = [];
+  const generations: ReturnType<typeof deferred<ReturnType<typeof result>>>[] = [];
   const saves: ReturnType<typeof deferred<void>>[] = [];
   const queries: ReturnType<typeof deferred<Response>>[] = [];
   const listeners: {
@@ -88,8 +106,9 @@ function fixture() {
       case "load_templates":
       case "load_generation_sessions":
         return [];
-      case "generate_page_stream": {
-        const request = deferred<PageSpec>();
+      case "generate_page_detailed":
+      case "generate_page_stream_detailed": {
+        const request = deferred<ReturnType<typeof result>>();
         generations.push(request);
         return request.promise;
       }
@@ -158,7 +177,7 @@ async function commit(f: ReturnType<typeof fixture>, index: number, title: strin
   });
   await waitFor(() => expect(f.generations).toHaveLength(index + 1));
   await act(async () => {
-    f.generations[index].resolve(page(title));
+    f.generations[index].resolve(result(title));
   });
   await waitFor(() => expect(f.saves).toHaveLength(index + 1));
   await act(async () => {
@@ -166,6 +185,121 @@ async function commit(f: ReturnType<typeof fixture>, index: number, title: strin
   });
   await waitFor(() => expect(f.queries).toHaveLength(index + 1));
 }
+
+it("shows repaired provenance and safe diagnostics without exposing raw provider errors", async () => {
+  const f = fixture();
+  const user = await mount();
+  await start(user, f);
+  await commit(f, 0, "Valid previous page");
+  await act(async () => {
+    f.queries[0].resolve({ status: 200, body: [] });
+  });
+  await start(user, f);
+  await act(async () => {
+    f.listeners[1].ready.resolve(f.listeners[1].unlisten);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(2));
+  await act(async () => {
+    f.generations[1].reject(new Error("SECRET raw body prompt rows"));
+  });
+  expect(screen.queryByText(/SECRET/)).toBeNull();
+  expect(screen.getByRole("heading", { name: "Valid previous page" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "重试生成" })).toBeTruthy();
+});
+
+it("retries once without streaming and labels retry provenance", async () => {
+  const f = fixture();
+  const user = await mount();
+  await start(user, f);
+  await act(async () => {
+    f.listeners[0].ready.resolve(f.listeners[0].unlisten);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(1));
+  await act(async () => {
+    f.generations[0].reject(invalid);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(2));
+  expect(screen.getByText(/结构化重试/)).toBeTruthy();
+  await act(async () => {
+    f.generations[1].resolve(result("Retry page", "repaired"));
+  });
+  await waitFor(() => expect(f.saves).toHaveLength(1));
+  await act(async () => {
+    f.saves[0].resolve();
+  });
+  await waitFor(() => expect(screen.getByText(/来源：重试/)).toBeTruthy());
+  expect(
+    vi.mocked(invoke).mock.calls.filter(([name]) => name === "generate_page_detailed"),
+  ).toHaveLength(1);
+  const retry = vi.mocked(invoke).mock.calls.find(([name]) => name === "generate_page_detailed");
+  expect((retry?.[1] as { input: { streaming: boolean } }).input.streaming).toBe(false);
+});
+
+it("labels safe repair separately from model success", async () => {
+  const f = fixture();
+  const user = await mount();
+  await start(user, f);
+  await act(async () => {
+    f.listeners[0].ready.resolve(f.listeners[0].unlisten);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(1));
+  await act(async () => {
+    f.generations[0].resolve(result("Safely decoded", "repaired"));
+  });
+  await waitFor(() => expect(f.saves).toHaveLength(1));
+  await act(async () => {
+    f.saves[0].resolve();
+  });
+  await waitFor(() => expect(screen.getByText("来源：安全格式修复")).toBeTruthy());
+});
+
+it("uses an identifiable API fallback only after the one failed retry", async () => {
+  const f = fixture();
+  const user = await mount();
+  await start(user, f);
+  await act(async () => {
+    f.listeners[0].ready.resolve(f.listeners[0].unlisten);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(1));
+  await act(async () => {
+    f.generations[0].reject(invalid);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(2));
+  await act(async () => {
+    f.generations[1].reject(invalid);
+  });
+  await waitFor(() => expect(f.saves).toHaveLength(1));
+  await act(async () => {
+    f.saves[0].resolve();
+  });
+  await waitFor(() => expect(screen.getByText("来源：API 基础页面（非模型输出）")).toBeTruthy());
+  expect(f.generations).toHaveLength(2);
+  expect(screen.getByRole("button", { name: "重试生成" })).toBeTruthy();
+});
+
+it("does not commit an invalid final result over the previous page", async () => {
+  const f = fixture();
+  const user = await mount();
+  await start(user, f);
+  await commit(f, 0, "Previous valid");
+  await act(async () => {
+    f.queries[0].resolve({ status: 200, body: [] });
+  });
+  await start(user, f);
+  await act(async () => {
+    f.listeners[1].ready.resolve(f.listeners[1].unlisten);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(2));
+  await act(async () => {
+    f.generations[1].resolve({
+      ...result("Invalid candidate"),
+      page: { ...page("Invalid candidate"), version: 99 },
+    });
+  });
+  expect(screen.getByRole("heading", { name: "Previous valid" })).toBeTruthy();
+  expect(f.saves).toHaveLength(1);
+  expect(screen.getByRole("button", { name: "重试生成" })).toBeTruthy();
+});
 
 it("generation hands auto-query loading ownership to the store when a user query replaces it", async () => {
   const f = fixture();
@@ -229,7 +363,7 @@ it("project switch during listen prevents old invoke and old finally cannot clea
     f.generations[0].reject(new Error("current model failure"));
   });
   expect(useWorkbenchStore.getState().loadingState).toBe("idle");
-  expect(screen.getByText("current model failure")).toBeTruthy();
+  expect(screen.getByText(/模型请求未完成，请检查连接与授权配置后重试/)).toBeTruthy();
 });
 
 it("project switch during model generation ignores the old result and preserves the new generation", async () => {
@@ -243,7 +377,7 @@ it("project switch during model generation ignores the old result and preserves 
   await switchProject(user);
   const current = await start(user, f);
   await act(async () => {
-    f.generations[0].resolve(page("Obsolete model result"));
+    f.generations[0].resolve(result("Obsolete model result"));
   });
   expect(f.saves).toHaveLength(0);
   expect(useWorkbenchStore.getState().page).toBeNull();
@@ -257,7 +391,7 @@ it("project switch during model generation ignores the old result and preserves 
     f.generations[1].reject(new Error("new model failure"));
   });
   expect(useWorkbenchStore.getState().loadingState).toBe("idle");
-  expect(screen.getByText("new model failure")).toBeTruthy();
+  expect(screen.getByText(/模型请求未完成，请检查连接与授权配置后重试/)).toBeTruthy();
 });
 
 it("project switch while saving a session prevents stale commit and old finally preserves new querying", async () => {
@@ -269,7 +403,7 @@ it("project switch while saving a session prevents stale commit and old finally 
   });
   await waitFor(() => expect(f.generations).toHaveLength(1));
   await act(async () => {
-    f.generations[0].resolve(page("Old project page"));
+    f.generations[0].resolve(result("Old project page"));
   });
   await waitFor(() => expect(f.saves).toHaveLength(1));
   await switchProject(user);
@@ -279,7 +413,7 @@ it("project switch while saving a session prevents stale commit and old finally 
   });
   await waitFor(() => expect(f.generations).toHaveLength(2));
   await act(async () => {
-    f.generations[1].resolve(page("Current project page"));
+    f.generations[1].resolve(result("Current project page"));
   });
   await waitFor(() => expect(f.saves).toHaveLength(2));
   await act(async () => {

@@ -60,6 +60,73 @@ pub fn schema() -> Value {
     })
 }
 
+#[derive(Debug)]
+pub struct DecodedPageSpec {
+    pub page: super::page_spec::PageSpec,
+    pub issues: Vec<super::page_spec::PageIssue>,
+    pub repaired: bool,
+}
+
+/// Only an outer JSON envelope may be removed automatically. Field, row,
+/// identity, API and view repairs are deliberately not applied at this boundary.
+pub fn decode_page_spec_detailed(
+    content: &str,
+) -> Result<DecodedPageSpec, Vec<super::page_spec::PageIssue>> {
+    use super::page_spec::{validate_detailed, PageIssue, PageSpec};
+    let trimmed = content.trim();
+    let (value, repaired) = match serde_json::from_str::<Value>(trimmed) {
+        Ok(value) => (value, false),
+        Err(_) => (
+            decode_json(content).map_err(|_| {
+                vec![PageIssue::error(
+                    "PAGE_JSON_INVALID",
+                    "",
+                    "syntax",
+                    "页面 JSON 无法解析，请重新生成或修复语法",
+                )]
+            })?,
+            true,
+        ),
+    };
+    if value
+        .get("version")
+        .is_some_and(|version| version.as_f64() != Some(1.0))
+    {
+        return Err(vec![PageIssue::error(
+            "PAGE_VERSION_UNSUPPORTED",
+            "/version",
+            "schema",
+            "仅支持 PageSpec v1",
+        )]);
+    }
+    let page: PageSpec = serde_json::from_value(value).map_err(|_| {
+        vec![PageIssue::error(
+            "PAGE_SHAPE_INVALID",
+            "",
+            "schema",
+            "页面字段类型或必填结构无效；不会自动改写字段或业务数据",
+        )]
+    })?;
+    validate_detailed(&page)?;
+    let issues = if repaired {
+        vec![PageIssue {
+            code: "PAGE_JSON_ENVELOPE_REMOVED".into(),
+            path: "".into(),
+            severity: "warning".into(),
+            stage: "syntax".into(),
+            message: "已移除 JSON 外层文本，页面字段未改写".into(),
+            suggested_fix: None,
+        }]
+    } else {
+        vec![]
+    };
+    Ok(DecodedPageSpec {
+        page,
+        issues,
+        repaired,
+    })
+}
+
 pub fn decode_json(content: &str) -> Result<Value, String> {
     let trimmed = content
         .trim()

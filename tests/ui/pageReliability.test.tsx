@@ -225,17 +225,29 @@ describe("GeneratedPage execution gates", () => {
     const props = { ...pageProps(), isStreaming: true };
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.mocked(invoke).mockClear();
-    render(<GeneratedPage {...props} />, { wrapper: LanguageProvider });
-    expect(screen.getByRole("heading", { name: "Orders" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /保存为模板|Save as template/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /加载真实数据|Load real data/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: "batchDelete" })).toBeNull();
-    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    const { container } = render(<GeneratedPage {...props} />, { wrapper: LanguageProvider });
+    const header = container.querySelector<HTMLElement>(".panel-head");
+    const content = container.querySelector<HTMLFieldSetElement>("fieldset.streaming-content");
+    const table = content?.querySelector<HTMLElement>(".generated-data-table");
+    const main = content?.querySelector<HTMLElement>(".generated-page-main");
+    const filterBar = content?.querySelector<HTMLElement>(".filter-row");
+    const firstRow = table?.querySelector<HTMLTableRowElement>("tbody tr:not(.ant-table-measure-row)");
+    expect(header).not.toBeNull();
+    expect(content).not.toBeNull();
+    expect(table).not.toBeNull();
+    expect(main).not.toBeNull();
+    expect(filterBar).not.toBeNull();
+    expect(firstRow).not.toBeNull();
+    expect(within(header!).getByRole("heading", { name: "Orders" })).toBeTruthy();
+    expect(within(header!).queryByRole("button", { name: /保存为模板|Save as template/ })).toBeNull();
+    expect(within(header!).queryByRole("button", { name: /加载真实数据|Load real data/ })).toBeNull();
+    expect(within(main!).queryByRole("button", { name: "batchDelete" })).toBeNull();
+    expect(within(table!).queryAllByRole("checkbox")).toHaveLength(0);
     // Exercise the real disabled fieldset, row buttons, and sortable AntD header.
-    for (const name of ["查询", "查看", "编辑"]) {
-      await user.click(screen.getAllByRole("button", { name })[0]);
-    }
-    await user.click(screen.getByRole("columnheader", { name: /amount/ }));
+    await user.click(within(filterBar!).getByRole("button", { name: "查询" }));
+    await user.click(within(firstRow!).getByRole("button", { name: "查看" }));
+    await user.click(within(firstRow!).getByRole("button", { name: "编辑" }));
+    await user.click(within(table!).getByRole("columnheader", { name: /amount/ }));
     expect(props.onQuery).not.toHaveBeenCalled();
     expect(props.onMutation).not.toHaveBeenCalled();
     expect(props.onDelete).not.toHaveBeenCalled();

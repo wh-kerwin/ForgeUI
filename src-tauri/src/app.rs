@@ -38,6 +38,36 @@ async fn generate_page(input: GenerateInput) -> Result<PageSpec, String> {
     model_provider::generate_page(input).await
 }
 
+#[tauri::command]
+async fn generate_page_detailed(
+    input: GenerateInput,
+) -> Result<model_provider::GenerationResult, model_provider::GenerationFailure> {
+    model_provider::generate_page_detailed(input).await
+}
+
+#[tauri::command]
+async fn generate_page_stream_detailed(
+    window: tauri::WebviewWindow,
+    input: GenerateInput,
+    request_id: String,
+) -> Result<model_provider::GenerationResult, model_provider::GenerationFailure> {
+    if request_id.is_empty() || request_id.len() > 128 {
+        return Err("invalid request id".to_string().into());
+    }
+    model_provider::generate_page_stream_detailed(input, |delta| {
+        window
+            .emit(
+                "page-generation-delta",
+                PageGenerationDelta {
+                    request_id: &request_id,
+                    delta,
+                },
+            )
+            .map_err(|_| "发送页面增量失败".to_string())
+    })
+    .await
+}
+
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PageGenerationDelta<'a> {
@@ -372,6 +402,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             validate_model_config,
             generate_page,
+            generate_page_detailed,
+            generate_page_stream_detailed,
             generate_page_stream,
             execute_api,
             cancel_query,

@@ -8,3 +8,6 @@ src-tauri/gen/
 *.tsbuildinfo
 package-lock.json
 public/
+# 保留 JSON 数值的原始词法，验证 1.0 / 1e0 的跨宿主解析。
+contracts/fixtures/v1/version-integral-float.json
+contracts/fixtures/v1/version-integral-exponent.json

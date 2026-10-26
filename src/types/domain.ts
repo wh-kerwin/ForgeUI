@@ -1,3 +1,13 @@
+import type { PageIssue } from "../features/pages/pageIssues";
+
+export type GenerationSource = "model" | "repaired" | "retry" | "apiFallback";
+export type GenerationResult = {
+  page: PageSpec;
+  generationSource: GenerationSource;
+  issues: PageIssue[];
+};
+export type GenerationFailure = { issues: PageIssue[]; retryable: boolean };
+
 export type Protocol = "openai" | "anthropic";
 
 export type ModelConfig = {

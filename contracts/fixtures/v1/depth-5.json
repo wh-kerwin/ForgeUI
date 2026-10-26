@@ -1,0 +1,43 @@
+{
+  "title": "Orders",
+  "description": "",
+  "filters": [],
+  "stats": [],
+  "columns": ["id", "amount"],
+  "rows": [["1", "12"]],
+  "views": [
+    {
+      "type": "split",
+      "left": {
+        "type": "split",
+        "left": {
+          "type": "split",
+          "left": {
+            "type": "split",
+            "left": {
+              "type": "split",
+              "left": {
+                "type": "list"
+              },
+              "right": {
+                "type": "list"
+              }
+            },
+            "right": {
+              "type": "list"
+            }
+          },
+          "right": {
+            "type": "list"
+          }
+        },
+        "right": {
+          "type": "list"
+        }
+      },
+      "right": {
+        "type": "list"
+      }
+    }
+  ]
+}

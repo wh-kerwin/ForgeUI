@@ -1,0 +1,263 @@
+{
+  "contract": "PageSpec-v1",
+  "cases": [
+    {
+      "id": "missing-version",
+      "file": "missing-version.json",
+      "accepted": true
+    },
+    {
+      "id": "explicit-v1",
+      "file": "explicit-v1.json",
+      "accepted": true
+    },
+    {
+      "id": "unknown-version",
+      "file": "unknown-version.json",
+      "accepted": false
+    },
+    {
+      "id": "null-version",
+      "file": "null-version.json",
+      "accepted": false
+    },
+    {
+      "id": "empty-title",
+      "file": "empty-title.json",
+      "accepted": false
+    },
+    {
+      "id": "utf8-title-boundary",
+      "file": "utf8-title-boundary.json",
+      "accepted": true
+    },
+    {
+      "id": "utf8-title-over",
+      "file": "utf8-title-over.json",
+      "accepted": false
+    },
+    {
+      "id": "filters-20",
+      "file": "filters-20.json",
+      "accepted": true
+    },
+    {
+      "id": "filters-21",
+      "file": "filters-21.json",
+      "accepted": false,
+      "issuePath": "/filters"
+    },
+    {
+      "id": "columns-50",
+      "file": "columns-50.json",
+      "accepted": true
+    },
+    {
+      "id": "columns-51",
+      "file": "columns-51.json",
+      "accepted": false
+    },
+    {
+      "id": "rows-100",
+      "file": "rows-100.json",
+      "accepted": true
+    },
+    {
+      "id": "rows-101",
+      "file": "rows-101.json",
+      "accepted": false
+    },
+    {
+      "id": "columnMeta-50",
+      "file": "columnMeta-50.json",
+      "accepted": true
+    },
+    {
+      "id": "columnMeta-51",
+      "file": "columnMeta-51.json",
+      "accepted": false
+    },
+    {
+      "id": "operations-30",
+      "file": "operations-30.json",
+      "accepted": true
+    },
+    {
+      "id": "operations-31",
+      "file": "operations-31.json",
+      "accepted": false
+    },
+    {
+      "id": "views-10",
+      "file": "views-10.json",
+      "accepted": true
+    },
+    {
+      "id": "views-11",
+      "file": "views-11.json",
+      "accepted": false
+    },
+    {
+      "id": "batchActions-10",
+      "file": "batchActions-10.json",
+      "accepted": true
+    },
+    {
+      "id": "batchActions-11",
+      "file": "batchActions-11.json",
+      "accepted": false
+    },
+    {
+      "id": "short-row",
+      "file": "short-row.json",
+      "accepted": false
+    },
+    {
+      "id": "long-row",
+      "file": "long-row.json",
+      "accepted": false
+    },
+    {
+      "id": "bad-theme",
+      "file": "bad-theme.json",
+      "accepted": false
+    },
+    {
+      "id": "safe-theme",
+      "file": "safe-theme.json",
+      "accepted": true
+    },
+    {
+      "id": "unsafe-token",
+      "file": "unsafe-token.json",
+      "accepted": false
+    },
+    {
+      "id": "view-missing-reference",
+      "file": "view-missing-reference.json",
+      "accepted": false
+    },
+    {
+      "id": "chart-reference",
+      "file": "chart-reference.json",
+      "accepted": true
+    },
+    {
+      "id": "chart-bad-reference",
+      "file": "chart-bad-reference.json",
+      "accepted": false
+    },
+    {
+      "id": "tabs-duplicate",
+      "file": "tabs-duplicate.json",
+      "accepted": false
+    },
+    {
+      "id": "depth-4",
+      "file": "depth-4.json",
+      "accepted": true
+    },
+    {
+      "id": "depth-5",
+      "file": "depth-5.json",
+      "accepted": false
+    },
+    {
+      "id": "invalid-batch-payload",
+      "file": "invalid-batch-payload.json",
+      "accepted": false
+    },
+    {
+      "id": "column-width",
+      "file": "column-width.json",
+      "accepted": false
+    },
+    {
+      "id": "column-reference",
+      "file": "column-reference.json",
+      "accepted": false
+    },
+    {
+      "id": "duplicate-fields",
+      "file": "duplicate-fields.json",
+      "accepted": false
+    },
+    {
+      "id": "field-reference",
+      "file": "field-reference.json",
+      "accepted": false
+    },
+    {
+      "id": "empty-enum",
+      "file": "empty-enum.json",
+      "accepted": false
+    },
+    {
+      "id": "fractional-pagination",
+      "file": "fractional-pagination.json",
+      "accepted": false
+    },
+    {
+      "id": "nullable-optionals",
+      "file": "nullable-optionals.json",
+      "accepted": true
+    },
+    {
+      "id": "binding-document-a",
+      "file": "binding-document-a.json",
+      "accepted": true,
+      "context": {
+        "allowedOperations": [
+          {
+            "apiDocumentId": "document-a",
+            "operation_id": "list",
+            "method": "GET",
+            "path": "/orders"
+          }
+        ]
+      },
+      "authorized": true
+    },
+    {
+      "id": "binding-document-b",
+      "file": "binding-document-b.json",
+      "accepted": true,
+      "context": {
+        "allowedOperations": [
+          {
+            "apiDocumentId": "document-a",
+            "operation_id": "list",
+            "method": "GET",
+            "path": "/orders"
+          }
+        ]
+      },
+      "authorized": false
+    },
+    {
+      "id": "unknown-interaction-key",
+      "file": "unknown-interaction-key.json",
+      "accepted": false
+    },
+    {
+      "id": "visible-equals-120",
+      "file": "visible-equals-120.json",
+      "accepted": true
+    },
+    {
+      "id": "visible-equals-121",
+      "file": "visible-equals-121.json",
+      "accepted": true
+    },
+    {
+      "id": "version-integral-float",
+      "file": "version-integral-float.json",
+      "accepted": true
+    },
+    {
+      "id": "version-integral-exponent",
+      "file": "version-integral-exponent.json",
+      "accepted": true
+    }
+  ]
+}

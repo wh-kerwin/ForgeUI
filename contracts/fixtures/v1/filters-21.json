@@ -1,0 +1,30 @@
+{
+  "title": "Orders",
+  "description": "",
+  "filters": [
+    "id",
+    "id",
+    "id",
+    "id",
+    "id",
+    "id",
+    "id",
+    "id",
+    "id",
+    "id",
+    "id",
+    "id",
+    "id",
+    "id",
+    "id",
+    "id",
+    "id",
+    "id",
+    "id",
+    "id",
+    "id"
+  ],
+  "stats": [],
+  "columns": ["id", "amount"],
+  "rows": [["1", "12"]]
+}

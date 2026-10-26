@@ -1,0 +1,13 @@
+{
+  "title": "Orders",
+  "description": "",
+  "filters": [],
+  "stats": [],
+  "columns": ["id", "amount"],
+  "rows": [["1", "12"]],
+  "theme": "custom",
+  "styleTokens": {
+    "primary": "#abcdef",
+    "density": "compact"
+  }
+}
