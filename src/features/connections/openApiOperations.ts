@@ -35,7 +35,17 @@ export function allowedOperationsForDocuments(
   return documents
     .filter((document) => document.enabled)
     .flatMap((document) =>
-      toAllowedOperations(document.spec, document.id, document.auth.authorizedOperations ?? []),
+      toAllowedOperations(document.spec, document.id, document.auth.authorizedOperations ?? []).map(
+        (operation) => ({
+          ...operation,
+          ...(document.spec.fieldSchemas?.[operation.operation_id]?.length
+            ? { bodySchemas: document.spec.fieldSchemas[operation.operation_id] }
+            : {}),
+          ...(document.spec.queryParameters?.[operation.operation_id]
+            ? { queryParameters: document.spec.queryParameters[operation.operation_id] }
+            : {}),
+        }),
+      ),
     );
 }
 
@@ -44,9 +54,11 @@ export function inferOperationRoles(operations: AllowedOperation[]): Record<stri
     operations.map((operation) => {
       const hasPathParameter = /\{[^}]+\}|\/:\w+/.test(operation.path);
       const roles: string[] = [];
-      if (operation.method === "GET")
-        roles.push(hasPathParameter ? "detail" : "list", ...(hasPathParameter ? [] : ["stat"]));
-      else if (operation.method === "POST") roles.push("create");
+      if (operation.method === "GET") {
+        roles.push(hasPathParameter ? "detail" : "list");
+        if (/(?:^|\/)(?:stats?|metrics|summary|aggregate)(?:\/|$)/i.test(operation.path))
+          roles.push("stat");
+      } else if (operation.method === "POST") roles.push("create");
       else if (operation.method === "PUT" || operation.method === "PATCH") roles.push("update");
       else if (operation.method === "DELETE") roles.push("delete");
       if (/\/(export|download)(?:\/|$)/i.test(operation.path)) roles.push("export");
@@ -65,19 +77,9 @@ export function buildOpenApiContext(documents: readonly ApiDocument[]) {
         document.auth.authorizedOperations ?? [],
       );
       const bodySchemas = Object.fromEntries(
-        operations.slice(0, 16).flatMap((operation) => {
-          const fields = document.spec.fieldSchemas?.[operation.operation_id]?.slice(0, 50);
-          return fields?.length
-            ? [
-                [
-                  operation.operation_id,
-                  fields.map((field) => ({
-                    ...field,
-                    description: field.description?.slice(0, 200),
-                  })),
-                ],
-              ]
-            : [];
+        operations.flatMap((operation) => {
+          const fields = document.spec.fieldSchemas?.[operation.operation_id];
+          return fields?.length ? [[operation.operation_id, fields]] : [];
         }),
       );
       return {

@@ -51,6 +51,22 @@ import {
 } from "../pages/pageOperations";
 import { createApiFallbackPage } from "./apiFallbackPage";
 
+function promptDiagnosticIssues(request: ReturnType<typeof buildModelRequest>): PageIssue[] {
+  return request.prompt_diagnostics.flatMap(({ code, message }) => {
+    if (!(["prompt_budget", "template_budget", "capability_gap"] as string[]).includes(code))
+      return [];
+    return [
+      {
+        code: `prompt.${code}`,
+        path: "",
+        severity: "warning",
+        stage: "permission",
+        message: message.slice(0, 300),
+      },
+    ];
+  });
+}
+
 function generationFailure(error: unknown): { issues: PageIssue[]; retryable: boolean } {
   if (error && typeof error === "object" && "issues" in error && Array.isArray(error.issues)) {
     const issues = error.issues as PageIssue[];
@@ -344,16 +360,18 @@ export function Workbench() {
       let result: GenerationResult;
       let attemptIssues: PageIssue[] = [];
       try {
-        result = await requestPage(
-          buildModelRequest(
-            active,
-            prompt,
-            generationDocuments,
-            parseTemplate(selectedTemplate),
-            selectedPromptTemplate,
-          ),
-          context,
+        const request = buildModelRequest(
+          active,
+          prompt,
+          generationDocuments,
+          parseTemplate(selectedTemplate),
+          selectedPromptTemplate,
         );
+        result = await requestPage(request, context);
+        result = {
+          ...result,
+          issues: [...promptDiagnosticIssues(request), ...result.issues],
+        };
       } catch (error) {
         if (!currentGeneration(context)) return;
         const failure = generationFailure(error);
@@ -364,17 +382,19 @@ export function Workbench() {
         try {
           // Retry once without streaming so OpenAI-compatible providers can
           // enforce response_format=json_schema instead of relying on prompts.
-          result = await requestPage(
-            buildModelRequest(
-              { ...active, streaming: false, structuredOutput: "jsonSchema" },
-              prompt,
-              generationDocuments,
-              parseTemplate(selectedTemplate),
-              selectedPromptTemplate,
-            ),
-            context,
+          const retryRequest = buildModelRequest(
+            { ...active, streaming: false, structuredOutput: "jsonSchema" },
+            prompt,
+            generationDocuments,
+            parseTemplate(selectedTemplate),
+            selectedPromptTemplate,
           );
-          result = { ...result, generationSource: "retry" };
+          result = await requestPage(retryRequest, context);
+          result = {
+            ...result,
+            generationSource: "retry",
+            issues: [...attemptIssues, ...promptDiagnosticIssues(retryRequest), ...result.issues],
+          };
         } catch (retryError) {
           if (!currentGeneration(context)) return;
           const failure = generationFailure(retryError);

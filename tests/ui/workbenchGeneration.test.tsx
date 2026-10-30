@@ -135,6 +135,10 @@ beforeEach(() => {
   vi.mocked(listen).mockReset();
   window.history.replaceState({}, "", "/generate");
   window.localStorage.setItem(
+    "forge-ui-prompt-templates",
+    JSON.stringify([{ id: "query", name: "查询", scene: "query", systemPrompt: "" }]),
+  );
+  window.localStorage.setItem(
     "forge-models",
     JSON.stringify([
       {
@@ -146,6 +150,7 @@ beforeEach(() => {
         apiKey: "test-key",
         streaming: true,
         enabled: true,
+        promptTemplateId: "query",
       },
     ]),
   );
@@ -205,6 +210,38 @@ it("shows repaired provenance and safe diagnostics without exposing raw provider
   expect(screen.queryByText(/SECRET/)).toBeNull();
   expect(screen.getByRole("heading", { name: "Valid previous page" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "重试生成" })).toBeTruthy();
+});
+
+it("shows safe prompt-budget diagnostics from the generation request", async () => {
+  const f = fixture();
+  const user = await mount();
+  await start(user, f);
+  await act(async () => {
+    f.listeners[0].ready.resolve(f.listeners[0].unlisten);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(1));
+  const request = vi
+    .mocked(invoke)
+    .mock.calls.find(([name]) => name === "generate_page_stream_detailed")?.[1] as {
+    input: { prompt_diagnostics?: { code: string; message: string }[] };
+  };
+  request.input.prompt_diagnostics = [
+    {
+      code: "prompt_budget",
+      message:
+        "已按请求资源优先级保留 1 个完整授权操作，另有 2 个因预算省略；未省略项保留 apiDocumentId。",
+    },
+  ];
+  await act(async () => {
+    f.generations[0].resolve(result("Budget-aware page"));
+  });
+  await waitFor(() => expect(f.saves).toHaveLength(1));
+  await act(async () => {
+    f.saves[0].resolve();
+  });
+  await waitFor(() => expect(screen.getByText(/另有 2 个因预算省略/)).toBeTruthy());
+  expect(screen.getAllByText(/另有 2 个因预算省略/)).toHaveLength(1);
+  expect(f.generations).toHaveLength(1);
 });
 
 it("retries once without streaming and labels retry provenance", async () => {

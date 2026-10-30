@@ -112,7 +112,7 @@ export type OperationBinding = {
 export type PromptTemplate = {
   id: string;
   name: string;
-  scene: "dashboard" | "crud" | "report" | "kanban" | "shop" | "content" | "social";
+  scene: "query" | "dashboard" | "crud" | "report" | "kanban" | "shop" | "content" | "social";
   systemPrompt: string;
   isDefault?: boolean;
 };
@@ -177,6 +177,8 @@ export type AllowedOperation = {
   operation_id: string;
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
+  bodySchemas?: FieldSchema[];
+  queryParameters?: string[];
 };
 
 export type BusinessAuth = {

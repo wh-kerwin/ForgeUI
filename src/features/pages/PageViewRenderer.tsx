@@ -3,6 +3,7 @@ import type { BatchAction, ColumnMeta, PageView } from "../../types/domain";
 import { DataTableView } from "./DataTableView";
 import { ChartPageView } from "./ChartPageView";
 import { KanbanView } from "./KanbanView";
+import { PAGE_RENDERER_REGISTRY } from "./pageRendererRegistry";
 
 type Props = {
   view: PageView;
@@ -39,6 +40,7 @@ export function PageViewRenderer({
   onEdit,
   onDelete,
 }: Props) {
+  if (!PAGE_RENDERER_REGISTRY[view.type]) return null;
   if (view.type === "list")
     return (
       <DataTableView
@@ -81,60 +83,63 @@ export function PageViewRenderer({
         }}
       />
     );
-  const ratio = Math.min(0.8, Math.max(0.2, view.splitRatio ?? 0.5));
-  return (
-    <div
-      className="split-view"
-      style={{ gridTemplateColumns: `minmax(0, ${ratio}fr) minmax(0, ${1 - ratio}fr)` }}
-    >
-      <div>
-        <PageViewRenderer
-          {...{
-            columns,
-            columnMeta,
-            rows,
-            batchActions,
-            selectedRows,
-            onSelectionChange,
-            onBatchAction,
-            serverSort,
-            onSortChange,
-            onRowsChange,
-            onView,
-            onEdit,
-            onDelete,
-          }}
-          view={view.left}
-        />
+  if (view.type === "split") {
+    const ratio = Math.min(0.8, Math.max(0.2, view.splitRatio ?? 0.5));
+    return (
+      <div
+        className="split-view"
+        style={{ gridTemplateColumns: `minmax(0, ${ratio}fr) minmax(0, ${1 - ratio}fr)` }}
+      >
+        <div>
+          <PageViewRenderer
+            {...{
+              columns,
+              columnMeta,
+              rows,
+              batchActions,
+              selectedRows,
+              onSelectionChange,
+              onBatchAction,
+              serverSort,
+              onSortChange,
+              onRowsChange,
+              onView,
+              onEdit,
+              onDelete,
+            }}
+            view={view.left}
+          />
+        </div>
+        <div>
+          <PageViewRenderer
+            {...{
+              columns,
+              columnMeta,
+              rows,
+              batchActions,
+              selectedRows,
+              onSelectionChange,
+              onBatchAction,
+              serverSort,
+              onSortChange,
+              onRowsChange,
+              onView,
+              onEdit,
+              onDelete,
+            }}
+            view={view.right}
+          />
+        </div>
       </div>
-      <div>
-        <PageViewRenderer
-          {...{
-            columns,
-            columnMeta,
-            rows,
-            batchActions,
-            selectedRows,
-            onSelectionChange,
-            onBatchAction,
-            serverSort,
-            onSortChange,
-            onRowsChange,
-            onView,
-            onEdit,
-            onDelete,
-          }}
-          view={view.right}
-        />
-      </div>
-    </div>
-  );
+    );
+  }
+  return null;
 }
 
 function TabbedPageView({
   view,
   ...props
-}: Omit<Props, "view"> & { view: Extract<PageView, { type: "tabs" }> }) {
+}: Omit<Props, "view"> & { view: Extract<Props["view"], { type: "tabs" }> }) {
   const groupId = useId();
   const [activeKey, setActiveKey] = useState(view.items[0]?.key ?? "");
   useEffect(() => {

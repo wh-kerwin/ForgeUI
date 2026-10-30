@@ -318,6 +318,33 @@ where
     generate_page_with_delta(input, Some(on_delta)).await
 }
 
+fn validate_prompt_budget(input: &GenerateInput) -> Result<(), GenerationFailure> {
+    const SYSTEM_PROMPT_LIMIT: usize = 4000;
+    const OPENAPI_CONTEXT_LIMIT: usize = 12000;
+    const USER_REQUEST_LIMIT: usize = 8000;
+    const USER_MESSAGE_LIMIT: usize = 18000;
+    let system_prompt = input.system_prompt.as_deref().unwrap_or_default();
+    let openapi_context = input.openapi_context.as_deref().unwrap_or("");
+    let user_message_size = input.prompt.chars().count()
+        + openapi_context.chars().count()
+        + "Request: \nOpenAPI context: ".chars().count();
+    if system_prompt.chars().count() > SYSTEM_PROMPT_LIMIT
+        || openapi_context.chars().count() > OPENAPI_CONTEXT_LIMIT
+        || input.prompt.chars().count() > USER_REQUEST_LIMIT
+        || user_message_size > USER_MESSAGE_LIMIT
+    {
+        return Err(GenerationFailure {
+            issues: vec![generation_issue(
+                "schema",
+                "generation.prompt_budget",
+                "生成上下文超过安全预算；请缩小业务描述或选择较少的 API 文档后重试",
+            )],
+            retryable: false,
+        });
+    }
+    Ok(())
+}
+
 async fn generate_page_with_delta<F>(
     input: GenerateInput,
     mut on_delta: Option<F>,
@@ -325,12 +352,12 @@ async fn generate_page_with_delta<F>(
 where
     F: FnMut(&str) -> Result<(), String>,
 {
+    validate_prompt_budget(&input)?;
     validate_transport(&input.base_url, &input.protocol, &input.model)?;
     let key = resolve_api_key(input.api_key, input.secret_ref)?;
     let schema = page_schema::schema();
     let custom_prompt = input.system_prompt.unwrap_or_default();
-    let custom_prompt: String = custom_prompt.chars().take(4000).collect();
-    let system = format!("You generate ONLY valid JSON matching this PageSpec schema: {schema}. filters and columns MUST be arrays of strings, never objects. rows MUST be arrays of arrays of strings, never objects. stats values MUST be strings. Every view column reference (defaultSort.column, chart axes/group, and kanban group/card fields) MUST exactly match one string in columns; omit a view when its required columns are unavailable. Keep the output compact: use at most 10 columns, 4 sample rows, and 3 top-level views; omit optional metadata that does not improve the requested screen. Use layout=full by default so filters and stats appear above the main view; use layout=sidebar only when the user explicitly requests a sidebar or side-by-side filter layout. Explicit user requests for modal/dialog detail or editing MUST be reflected in interaction.detail or interaction.update. When an existing PageSpec is provided, preserve its operation bindings exactly; never invent an apiDocumentId, operation_id, method, or path. Every new operation and batch action binding MUST copy apiDocumentId from the matching authorized OpenAPI operation. If no authorized operation exists for a requested action, represent it as local UI state only. Never include markdown or code. Do not invent credentials or execute actions. The UI is a read-only preview. {}", custom_prompt);
+    let system = format!("You generate ONLY valid JSON matching this PageSpec schema: {schema}. filters and columns MUST be arrays of strings, never objects. rows MUST be arrays of arrays of strings, never objects. stats values MUST be strings. Every view column reference (defaultSort.column, chart axes/group, and kanban group/card fields) MUST exactly match one string in columns; omit a view when its required columns are unavailable. Do not fabricate rows, statistics, or metric values; data is loaded from bound operations. Use at most 10 columns and 3 top-level views; keep every view reference within columns. Use layout=full by default so filters and stats appear above the main view; use layout=sidebar only when the user explicitly requests a sidebar or side-by-side filter layout. Explicit user requests for modal/dialog detail or editing MUST be reflected in interaction.detail or interaction.update. When an existing PageSpec is provided, preserve its operation bindings exactly; never invent an apiDocumentId, operation_id, method, or path. Every new operation and batch action binding MUST copy apiDocumentId from the matching authorized OpenAPI operation. If no authorized operation exists for a requested action, explain the missing capability and do not create that binding. Never include markdown or code. Do not invent credentials or execute actions. The UI is a read-only preview. {}", custom_prompt);
     let context = input
         .openapi_context
         .unwrap_or_else(|| "No OpenAPI context provided".into());
@@ -1043,6 +1070,67 @@ mod tests {
             checked += 1;
         }
         assert_eq!(checked, 2);
+    }
+
+    #[tokio::test]
+    async fn combined_user_message_budget_is_rejected_before_network() {
+        let input = serde_json::from_value(serde_json::json!({
+            "prompt": "p".repeat(8000),
+            "openapi_context": "o".repeat(10000),
+            "base_url": "http://127.0.0.1:1",
+            "protocol": "openai",
+            "model": "fixture"
+        }))
+        .unwrap();
+        let failure = super::generate_page_detailed(input).await.unwrap_err();
+        assert_eq!(failure.issues[0].code, "generation.prompt_budget");
+        assert!(!failure.retryable);
+    }
+    #[tokio::test]
+    async fn oversized_user_prompt_is_rejected_before_credentials_or_network() {
+        let input = serde_json::from_value(serde_json::json!({
+            "prompt": "x".repeat(8001),
+            "base_url": "http://127.0.0.1:1",
+            "protocol": "openai",
+            "model": "fixture"
+        }))
+        .unwrap();
+        let failure = super::generate_page_detailed(input).await.unwrap_err();
+        assert_eq!(failure.issues[0].code, "generation.prompt_budget");
+        assert!(!failure.retryable);
+    }
+
+    #[tokio::test]
+    async fn oversized_openapi_context_is_rejected_before_credentials_or_network() {
+        let input = serde_json::from_value(serde_json::json!({
+            "prompt": "订单列表",
+            "base_url": "http://127.0.0.1:1",
+            "protocol": "openai",
+            "model": "fixture",
+            "openapi_context": "{}".repeat(6001)
+        }))
+        .unwrap();
+        let failure = super::generate_page_detailed(input).await.unwrap_err();
+        assert_eq!(failure.issues[0].code, "generation.prompt_budget");
+        assert!(!failure.retryable);
+    }
+
+    #[tokio::test]
+    async fn oversized_prompt_is_rejected_before_credentials_or_network() {
+        let input = serde_json::from_value(serde_json::json!({
+            "prompt": "订单列表",
+            "base_url": "http://127.0.0.1:1",
+            "protocol": "openai",
+            "model": "fixture",
+            "system_prompt": "敏感输入".repeat(1001)
+        }))
+        .unwrap();
+        let failure = super::generate_page_detailed(input).await.unwrap_err();
+        assert!(!failure.retryable);
+        assert_eq!(failure.issues[0].code, "generation.prompt_budget");
+        assert!(!serde_json::to_string(&failure)
+            .unwrap()
+            .contains("敏感输入"));
     }
 
     #[test]
