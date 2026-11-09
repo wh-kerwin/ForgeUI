@@ -1,0 +1,60 @@
+{
+  "version": 2,
+  "title": "Orders",
+  "description": "Order list",
+  "dataSources": {
+    "primary": {
+      "operationRef": "orders.list",
+      "itemsPointer": "/data/items",
+      "totalPointer": "/data/total",
+      "rowKeyPointer": "/id"
+    }
+  },
+  "fields": [
+    {
+      "key": "orderId",
+      "label": "Order ID",
+      "valuePointer": "/id",
+      "type": "string"
+    }
+  ],
+  "filters": [],
+  "operations": [
+    {
+      "key": "orders.list",
+      "apiDocumentId": "orders-doc",
+      "operation_id": "listOrders",
+      "method": "GET",
+      "path": "/orders",
+      "role": "list"
+    }
+  ],
+  "views": [
+    {
+      "key": "a",
+      "type": "tabs",
+      "items": [
+        {
+          "key": "b",
+          "label": "B",
+          "view": {
+            "key": "c",
+            "type": "tabs",
+            "items": [
+              {
+                "key": "d",
+                "label": "D",
+                "view": {
+                  "key": "e",
+                  "type": "list",
+                  "dataSourceRef": "primary",
+                  "fieldKeys": ["orderId"]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

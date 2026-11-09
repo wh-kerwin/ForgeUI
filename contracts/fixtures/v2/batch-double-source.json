@@ -1,0 +1,85 @@
+{
+  "version": 2,
+  "title": "Orders",
+  "description": "Order list",
+  "dataSources": {
+    "primary": {
+      "operationRef": "orders.list",
+      "itemsPointer": "/data/items",
+      "totalPointer": "/data/total",
+      "rowKeyPointer": "/id"
+    }
+  },
+  "fields": [
+    {
+      "key": "orderId",
+      "label": "Order ID",
+      "valuePointer": "/id",
+      "type": "string"
+    },
+    {
+      "key": "customerId",
+      "label": "Customer ID",
+      "valuePointer": "/customerId",
+      "type": "string"
+    }
+  ],
+  "filters": [],
+  "operations": [
+    {
+      "key": "orders.list",
+      "apiDocumentId": "orders-doc",
+      "operation_id": "listOrders",
+      "method": "GET",
+      "path": "/orders/{orderId}",
+      "role": "list",
+      "parameterMapping": {
+        "path": [
+          {
+            "param": "orderId",
+            "fieldKey": "orderId"
+          }
+        ]
+      }
+    },
+    {
+      "key": "orders.batch",
+      "apiDocumentId": "orders-doc",
+      "operation_id": "batchOrders",
+      "method": "POST",
+      "path": "/orders/batch",
+      "role": "batch",
+      "batch": {
+        "type": "ids",
+        "dataSourceRef": "primary",
+        "idsFieldKey": "orderId",
+        "target": {
+          "in": "body",
+          "param": "ids"
+        }
+      },
+      "bodySchema": [
+        {
+          "key": "ids",
+          "type": "string"
+        }
+      ],
+      "parameterMapping": {
+        "body": [
+          {
+            "param": "ids",
+            "bodyFieldKey": "ids"
+          }
+        ]
+      }
+    }
+  ],
+  "views": [
+    {
+      "key": "ordersTable",
+      "type": "list",
+      "dataSourceRef": "primary",
+      "fieldKeys": ["orderId"]
+    }
+  ]
+}

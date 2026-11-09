@@ -1,0 +1,55 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { compileFromFile } from "json-schema-to-typescript";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const schemaPath = path.join(root, "contracts/page-definition-v2.schema.json");
+const outputPath = path.join(root, "src/types/generated/pageDefinitionV2.ts");
+const schemaModulePath = path.join(root, "src/types/generated/pageDefinitionV2Schema.ts");
+const schemaValue = JSON.parse(await fs.readFile(schemaPath, "utf8"));
+const generated = await compileFromFile(schemaPath, {
+  bannerComment: "/* Generated from contracts/page-definition-v2.schema.json. Do not edit. */",
+  style: { semi: true, singleQuote: false, trailingComma: "all" },
+});
+const generatedSchemaModule =
+  `/* Generated from contracts/page-definition-v2.schema.json. Do not edit. */\n` +
+  `export const pageDefinitionV2Schema = ${JSON.stringify(schemaValue, null, 2)} as const;\n`;
+const check = process.argv.includes("--check");
+const generatedOutputs = [
+  [outputPath, generated],
+  [schemaModulePath, generatedSchemaModule],
+];
+if (check) {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "page-contract-"));
+  try {
+    let stale = false;
+    for (const [expectedPath, content] of generatedOutputs) {
+      const tempPath = path.join(tempDir, path.basename(expectedPath));
+      await fs.writeFile(tempPath, content, "utf8");
+      let existing;
+      try {
+        existing = await fs.readFile(expectedPath, "utf8");
+      } catch {
+        console.error(`Missing generated file: ${path.relative(root, expectedPath)}`);
+        stale = true;
+        continue;
+      }
+      if (existing !== (await fs.readFile(tempPath, "utf8"))) {
+        console.error(`Generated contract is stale: ${path.relative(root, expectedPath)}`);
+        stale = true;
+      }
+    }
+    if (stale) process.exitCode = 1;
+    else console.log("Verified generated TypeScript types and schema module");
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+} else {
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await Promise.all(generatedOutputs.map(([file, content]) => fs.writeFile(file, content, "utf8")));
+  console.log(
+    `Generated ${path.relative(root, outputPath)} and ${path.relative(root, schemaModulePath)}`,
+  );
+}

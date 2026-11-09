@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "title": "Orders",
+  "description": "Order list",
+  "dataSources": {
+    "primary": {
+      "operationRef": "orders.list",
+      "itemsPointer": "/data/items",
+      "rowKeyPointer": "/id"
+    }
+  },
+  "fields": [{ "key": "orderId", "label": "Order ID", "valuePointer": "/id", "type": "string" }],
+  "filters": [],
+  "operations": [
+    {
+      "key": "orders.list",
+      "apiDocumentId": "orders-doc",
+      "operation_id": "listOrders",
+      "method": "GET",
+      "path": "/orders/{orderId}",
+      "role": "list",
+      "parameterMapping": { "path": [{ "param": "other", "fieldKey": "orderId" }] }
+    }
+  ],
+  "views": [
+    { "key": "ordersTable", "type": "list", "dataSourceRef": "primary", "fieldKeys": ["orderId"] }
+  ]
+}

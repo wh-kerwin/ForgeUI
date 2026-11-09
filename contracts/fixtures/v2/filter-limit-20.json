@@ -1,0 +1,181 @@
+{
+  "version": 2,
+  "title": "Orders",
+  "description": "Order list",
+  "dataSources": {
+    "primary": {
+      "operationRef": "orders.list",
+      "itemsPointer": "/data/items",
+      "totalPointer": "/data/total",
+      "rowKeyPointer": "/id"
+    }
+  },
+  "fields": [
+    {
+      "key": "orderId",
+      "label": "Order ID",
+      "valuePointer": "/id",
+      "type": "string"
+    }
+  ],
+  "filters": [
+    {
+      "key": "f0",
+      "fieldKey": "orderId",
+      "queryParam": "p0",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f1",
+      "fieldKey": "orderId",
+      "queryParam": "p1",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f2",
+      "fieldKey": "orderId",
+      "queryParam": "p2",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f3",
+      "fieldKey": "orderId",
+      "queryParam": "p3",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f4",
+      "fieldKey": "orderId",
+      "queryParam": "p4",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f5",
+      "fieldKey": "orderId",
+      "queryParam": "p5",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f6",
+      "fieldKey": "orderId",
+      "queryParam": "p6",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f7",
+      "fieldKey": "orderId",
+      "queryParam": "p7",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f8",
+      "fieldKey": "orderId",
+      "queryParam": "p8",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f9",
+      "fieldKey": "orderId",
+      "queryParam": "p9",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f10",
+      "fieldKey": "orderId",
+      "queryParam": "p10",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f11",
+      "fieldKey": "orderId",
+      "queryParam": "p11",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f12",
+      "fieldKey": "orderId",
+      "queryParam": "p12",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f13",
+      "fieldKey": "orderId",
+      "queryParam": "p13",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f14",
+      "fieldKey": "orderId",
+      "queryParam": "p14",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f15",
+      "fieldKey": "orderId",
+      "queryParam": "p15",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f16",
+      "fieldKey": "orderId",
+      "queryParam": "p16",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f17",
+      "fieldKey": "orderId",
+      "queryParam": "p17",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f18",
+      "fieldKey": "orderId",
+      "queryParam": "p18",
+      "operator": "eq",
+      "inputType": "string"
+    },
+    {
+      "key": "f19",
+      "fieldKey": "orderId",
+      "queryParam": "p19",
+      "operator": "eq",
+      "inputType": "string"
+    }
+  ],
+  "operations": [
+    {
+      "key": "orders.list",
+      "apiDocumentId": "orders-doc",
+      "operation_id": "listOrders",
+      "method": "GET",
+      "path": "/orders",
+      "role": "list"
+    }
+  ],
+  "views": [
+    {
+      "key": "ordersTable",
+      "type": "list",
+      "dataSourceRef": "primary",
+      "fieldKeys": ["orderId"]
+    }
+  ]
+}

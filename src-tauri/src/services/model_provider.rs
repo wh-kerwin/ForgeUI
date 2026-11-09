@@ -28,6 +28,8 @@ pub struct ModelConfigInput {
 
 #[derive(Debug, Deserialize)]
 pub struct GenerateInput {
+    #[serde(default = "default_contract_version")]
+    pub contract_version: u8,
     pub prompt: String,
     pub base_url: String,
     pub protocol: String,
@@ -227,17 +229,11 @@ impl From<String> for GenerationFailure {
     }
 }
 
-fn finish_generation(
-    content: &str,
+fn finalize_v1_spec(
+    mut spec: PageSpec,
     allowed: Option<&[AllowedOperation]>,
     prompt: &str,
-) -> Result<GenerationResult, GenerationFailure> {
-    let decoded =
-        page_schema::decode_page_spec_detailed(content).map_err(|issues| GenerationFailure {
-            issues,
-            retryable: true,
-        })?;
-    let mut spec = decoded.page;
+) -> Result<PageSpec, GenerationFailure> {
     validate_operation_bindings(&spec.operations, &spec.batch_actions, allowed).map_err(|_| {
         GenerationFailure {
             issues: vec![generation_issue(
@@ -260,6 +256,20 @@ fn finish_generation(
         )],
         retryable: true,
     })?;
+    Ok(spec)
+}
+
+fn finish_generation(
+    content: &str,
+    allowed: Option<&[AllowedOperation]>,
+    prompt: &str,
+) -> Result<GenerationResult, GenerationFailure> {
+    let decoded =
+        page_schema::decode_page_spec_detailed(content).map_err(|issues| GenerationFailure {
+            issues,
+            retryable: true,
+        })?;
+    let spec = finalize_v1_spec(decoded.page, allowed, prompt)?;
     Ok(GenerationResult {
         page: spec,
         generation_source: if decoded.repaired {
@@ -272,10 +282,131 @@ fn finish_generation(
     })
 }
 
+/// Version tags are deliberately the explicit `V1`/`V2` variant names: this
+/// envelope is opt-in and has no legacy camelCase consumers to stay compatible with.
+#[derive(Debug, Serialize)]
+#[serde(tag = "contractVersion")]
+pub enum GeneratedDocument {
+    V1 {
+        page: PageSpec,
+    },
+    V2 {
+        page: crate::domain::page_definition_v2_types::PageDefinitionV2,
+    },
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionedGenerationResult {
+    pub document: GeneratedDocument,
+    pub generation_source: String,
+    pub issues: Vec<crate::domain::page_spec::PageIssue>,
+    pub repaired: bool,
+}
+
+fn finish_versioned_generation(
+    content: &str,
+    version: u8,
+    allowed: Option<&[AllowedOperation]>,
+    prompt: &str,
+) -> Result<VersionedGenerationResult, GenerationFailure> {
+    use crate::domain::page_document::{decode_page_document, PageDocument};
+    let decoded = decode_page_document(content).map_err(|issues| GenerationFailure {
+        issues,
+        retryable: true,
+    })?;
+    let document = match (version, decoded.page) {
+        // Normally v1 is dispatched to finish_generation before this point;
+        // the defensive branch still applies the complete legacy host rules.
+        (1, PageDocument::V1(spec)) => GeneratedDocument::V1 {
+            page: finalize_v1_spec(spec, allowed, prompt)?,
+        },
+        (2, PageDocument::V2(page)) => {
+            for operation in &page.operations {
+                let method = serde_json::to_value(operation.method).expect("method serializes");
+                if !allowed.unwrap_or_default().iter().any(|candidate| {
+                    candidate.api_document_id.as_deref() == Some(operation.api_document_id.as_str())
+                        && candidate.operation_id == operation.operation_id
+                        && method.as_str() == Some(candidate.method.as_str())
+                        && candidate.path == operation.path
+                }) {
+                    return Err(GenerationFailure {
+                        issues: vec![generation_issue(
+                            "permission",
+                            "generation.unauthorized_binding",
+                            "模型引用了未授权的 API 操作，页面未采用",
+                        )],
+                        retryable: true,
+                    });
+                }
+            }
+            GeneratedDocument::V2 { page }
+        }
+        _ => {
+            return Err(GenerationFailure {
+                issues: vec![generation_issue(
+                    "schema",
+                    "generation.version_mismatch",
+                    "模型返回页面版本与请求不一致，页面未采用",
+                )],
+                retryable: true,
+            })
+        }
+    };
+    Ok(VersionedGenerationResult {
+        document,
+        generation_source: if decoded.repaired {
+            "repaired"
+        } else {
+            "model"
+        }
+        .into(),
+        issues: decoded.issues,
+        repaired: decoded.repaired,
+    })
+}
+
+fn default_contract_version() -> u8 {
+    1
+}
+
+fn require_legacy_version(input: &GenerateInput) -> Result<(), GenerationFailure> {
+    if input.contract_version != 1 {
+        return Err(GenerationFailure {
+            issues: vec![generation_issue(
+                "schema",
+                "generation.versioned_command_required",
+                "旧生成命令仅支持 v1；请使用 versioned 生成命令显式请求 v2",
+            )],
+            retryable: false,
+        });
+    }
+    Ok(())
+}
+
 pub async fn generate_page_detailed(
     input: GenerateInput,
 ) -> Result<GenerationResult, GenerationFailure> {
+    require_legacy_version(&input)?;
     generate_page_with_delta(input, None::<fn(&str) -> Result<(), String>>).await
+}
+
+pub async fn generate_page_versioned(
+    input: GenerateInput,
+) -> Result<VersionedGenerationResult, GenerationFailure> {
+    generate_versioned_with_delta::<fn(&str) -> Result<(), String>>(input, None).await
+}
+
+pub async fn generate_page_stream_versioned<F>(
+    input: GenerateInput,
+    on_delta: F,
+) -> Result<VersionedGenerationResult, GenerationFailure>
+where
+    F: FnMut(&str) -> Result<(), String>,
+{
+    let mut input = input;
+    input.streaming = Some(true);
+    generate_versioned_with_delta(input, Some(on_delta)).await
 }
 
 pub async fn generate_page(input: GenerateInput) -> Result<PageSpec, String> {
@@ -314,6 +445,7 @@ pub async fn generate_page_stream_detailed<F>(
 where
     F: FnMut(&str) -> Result<(), String>,
 {
+    require_legacy_version(&input)?;
     input.streaming = Some(true);
     generate_page_with_delta(input, Some(on_delta)).await
 }
@@ -347,17 +479,156 @@ fn validate_prompt_budget(input: &GenerateInput) -> Result<(), GenerationFailure
 
 async fn generate_page_with_delta<F>(
     input: GenerateInput,
-    mut on_delta: Option<F>,
+    on_delta: Option<F>,
 ) -> Result<GenerationResult, GenerationFailure>
 where
     F: FnMut(&str) -> Result<(), String>,
 {
+    let content = request_page_content(input, on_delta).await?;
+    finish_generation(&content.text, content.allowed.as_deref(), &content.prompt)
+}
+
+async fn generate_versioned_with_delta<F>(
+    input: GenerateInput,
+    on_delta: Option<F>,
+) -> Result<VersionedGenerationResult, GenerationFailure>
+where
+    F: FnMut(&str) -> Result<(), String>,
+{
+    if input.contract_version != 1 && input.contract_version != 2 {
+        return Err(GenerationFailure {
+            issues: vec![generation_issue(
+                "schema",
+                "generation.version_unsupported",
+                "仅支持页面版本 v1 或 v2",
+            )],
+            retryable: false,
+        });
+    }
+    let content = request_page_content(input, on_delta).await?;
+    if content.contract_version == 1 {
+        let result = finish_generation(&content.text, content.allowed.as_deref(), &content.prompt)?;
+        let repaired = result.generation_source == "repaired";
+        return Ok(VersionedGenerationResult {
+            document: GeneratedDocument::V1 { page: result.page },
+            generation_source: result.generation_source,
+            issues: result.issues,
+            repaired,
+        });
+    }
+    if !content.strict_v2 {
+        // Prompt/Anthropic/streamed results keep the shared decoder's envelope
+        // repair path and are validated directly against the authoritative schema.
+        return finish_versioned_generation(
+            &content.text,
+            2,
+            content.allowed.as_deref(),
+            &content.prompt,
+        );
+    }
+    if content.text.len() > crate::domain::page_document::MAX_PAGE_DOCUMENT_BYTES {
+        return Err(GenerationFailure {
+            issues: vec![crate::domain::page_spec::PageIssue::error(
+                "PAGE_INPUT_LIMIT_EXCEEDED",
+                "",
+                "syntax",
+                "页面 JSON 超过输入大小限制",
+            )],
+            retryable: true,
+        });
+    }
+    let raw: serde_json::Value =
+        serde_json::from_str(&content.text).map_err(|_| GenerationFailure {
+            issues: vec![generation_issue(
+                "syntax",
+                "generation.response_json",
+                "模型响应格式无法解析，请重试生成",
+            )],
+            retryable: true,
+        })?;
+    let (value, adapted) =
+        page_schema::adapt_v2_strict_output(raw).map_err(|_| GenerationFailure {
+            issues: vec![generation_issue(
+                "schema",
+                "generation.strict_projection_ambiguous",
+                "模型 strict 响应无法安全适配，页面未采用",
+            )],
+            retryable: true,
+        })?;
+    let mut result = finish_versioned_generation(
+        &value.to_string(),
+        2,
+        content.allowed.as_deref(),
+        &content.prompt,
+    )?;
+    if adapted {
+        result.repaired = true;
+        result.generation_source = "repaired".into();
+        result.issues.push(crate::domain::page_spec::PageIssue {
+            code: "PROVIDER_OPTIONAL_NULL_ADAPTED".into(),
+            path: "".into(),
+            severity: "warning".into(),
+            stage: "syntax".into(),
+            message:
+                "已移除 strict provider 对应契约中 optional 属性的 null；其余内容经权威契约验证"
+                    .into(),
+            suggested_fix: None,
+        });
+    }
+    Ok(result)
+}
+
+struct GenerationContent {
+    text: String,
+    allowed: Option<Vec<AllowedOperation>>,
+    prompt: String,
+    strict_v2: bool,
+    contract_version: u8,
+}
+
+/// Only the real OpenAI non-streaming strict-v2 transport uses the projection
+/// and its reverse adapter. Anthropic, prompt mode and streaming keep the
+/// authoritative schema and never accept provider-side null repair.
+fn uses_v2_strict_transport(input: &GenerateInput) -> bool {
+    input.contract_version == 2
+        && input.protocol == "openai"
+        && input.structured_output.as_deref().unwrap_or("jsonObject") == "jsonSchema"
+        && !input.streaming.unwrap_or(false)
+}
+
+/// v1 prompt rules describe the legacy rows/columns/stats shape and must not
+/// be sent with a v2 request. v2 keeps the authoritative schema as its only
+/// structural source; strict-subset gaps stay with host validation.
+fn v2_page_definition_prompt(schema: &serde_json::Value, custom_prompt: &str) -> String {
+    format!(
+        "You generate ONLY valid JSON matching this PageDefinitionV2 schema: {schema}. Emit a pure page definition with version 2: dataSources, typed fields, filters, views and operation bindings matching the schema exactly. Never emit rows, columns arrays, statistics values, business records, metrics, credentials or executable code; data is loaded at runtime from bound operations. Use only operations supplied in the authorized OpenAPI context and preserve their apiDocumentId, operation_id, method and path exactly; if a capability is missing, explain the gap instead of inventing a binding. Every field and view reference must resolve to a declared key; omit optional properties rather than inventing structure. Constraints that the provider strict subset cannot express are rechecked by the host. Never include markdown or code fences. {custom_prompt}"
+    )
+}
+
+async fn request_page_content<F>(
+    input: GenerateInput,
+    mut on_delta: Option<F>,
+) -> Result<GenerationContent, GenerationFailure>
+where
+    F: FnMut(&str) -> Result<(), String>,
+{
+    let strict_v2 = uses_v2_strict_transport(&input);
+    let contract_version = input.contract_version;
     validate_prompt_budget(&input)?;
     validate_transport(&input.base_url, &input.protocol, &input.model)?;
     let key = resolve_api_key(input.api_key, input.secret_ref)?;
-    let schema = page_schema::schema();
+    let schema = if input.contract_version == 2 {
+        page_schema::v2_provider_schema(strict_v2)
+    } else {
+        page_schema::schema()
+    };
     let custom_prompt = input.system_prompt.unwrap_or_default();
     let system = format!("You generate ONLY valid JSON matching this PageSpec schema: {schema}. filters and columns MUST be arrays of strings, never objects. rows MUST be arrays of arrays of strings, never objects. stats values MUST be strings. Every view column reference (defaultSort.column, chart axes/group, and kanban group/card fields) MUST exactly match one string in columns; omit a view when its required columns are unavailable. Do not fabricate rows, statistics, or metric values; data is loaded from bound operations. Use at most 10 columns and 3 top-level views; keep every view reference within columns. Use layout=full by default so filters and stats appear above the main view; use layout=sidebar only when the user explicitly requests a sidebar or side-by-side filter layout. Explicit user requests for modal/dialog detail or editing MUST be reflected in interaction.detail or interaction.update. When an existing PageSpec is provided, preserve its operation bindings exactly; never invent an apiDocumentId, operation_id, method, or path. Every new operation and batch action binding MUST copy apiDocumentId from the matching authorized OpenAPI operation. If no authorized operation exists for a requested action, explain the missing capability and do not create that binding. Never include markdown or code. Do not invent credentials or execute actions. The UI is a read-only preview. {}", custom_prompt);
+    let system = if input.contract_version == 2 {
+        v2_page_definition_prompt(&schema, &custom_prompt)
+    } else {
+        system
+    };
     let context = input
         .openapi_context
         .unwrap_or_else(|| "No OpenAPI context provided".into());
@@ -373,7 +644,7 @@ where
         // with streaming. The strict prompt plus schema validation still
         // protects the result, so omit this optional field for streamed calls.
         if !streaming && output_mode == "jsonSchema" {
-            body["response_format"] = serde_json::json!({"type":"json_schema", "json_schema": {"name":"PageSpec", "strict":true, "schema":schema}});
+            body["response_format"] = serde_json::json!({"type":"json_schema", "json_schema": {"name": if input.contract_version == 2 { "PageDefinitionV2" } else { "PageSpec" }, "strict":true, "schema":schema.clone()}});
         } else if !streaming && output_mode != "prompt" {
             body["response_format"] = serde_json::json!({"type":"json_object"});
         }
@@ -439,7 +710,13 @@ where
         (content, Some(diagnostic))
     };
     let _ = response_diagnostic; // Shape diagnostics never cross the generation boundary.
-    finish_generation(&content, input.allowed_operations.as_deref(), &input.prompt)
+    Ok(GenerationContent {
+        text: content,
+        allowed: input.allowed_operations,
+        prompt: input.prompt,
+        strict_v2,
+        contract_version,
+    })
 }
 
 async fn read_streaming_sse<F>(
@@ -892,6 +1169,380 @@ fn parse_sse_content(body: &str, protocol: &str) -> Result<String, String> {
     let mut decoder = SseDecoder::default();
     decoder.push(body.as_bytes(), protocol, &mut |_| Ok(()))?;
     decoder.finish(protocol, &mut |_| Ok(()))
+}
+
+#[cfg(test)]
+mod versioned_tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    fn v2() -> Value {
+        serde_json::from_str(include_str!(
+            "../../../contracts/fixtures/v2/minimal-v2.json"
+        ))
+        .unwrap()
+    }
+
+    fn allowed(page: &Value) -> Vec<AllowedOperation> {
+        page["operations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|op| AllowedOperation {
+                api_document_id: Some(op["apiDocumentId"].as_str().unwrap().into()),
+                operation_id: op["operation_id"].as_str().unwrap().into(),
+                method: op["method"].as_str().unwrap().into(),
+                path: op["path"].as_str().unwrap().into(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn versioned_finish_preserves_v2_and_rejects_wrong_version_and_bindings() {
+        let page = v2();
+        let authorized = allowed(&page);
+        let result = finish_versioned_generation(
+            &page.to_string(),
+            2,
+            Some(&authorized),
+            "sidebar dark modal",
+        )
+        .unwrap();
+        let wire = serde_json::to_value(result).unwrap();
+        assert_eq!(wire["document"]["contractVersion"], "V2");
+        assert_eq!(wire["document"]["page"], page);
+        assert_eq!(wire["generationSource"], "model");
+        assert_eq!(wire["repaired"], false);
+        assert!(finish_versioned_generation(&page.to_string(), 1, Some(&authorized), "").is_err());
+        for field in ["apiDocumentId", "operation_id", "method", "path"] {
+            let mut invalid = page.clone();
+            invalid["operations"][0][field] = json!(if field == "method" {
+                "POST"
+            } else {
+                "not-authorized"
+            });
+            assert!(
+                finish_versioned_generation(&invalid.to_string(), 2, Some(&authorized), "")
+                    .is_err(),
+                "{field}"
+            );
+        }
+        assert!(finish_versioned_generation(&page.to_string(), 2, None, "").is_err());
+        let mut invalid = page.clone();
+        invalid["rows"] = json!([]);
+        assert!(
+            finish_versioned_generation(&invalid.to_string(), 2, Some(&authorized), "").is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn legacy_rejects_explicit_v2_before_transport() {
+        let input = serde_json::from_value(serde_json::json!({
+            "prompt": "orders", "base_url": "http://127.0.0.1:1",
+            "protocol": "openai", "model": "fixture", "contract_version": 2
+        }))
+        .unwrap();
+        let failure = super::generate_page_detailed(input).await.unwrap_err();
+        assert_eq!(
+            failure.issues[0].code,
+            "generation.versioned_command_required"
+        );
+    }
+
+    #[test]
+    fn strict_transport_is_limited_to_openai_non_streaming_v2() {
+        let mut input: GenerateInput = serde_json::from_value(json!({
+            "prompt": "orders", "base_url": "http://127.0.0.1:1",
+            "protocol": "openai", "model": "fixture", "contract_version": 2,
+            "structured_output": "jsonSchema"
+        }))
+        .unwrap();
+        assert!(uses_v2_strict_transport(&input));
+        input.streaming = Some(true);
+        assert!(!uses_v2_strict_transport(&input));
+        input.streaming = None;
+        input.structured_output = Some("prompt".into());
+        assert!(!uses_v2_strict_transport(&input));
+        input.structured_output = Some("jsonSchema".into());
+        input.protocol = "anthropic".into();
+        assert!(!uses_v2_strict_transport(&input));
+        input.protocol = "custom-compat".into();
+        assert!(!uses_v2_strict_transport(&input));
+        input.protocol = "openai".into();
+        input.contract_version = 1;
+        assert!(!uses_v2_strict_transport(&input));
+    }
+
+    fn local_provider(
+        body: String,
+        content_type: &str,
+    ) -> (String, std::thread::JoinHandle<String>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let content_type = content_type.to_string();
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0u8; 4096];
+            loop {
+                let count = socket.read(&mut buffer).unwrap();
+                if count == 0 {
+                    break;
+                }
+                request.extend_from_slice(&buffer[..count]);
+                if let Some(header_end) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n")
+                {
+                    let headers = String::from_utf8_lossy(&request[..header_end]);
+                    let length = headers
+                        .lines()
+                        .find_map(|line| {
+                            line.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .and_then(|value| value.trim().parse::<usize>().ok())
+                        })
+                        .unwrap();
+                    if request.len() >= header_end + 4 + length {
+                        break;
+                    }
+                }
+            }
+            let captured = String::from_utf8_lossy(&request).into_owned();
+            write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+            captured
+        });
+        (format!("http://{address}"), server)
+    }
+
+    fn openai_response(text: &str) -> String {
+        json!({"choices":[{"message":{"content": text}}]}).to_string()
+    }
+
+    fn anthropic_response(text: &str) -> String {
+        json!({"content":[{"type":"text","text": text}], "stop_reason":"end_turn"}).to_string()
+    }
+
+    fn v2_input(
+        base_url: &str,
+        protocol: &str,
+        output_mode: Option<&str>,
+        allowed: &[AllowedOperation],
+    ) -> GenerateInput {
+        let mut value = json!({
+            "prompt": "orders", "base_url": base_url, "protocol": protocol, "model": "fixture",
+            "contract_version": 2, "streaming": false, "allowed_operations": allowed
+        });
+        if let Some(mode) = output_mode {
+            value["structured_output"] = json!(mode);
+        }
+        serde_json::from_value(value).unwrap()
+    }
+
+    fn strict_wire(page: &Value) -> Value {
+        let mut wire = page.clone();
+        wire["layout"] = Value::Null;
+        wire["dataSources"]["primary"]["totalPointer"] = Value::Null;
+        wire["views"][0]["defaultSort"] = Value::Null;
+        wire
+    }
+
+    #[tokio::test]
+    async fn openai_strict_v2_adapts_only_optional_nulls_then_rechecks_host_rules() {
+        let page = v2();
+        let authorized = allowed(&page);
+        let wire = strict_wire(&page);
+        let mut expected = page.clone();
+        expected["dataSources"]["primary"]
+            .as_object_mut()
+            .unwrap()
+            .remove("totalPointer");
+        let body = openai_response(&wire.to_string());
+        let (base_url, server) = local_provider(body.clone(), "application/json");
+        let result = generate_page_versioned(v2_input(
+            &base_url,
+            "openai",
+            Some("jsonSchema"),
+            &authorized,
+        ))
+        .await
+        .unwrap();
+        let request = server.join().unwrap();
+        assert!(request.starts_with("POST /chat/completions"));
+        assert!(request.contains("\"name\":\"PageDefinitionV2\""));
+        assert!(request.contains("\"strict\":true"));
+        assert!(request.contains("\"anyOf\""));
+        assert!(!request.contains("rows MUST be arrays"));
+        let encoded = serde_json::to_value(&result).unwrap();
+        assert_eq!(encoded["document"]["contractVersion"], "V2");
+        assert_eq!(encoded["document"]["page"], expected);
+        assert_eq!(encoded["generationSource"], "repaired");
+        assert_eq!(encoded["repaired"], true);
+        assert!(encoded["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|issue| issue["code"] == "PROVIDER_OPTIONAL_NULL_ADAPTED"));
+
+        let (base_url, server) = local_provider(body.clone(), "application/json");
+        let failure =
+            generate_page_versioned(v2_input(&base_url, "openai", Some("jsonSchema"), &[]))
+                .await
+                .unwrap_err();
+        server.join().unwrap();
+        assert_eq!(failure.issues[0].code, "generation.unauthorized_binding");
+
+        let mut required_null = wire.clone();
+        required_null["title"] = Value::Null;
+        let (base_url, server) = local_provider(
+            openai_response(&required_null.to_string()),
+            "application/json",
+        );
+        let failure = generate_page_versioned(v2_input(
+            &base_url,
+            "openai",
+            Some("jsonSchema"),
+            &authorized,
+        ))
+        .await
+        .unwrap_err();
+        assert_eq!(failure.issues[0].code, "PAGE_V2_SCHEMA_INVALID");
+        server.join().unwrap();
+
+        let mut ambiguous = wire;
+        ambiguous["views"][0]["type"] = Value::Null;
+        let (base_url, server) =
+            local_provider(openai_response(&ambiguous.to_string()), "application/json");
+        let failure = generate_page_versioned(v2_input(
+            &base_url,
+            "openai",
+            Some("jsonSchema"),
+            &authorized,
+        ))
+        .await
+        .unwrap_err();
+        server.join().unwrap();
+        assert_eq!(
+            failure.issues[0].code,
+            "generation.strict_projection_ambiguous"
+        );
+    }
+
+    #[tokio::test]
+    async fn anthropic_v2_uses_authoritative_schema_without_reverse_adapter() {
+        let page = v2();
+        let authorized = allowed(&page);
+        let (base_url, server) =
+            local_provider(anthropic_response(&page.to_string()), "application/json");
+        let result = generate_page_versioned(v2_input(&base_url, "anthropic", None, &authorized))
+            .await
+            .unwrap();
+        let request = server.join().unwrap();
+        assert!(request.starts_with("POST /messages"));
+        assert!(!request.to_ascii_lowercase().contains("response_format"));
+        assert!(request.contains("PageDefinitionV2"));
+        assert!(request.contains("additionalProperties"));
+        let encoded = serde_json::to_value(&result).unwrap();
+        assert_eq!(encoded["document"]["contractVersion"], "V2");
+        assert_eq!(encoded["document"]["page"], page);
+        assert_eq!(encoded["generationSource"], "model");
+        assert_eq!(encoded["repaired"], false);
+
+        let mut with_null = page;
+        with_null["layout"] = Value::Null;
+        let (base_url, server) = local_provider(
+            anthropic_response(&with_null.to_string()),
+            "application/json",
+        );
+        let failure = generate_page_versioned(v2_input(&base_url, "anthropic", None, &authorized))
+            .await
+            .unwrap_err();
+        assert_eq!(failure.issues[0].code, "PAGE_V2_SCHEMA_INVALID");
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn prompt_mode_v2_keeps_shared_envelope_repair() {
+        let page = v2();
+        let authorized = allowed(&page);
+        let fenced = format!("```json\n{page}\n```");
+        let (base_url, server) = local_provider(openai_response(&fenced), "application/json");
+        let result =
+            generate_page_versioned(v2_input(&base_url, "openai", Some("prompt"), &authorized))
+                .await
+                .unwrap();
+        let request = server.join().unwrap();
+        assert!(!request.to_ascii_lowercase().contains("response_format"));
+        let encoded = serde_json::to_value(&result).unwrap();
+        assert_eq!(encoded["document"]["contractVersion"], "V2");
+        assert_eq!(encoded["document"]["page"], page);
+        assert_eq!(encoded["generationSource"], "repaired");
+        assert_eq!(encoded["repaired"], true);
+        assert!(encoded["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|issue| issue["code"] == "PAGE_JSON_ENVELOPE_REMOVED"));
+    }
+
+    #[tokio::test]
+    async fn streamed_v2_never_uses_strict_projection_or_adapter() {
+        let page = v2();
+        let authorized = allowed(&page);
+        let event = json!({"choices":[{"delta":{"content": page.to_string()}}]}).to_string();
+        let sse = format!("data: {event}\n\ndata: [DONE]\n\n");
+        let (base_url, server) = local_provider(sse, "text/event-stream");
+        let mut deltas = String::new();
+        let result = generate_page_stream_versioned(
+            v2_input(&base_url, "openai", Some("jsonSchema"), &authorized),
+            |delta| {
+                deltas.push_str(delta);
+                Ok(())
+            },
+        )
+        .await
+        .unwrap();
+        let request = server.join().unwrap();
+        assert!(!request.to_ascii_lowercase().contains("response_format"));
+        assert!(deltas.contains("Orders"));
+        let encoded = serde_json::to_value(&result).unwrap();
+        assert_eq!(encoded["document"]["contractVersion"], "V2");
+        assert_eq!(encoded["generationSource"], "model");
+        assert_eq!(encoded["repaired"], false);
+    }
+
+    #[tokio::test]
+    async fn versioned_v1_path_preserves_legacy_repair_and_tag() {
+        let v1 = json!({"title":"Orders","description":"","filters":[],"stats":[],"columns":["id"],"rows":[]});
+        let fenced = format!("```json\n{v1}\n```");
+        let (base_url, server) = local_provider(openai_response(&fenced), "application/json");
+        let input: GenerateInput = serde_json::from_value(json!({
+            "prompt": "orders", "base_url": base_url, "protocol": "openai",
+            "model": "fixture", "contract_version": 1
+        }))
+        .unwrap();
+        let result = generate_page_versioned(input).await.unwrap();
+        server.join().unwrap();
+        let encoded = serde_json::to_value(&result).unwrap();
+        assert_eq!(encoded["document"]["contractVersion"], "V1");
+        assert_eq!(encoded["document"]["page"]["title"], "Orders");
+        assert_eq!(encoded["generationSource"], "repaired");
+        assert_eq!(encoded["repaired"], true);
+    }
+
+    #[tokio::test]
+    async fn versioned_command_rejects_unknown_contract_version_before_network() {
+        let input: GenerateInput = serde_json::from_value(json!({
+            "prompt": "orders", "base_url": "http://127.0.0.1:1", "protocol": "openai",
+            "model": "fixture", "contract_version": 3
+        }))
+        .unwrap();
+        let failure = generate_page_versioned(input).await.unwrap_err();
+        assert_eq!(failure.issues[0].code, "generation.version_unsupported");
+        assert!(!failure.retryable);
+    }
 }
 
 #[cfg(test)]

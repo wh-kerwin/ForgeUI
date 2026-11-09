@@ -1,0 +1,536 @@
+{
+  "cases": [
+    {
+      "id": "minimal-v2",
+      "file": "minimal-v2.json",
+      "accepted": true
+    },
+    {
+      "id": "unknown-version",
+      "file": "unknown-version.json",
+      "accepted": false
+    },
+    {
+      "id": "field-limit-50",
+      "file": "field-limit-50.json",
+      "accepted": true
+    },
+    {
+      "id": "field-limit-51",
+      "file": "field-limit-51.json",
+      "accepted": false
+    },
+    {
+      "id": "filter-limit-20",
+      "file": "filter-limit-20.json",
+      "accepted": true
+    },
+    {
+      "id": "filter-limit-21",
+      "file": "filter-limit-21.json",
+      "accepted": false
+    },
+    {
+      "id": "operation-limit-20",
+      "file": "operation-limit-20.json",
+      "accepted": true
+    },
+    {
+      "id": "operation-limit-21",
+      "file": "operation-limit-21.json",
+      "accepted": false
+    },
+    {
+      "id": "views-limit-10",
+      "file": "views-limit-10.json",
+      "accepted": true
+    },
+    {
+      "id": "views-limit-11",
+      "file": "views-limit-11.json",
+      "accepted": false
+    },
+    {
+      "id": "duplicate-field-key",
+      "file": "duplicate-field-key.json",
+      "accepted": false
+    },
+    {
+      "id": "duplicate-operation-key",
+      "file": "duplicate-operation-key.json",
+      "accepted": false
+    },
+    {
+      "id": "bad-operation-reference",
+      "file": "bad-operation-reference.json",
+      "accepted": false
+    },
+    {
+      "id": "duplicate-view-key",
+      "file": "duplicate-view-key.json",
+      "accepted": false
+    },
+    {
+      "id": "unknown-root-property",
+      "file": "unknown-root-property.json",
+      "accepted": false
+    },
+    {
+      "id": "invalid-pointer-escape",
+      "file": "invalid-pointer-escape.json",
+      "accepted": false
+    },
+    {
+      "id": "pointer-root-array-and-escapes",
+      "file": "pointer-root-array-and-escapes.json",
+      "accepted": true
+    },
+    {
+      "id": "literal-stats-forbidden",
+      "file": "literal-stats-forbidden.json",
+      "accepted": false
+    },
+    {
+      "id": "rows-forbidden",
+      "file": "rows-forbidden.json",
+      "accepted": false
+    },
+    {
+      "id": "deep-view-rejected",
+      "file": "deep-view-rejected.json",
+      "accepted": false
+    },
+    {
+      "id": "nested-view-depth-three",
+      "file": "nested-view-depth-three.json",
+      "accepted": true
+    },
+    {
+      "id": "unknown-nested-property",
+      "file": "unknown-nested-property.json",
+      "accepted": false
+    },
+    {
+      "id": "duplicate-filter-key",
+      "file": "duplicate-filter-key.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_DUPLICATE_FILTER_KEY",
+      "issuePath": "/filters/1/key"
+    },
+    {
+      "id": "duplicate-body-field-key",
+      "file": "duplicate-body-field-key.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_DUPLICATE_BODY_FIELD_KEY",
+      "issuePath": "/operations/0/bodySchema/1/key"
+    },
+    {
+      "id": "duplicate-tab-item-key",
+      "file": "duplicate-tab-item-key.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_DUPLICATE_TAB_ITEM_KEY",
+      "issuePath": "/views/0/items/1/key"
+    },
+    {
+      "id": "inverted-number-range",
+      "file": "inverted-number-range.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_CONSTRAINT_RANGE_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/constraints"
+    },
+    {
+      "id": "inverted-length-range",
+      "file": "inverted-length-range.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_CONSTRAINT_RANGE_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/constraints"
+    },
+    {
+      "id": "invalid-role-method-list",
+      "file": "invalid-role-method-list.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_OPERATION_METHOD_INVALID",
+      "issuePath": "/operations/1/method"
+    },
+    {
+      "id": "invalid-role-method-detail",
+      "file": "invalid-role-method-detail.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_OPERATION_METHOD_INVALID",
+      "issuePath": "/operations/1/method"
+    },
+    {
+      "id": "invalid-role-method-read",
+      "file": "invalid-role-method-read.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_OPERATION_METHOD_INVALID",
+      "issuePath": "/operations/1/method"
+    },
+    {
+      "id": "invalid-role-method-stat",
+      "file": "invalid-role-method-stat.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_OPERATION_METHOD_INVALID",
+      "issuePath": "/operations/1/method"
+    },
+    {
+      "id": "invalid-role-method-stats",
+      "file": "invalid-role-method-stats.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_OPERATION_METHOD_INVALID",
+      "issuePath": "/operations/1/method"
+    },
+    {
+      "id": "invalid-role-method-export",
+      "file": "invalid-role-method-export.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_OPERATION_METHOD_INVALID",
+      "issuePath": "/operations/1/method"
+    },
+    {
+      "id": "invalid-role-method-create",
+      "file": "invalid-role-method-create.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_OPERATION_METHOD_INVALID",
+      "issuePath": "/operations/1/method"
+    },
+    {
+      "id": "invalid-role-method-update",
+      "file": "invalid-role-method-update.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_OPERATION_METHOD_INVALID",
+      "issuePath": "/operations/1/method"
+    },
+    {
+      "id": "invalid-role-method-delete",
+      "file": "invalid-role-method-delete.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_OPERATION_METHOD_INVALID",
+      "issuePath": "/operations/1/method"
+    },
+    {
+      "id": "parameter-mapping-valid",
+      "file": "parameter-mapping-valid.json",
+      "accepted": true
+    },
+    {
+      "id": "parameter-mapping-invalid",
+      "file": "parameter-mapping-invalid.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_PARAMETER_MAPPING_PATH_INVALID",
+      "issuePath": "/operations/0/parameterMapping/path/0/param"
+    },
+    {
+      "id": "constraint-type-number",
+      "file": "constraint-type-number.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_CONSTRAINT_TYPE_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/constraints"
+    },
+    {
+      "id": "constraint-type-integer",
+      "file": "constraint-type-integer.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_CONSTRAINT_TYPE_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/constraints"
+    },
+    {
+      "id": "constraint-type-boolean",
+      "file": "constraint-type-boolean.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_CONSTRAINT_TYPE_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/constraints"
+    },
+    {
+      "id": "constraint-type-date",
+      "file": "constraint-type-date.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_CONSTRAINT_TYPE_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/constraints"
+    },
+    {
+      "id": "constraint-type-string",
+      "file": "constraint-type-string.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_CONSTRAINT_TYPE_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/constraints"
+    },
+    {
+      "id": "constraint-type-enum",
+      "file": "constraint-type-enum.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_CONSTRAINT_TYPE_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/constraints"
+    },
+    {
+      "id": "missing-body-enum",
+      "file": "missing-body-enum.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_ENUM_VALUES_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/enumValues"
+    },
+    {
+      "id": "non-enum-values",
+      "file": "non-enum-values.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_ENUM_VALUES_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/enumValues"
+    },
+    {
+      "id": "enum-length-conflict",
+      "file": "enum-length-conflict.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_ENUM_CONSTRAINT_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/enumValues"
+    },
+    {
+      "id": "enum-min-length-decimal",
+      "file": "enum-min-length-decimal.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_ENUM_CONSTRAINT_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/enumValues"
+    },
+    {
+      "id": "enum-min-length-exponent",
+      "file": "enum-min-length-exponent.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_ENUM_CONSTRAINT_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/enumValues"
+    },
+    {
+      "id": "enum-max-length-decimal",
+      "file": "enum-max-length-decimal.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_ENUM_CONSTRAINT_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/enumValues"
+    },
+    {
+      "id": "enum-max-length-exponent",
+      "file": "enum-max-length-exponent.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_ENUM_CONSTRAINT_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/enumValues"
+    },
+    {
+      "id": "integer-empty-range",
+      "file": "integer-empty-range.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_CONSTRAINT_RANGE_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/constraints"
+    },
+    {
+      "id": "pattern-digits",
+      "file": "pattern-digits.json",
+      "accepted": true
+    },
+    {
+      "id": "pattern-letters",
+      "file": "pattern-letters.json",
+      "accepted": true
+    },
+    {
+      "id": "pattern-alphanumeric",
+      "file": "pattern-alphanumeric.json",
+      "accepted": true
+    },
+    {
+      "id": "pattern-slug",
+      "file": "pattern-slug.json",
+      "accepted": true
+    },
+    {
+      "id": "pattern-upper-bound",
+      "file": "pattern-upper-bound.json",
+      "accepted": true
+    },
+    {
+      "id": "pattern-over-bound",
+      "file": "pattern-over-bound.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_PATTERN_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/constraints/pattern"
+    },
+    {
+      "id": "pattern-reversed",
+      "file": "pattern-reversed.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_PATTERN_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/constraints/pattern"
+    },
+    {
+      "id": "pattern-malicious",
+      "file": "pattern-malicious.json",
+      "accepted": false,
+      "schemaAccepted": false
+    },
+    {
+      "id": "pattern-unanchored",
+      "file": "pattern-unanchored.json",
+      "accepted": false,
+      "schemaAccepted": false
+    },
+    {
+      "id": "pattern-no-count",
+      "file": "pattern-no-count.json",
+      "accepted": false,
+      "schemaAccepted": false
+    },
+    {
+      "id": "pattern-enum-conflict",
+      "file": "pattern-enum-conflict.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_ENUM_CONSTRAINT_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/enumValues"
+    },
+    {
+      "id": "required-nullable-valid",
+      "file": "required-nullable-valid.json",
+      "accepted": true
+    },
+    {
+      "id": "batch-delete-no-form",
+      "file": "batch-delete-no-form.json",
+      "accepted": true
+    },
+    {
+      "id": "batch-double-source",
+      "file": "batch-double-source.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_BATCH_TARGET_CONFLICT",
+      "issuePath": "/operations/1/batch/target/param"
+    },
+    {
+      "id": "non-batch-with-batch",
+      "file": "non-batch-with-batch.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_BATCH_ROLE_INVALID",
+      "issuePath": "/operations/1/batch"
+    },
+    {
+      "id": "duplicate-path-mapping",
+      "file": "duplicate-path-mapping.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_PARAMETER_MAPPING_DUPLICATE",
+      "issuePath": "/operations/0/parameterMapping/path/1/param"
+    },
+    {
+      "id": "duplicate-body-mapping",
+      "file": "duplicate-body-mapping.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_PARAMETER_MAPPING_DUPLICATE",
+      "issuePath": "/operations/0/parameterMapping/body/1/param"
+    },
+    {
+      "id": "enum-fields-missing",
+      "file": "enum-fields-missing.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_ENUM_VALUES_INVALID",
+      "issuePath": "/fields/0/enumValues"
+    },
+    {
+      "id": "enum-fields-duplicate",
+      "file": "enum-fields-duplicate.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_ENUM_VALUES_INVALID",
+      "issuePath": "/fields/0/enumValues"
+    },
+    {
+      "id": "enum-fields-empty",
+      "file": "enum-fields-empty.json",
+      "accepted": false,
+      "schemaAccepted": false
+    },
+    {
+      "id": "enum-fields-non-enum",
+      "file": "enum-fields-non-enum.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_ENUM_VALUES_INVALID",
+      "issuePath": "/fields/0/enumValues"
+    },
+    {
+      "id": "enum-body-missing",
+      "file": "enum-body-missing.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_ENUM_VALUES_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/enumValues"
+    },
+    {
+      "id": "enum-body-duplicate",
+      "file": "enum-body-duplicate.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_ENUM_VALUES_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/enumValues"
+    },
+    {
+      "id": "enum-body-empty",
+      "file": "enum-body-empty.json",
+      "accepted": false,
+      "schemaAccepted": false
+    },
+    {
+      "id": "enum-body-non-enum",
+      "file": "enum-body-non-enum.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_ENUM_VALUES_INVALID",
+      "issuePath": "/operations/0/bodySchema/0/enumValues"
+    },
+    {
+      "id": "empty-view-field-arrays",
+      "file": "empty-view-field-arrays.json",
+      "accepted": true
+    },
+    {
+      "id": "duplicate-view-field-array",
+      "file": "duplicate-view-field-array.json",
+      "accepted": false,
+      "schemaAccepted": false
+    },
+    {
+      "id": "all-compatible-constraints",
+      "file": "all-compatible-constraints.json",
+      "accepted": true
+    }
+  ]
+}

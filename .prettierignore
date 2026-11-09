@@ -11,3 +11,10 @@ public/
 # 保留 JSON 数值的原始词法，验证 1.0 / 1e0 的跨宿主解析。
 contracts/fixtures/v1/version-integral-float.json
 contracts/fixtures/v1/version-integral-exponent.json
+contracts/fixtures/v2/enum-min-length-decimal.json
+contracts/fixtures/v2/enum-min-length-exponent.json
+contracts/fixtures/v2/enum-max-length-decimal.json
+contracts/fixtures/v2/enum-max-length-exponent.json
+# 生成产物由 contract:check 逐字节校验，不能被格式化器改写。
+src/types/generated/pageDefinitionV2.ts
+src/types/generated/pageDefinitionV2Schema.ts

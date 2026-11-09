@@ -1,0 +1,94 @@
+{
+  "version": 2,
+  "title": "Orders",
+  "description": "Order list",
+  "dataSources": {
+    "primary": {
+      "operationRef": "orders.list",
+      "itemsPointer": "/data/items",
+      "totalPointer": "/data/total",
+      "rowKeyPointer": "/id"
+    }
+  },
+  "fields": [
+    {
+      "key": "orderId",
+      "label": "Order ID",
+      "valuePointer": "/id",
+      "type": "string"
+    }
+  ],
+  "filters": [],
+  "operations": [
+    {
+      "key": "orders.list",
+      "apiDocumentId": "orders-doc",
+      "operation_id": "listOrders",
+      "method": "GET",
+      "path": "/orders",
+      "role": "list"
+    }
+  ],
+  "views": [
+    {
+      "key": "view0",
+      "type": "list",
+      "dataSourceRef": "primary",
+      "fieldKeys": ["orderId"]
+    },
+    {
+      "key": "view1",
+      "type": "list",
+      "dataSourceRef": "primary",
+      "fieldKeys": ["orderId"]
+    },
+    {
+      "key": "view2",
+      "type": "list",
+      "dataSourceRef": "primary",
+      "fieldKeys": ["orderId"]
+    },
+    {
+      "key": "view3",
+      "type": "list",
+      "dataSourceRef": "primary",
+      "fieldKeys": ["orderId"]
+    },
+    {
+      "key": "view4",
+      "type": "list",
+      "dataSourceRef": "primary",
+      "fieldKeys": ["orderId"]
+    },
+    {
+      "key": "view5",
+      "type": "list",
+      "dataSourceRef": "primary",
+      "fieldKeys": ["orderId"]
+    },
+    {
+      "key": "view6",
+      "type": "list",
+      "dataSourceRef": "primary",
+      "fieldKeys": ["orderId"]
+    },
+    {
+      "key": "view7",
+      "type": "list",
+      "dataSourceRef": "primary",
+      "fieldKeys": ["orderId"]
+    },
+    {
+      "key": "view8",
+      "type": "list",
+      "dataSourceRef": "primary",
+      "fieldKeys": ["orderId"]
+    },
+    {
+      "key": "view9",
+      "type": "list",
+      "dataSourceRef": "primary",
+      "fieldKeys": ["orderId"]
+    }
+  ]
+}

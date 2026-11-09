@@ -1,0 +1,200 @@
+{
+  "version": 2,
+  "title": "Orders",
+  "description": "Order list",
+  "dataSources": {
+    "primary": {
+      "operationRef": "orders.list",
+      "itemsPointer": "/data/items",
+      "totalPointer": "/data/total",
+      "rowKeyPointer": "/id"
+    }
+  },
+  "fields": [
+    {
+      "key": "orderId",
+      "label": "Order ID",
+      "valuePointer": "/id",
+      "type": "string"
+    }
+  ],
+  "filters": [],
+  "operations": [
+    {
+      "key": "op0",
+      "apiDocumentId": "doc",
+      "operation_id": "op0",
+      "method": "GET",
+      "path": "/op0",
+      "role": "list"
+    },
+    {
+      "key": "op1",
+      "apiDocumentId": "doc",
+      "operation_id": "op1",
+      "method": "GET",
+      "path": "/op1",
+      "role": "list"
+    },
+    {
+      "key": "op2",
+      "apiDocumentId": "doc",
+      "operation_id": "op2",
+      "method": "GET",
+      "path": "/op2",
+      "role": "list"
+    },
+    {
+      "key": "op3",
+      "apiDocumentId": "doc",
+      "operation_id": "op3",
+      "method": "GET",
+      "path": "/op3",
+      "role": "list"
+    },
+    {
+      "key": "op4",
+      "apiDocumentId": "doc",
+      "operation_id": "op4",
+      "method": "GET",
+      "path": "/op4",
+      "role": "list"
+    },
+    {
+      "key": "op5",
+      "apiDocumentId": "doc",
+      "operation_id": "op5",
+      "method": "GET",
+      "path": "/op5",
+      "role": "list"
+    },
+    {
+      "key": "op6",
+      "apiDocumentId": "doc",
+      "operation_id": "op6",
+      "method": "GET",
+      "path": "/op6",
+      "role": "list"
+    },
+    {
+      "key": "op7",
+      "apiDocumentId": "doc",
+      "operation_id": "op7",
+      "method": "GET",
+      "path": "/op7",
+      "role": "list"
+    },
+    {
+      "key": "op8",
+      "apiDocumentId": "doc",
+      "operation_id": "op8",
+      "method": "GET",
+      "path": "/op8",
+      "role": "list"
+    },
+    {
+      "key": "op9",
+      "apiDocumentId": "doc",
+      "operation_id": "op9",
+      "method": "GET",
+      "path": "/op9",
+      "role": "list"
+    },
+    {
+      "key": "op10",
+      "apiDocumentId": "doc",
+      "operation_id": "op10",
+      "method": "GET",
+      "path": "/op10",
+      "role": "list"
+    },
+    {
+      "key": "op11",
+      "apiDocumentId": "doc",
+      "operation_id": "op11",
+      "method": "GET",
+      "path": "/op11",
+      "role": "list"
+    },
+    {
+      "key": "op12",
+      "apiDocumentId": "doc",
+      "operation_id": "op12",
+      "method": "GET",
+      "path": "/op12",
+      "role": "list"
+    },
+    {
+      "key": "op13",
+      "apiDocumentId": "doc",
+      "operation_id": "op13",
+      "method": "GET",
+      "path": "/op13",
+      "role": "list"
+    },
+    {
+      "key": "op14",
+      "apiDocumentId": "doc",
+      "operation_id": "op14",
+      "method": "GET",
+      "path": "/op14",
+      "role": "list"
+    },
+    {
+      "key": "op15",
+      "apiDocumentId": "doc",
+      "operation_id": "op15",
+      "method": "GET",
+      "path": "/op15",
+      "role": "list"
+    },
+    {
+      "key": "op16",
+      "apiDocumentId": "doc",
+      "operation_id": "op16",
+      "method": "GET",
+      "path": "/op16",
+      "role": "list"
+    },
+    {
+      "key": "op17",
+      "apiDocumentId": "doc",
+      "operation_id": "op17",
+      "method": "GET",
+      "path": "/op17",
+      "role": "list"
+    },
+    {
+      "key": "op18",
+      "apiDocumentId": "doc",
+      "operation_id": "op18",
+      "method": "GET",
+      "path": "/op18",
+      "role": "list"
+    },
+    {
+      "key": "op19",
+      "apiDocumentId": "doc",
+      "operation_id": "op19",
+      "method": "GET",
+      "path": "/op19",
+      "role": "list"
+    },
+    {
+      "key": "op20",
+      "apiDocumentId": "doc",
+      "operation_id": "op20",
+      "method": "GET",
+      "path": "/op20",
+      "role": "list"
+    }
+  ],
+  "views": [
+    {
+      "key": "ordersTable",
+      "type": "list",
+      "dataSourceRef": "primary",
+      "fieldKeys": ["orderId"]
+    }
+  ]
+}

@@ -1,0 +1,334 @@
+{
+  "version": 2,
+  "title": "Orders",
+  "description": "Order list",
+  "dataSources": {
+    "primary": {
+      "operationRef": "orders.list",
+      "itemsPointer": "/data/items",
+      "totalPointer": "/data/total",
+      "rowKeyPointer": "/id"
+    }
+  },
+  "fields": [
+    {
+      "key": "f0",
+      "label": "Field 0",
+      "valuePointer": "/f0",
+      "type": "string"
+    },
+    {
+      "key": "f1",
+      "label": "Field 1",
+      "valuePointer": "/f1",
+      "type": "string"
+    },
+    {
+      "key": "f2",
+      "label": "Field 2",
+      "valuePointer": "/f2",
+      "type": "string"
+    },
+    {
+      "key": "f3",
+      "label": "Field 3",
+      "valuePointer": "/f3",
+      "type": "string"
+    },
+    {
+      "key": "f4",
+      "label": "Field 4",
+      "valuePointer": "/f4",
+      "type": "string"
+    },
+    {
+      "key": "f5",
+      "label": "Field 5",
+      "valuePointer": "/f5",
+      "type": "string"
+    },
+    {
+      "key": "f6",
+      "label": "Field 6",
+      "valuePointer": "/f6",
+      "type": "string"
+    },
+    {
+      "key": "f7",
+      "label": "Field 7",
+      "valuePointer": "/f7",
+      "type": "string"
+    },
+    {
+      "key": "f8",
+      "label": "Field 8",
+      "valuePointer": "/f8",
+      "type": "string"
+    },
+    {
+      "key": "f9",
+      "label": "Field 9",
+      "valuePointer": "/f9",
+      "type": "string"
+    },
+    {
+      "key": "f10",
+      "label": "Field 10",
+      "valuePointer": "/f10",
+      "type": "string"
+    },
+    {
+      "key": "f11",
+      "label": "Field 11",
+      "valuePointer": "/f11",
+      "type": "string"
+    },
+    {
+      "key": "f12",
+      "label": "Field 12",
+      "valuePointer": "/f12",
+      "type": "string"
+    },
+    {
+      "key": "f13",
+      "label": "Field 13",
+      "valuePointer": "/f13",
+      "type": "string"
+    },
+    {
+      "key": "f14",
+      "label": "Field 14",
+      "valuePointer": "/f14",
+      "type": "string"
+    },
+    {
+      "key": "f15",
+      "label": "Field 15",
+      "valuePointer": "/f15",
+      "type": "string"
+    },
+    {
+      "key": "f16",
+      "label": "Field 16",
+      "valuePointer": "/f16",
+      "type": "string"
+    },
+    {
+      "key": "f17",
+      "label": "Field 17",
+      "valuePointer": "/f17",
+      "type": "string"
+    },
+    {
+      "key": "f18",
+      "label": "Field 18",
+      "valuePointer": "/f18",
+      "type": "string"
+    },
+    {
+      "key": "f19",
+      "label": "Field 19",
+      "valuePointer": "/f19",
+      "type": "string"
+    },
+    {
+      "key": "f20",
+      "label": "Field 20",
+      "valuePointer": "/f20",
+      "type": "string"
+    },
+    {
+      "key": "f21",
+      "label": "Field 21",
+      "valuePointer": "/f21",
+      "type": "string"
+    },
+    {
+      "key": "f22",
+      "label": "Field 22",
+      "valuePointer": "/f22",
+      "type": "string"
+    },
+    {
+      "key": "f23",
+      "label": "Field 23",
+      "valuePointer": "/f23",
+      "type": "string"
+    },
+    {
+      "key": "f24",
+      "label": "Field 24",
+      "valuePointer": "/f24",
+      "type": "string"
+    },
+    {
+      "key": "f25",
+      "label": "Field 25",
+      "valuePointer": "/f25",
+      "type": "string"
+    },
+    {
+      "key": "f26",
+      "label": "Field 26",
+      "valuePointer": "/f26",
+      "type": "string"
+    },
+    {
+      "key": "f27",
+      "label": "Field 27",
+      "valuePointer": "/f27",
+      "type": "string"
+    },
+    {
+      "key": "f28",
+      "label": "Field 28",
+      "valuePointer": "/f28",
+      "type": "string"
+    },
+    {
+      "key": "f29",
+      "label": "Field 29",
+      "valuePointer": "/f29",
+      "type": "string"
+    },
+    {
+      "key": "f30",
+      "label": "Field 30",
+      "valuePointer": "/f30",
+      "type": "string"
+    },
+    {
+      "key": "f31",
+      "label": "Field 31",
+      "valuePointer": "/f31",
+      "type": "string"
+    },
+    {
+      "key": "f32",
+      "label": "Field 32",
+      "valuePointer": "/f32",
+      "type": "string"
+    },
+    {
+      "key": "f33",
+      "label": "Field 33",
+      "valuePointer": "/f33",
+      "type": "string"
+    },
+    {
+      "key": "f34",
+      "label": "Field 34",
+      "valuePointer": "/f34",
+      "type": "string"
+    },
+    {
+      "key": "f35",
+      "label": "Field 35",
+      "valuePointer": "/f35",
+      "type": "string"
+    },
+    {
+      "key": "f36",
+      "label": "Field 36",
+      "valuePointer": "/f36",
+      "type": "string"
+    },
+    {
+      "key": "f37",
+      "label": "Field 37",
+      "valuePointer": "/f37",
+      "type": "string"
+    },
+    {
+      "key": "f38",
+      "label": "Field 38",
+      "valuePointer": "/f38",
+      "type": "string"
+    },
+    {
+      "key": "f39",
+      "label": "Field 39",
+      "valuePointer": "/f39",
+      "type": "string"
+    },
+    {
+      "key": "f40",
+      "label": "Field 40",
+      "valuePointer": "/f40",
+      "type": "string"
+    },
+    {
+      "key": "f41",
+      "label": "Field 41",
+      "valuePointer": "/f41",
+      "type": "string"
+    },
+    {
+      "key": "f42",
+      "label": "Field 42",
+      "valuePointer": "/f42",
+      "type": "string"
+    },
+    {
+      "key": "f43",
+      "label": "Field 43",
+      "valuePointer": "/f43",
+      "type": "string"
+    },
+    {
+      "key": "f44",
+      "label": "Field 44",
+      "valuePointer": "/f44",
+      "type": "string"
+    },
+    {
+      "key": "f45",
+      "label": "Field 45",
+      "valuePointer": "/f45",
+      "type": "string"
+    },
+    {
+      "key": "f46",
+      "label": "Field 46",
+      "valuePointer": "/f46",
+      "type": "string"
+    },
+    {
+      "key": "f47",
+      "label": "Field 47",
+      "valuePointer": "/f47",
+      "type": "string"
+    },
+    {
+      "key": "f48",
+      "label": "Field 48",
+      "valuePointer": "/f48",
+      "type": "string"
+    },
+    {
+      "key": "f49",
+      "label": "Field 49",
+      "valuePointer": "/f49",
+      "type": "string"
+    }
+  ],
+  "filters": [],
+  "operations": [
+    {
+      "key": "orders.list",
+      "apiDocumentId": "orders-doc",
+      "operation_id": "listOrders",
+      "method": "GET",
+      "path": "/orders",
+      "role": "list"
+    }
+  ],
+  "views": [
+    {
+      "key": "ordersTable",
+      "type": "list",
+      "dataSourceRef": "primary",
+      "fieldKeys": ["f0"]
+    }
+  ]
+}

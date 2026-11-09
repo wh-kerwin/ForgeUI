@@ -1,5 +1,5 @@
 use crate::{
-    domain::page_spec::PageSpec,
+    domain::page_spec::{PageIssue, PageSpec},
     repositories::{projects, secrets, storage},
     services::{
         business_api::{self, ApiRequest, ApiResponse},
@@ -28,6 +28,22 @@ fn hide_main_window(app: &tauri::AppHandle) {
     }
 }
 
+fn valid_request_id(request_id: &str) -> bool {
+    !request_id.is_empty() && request_id.len() <= 128
+}
+
+fn invalid_request_id_failure() -> model_provider::GenerationFailure {
+    model_provider::GenerationFailure {
+        issues: vec![PageIssue::error(
+            "generation.invalid_request_id",
+            "",
+            "schema",
+            "流式生成请求 ID 无效",
+        )],
+        retryable: false,
+    }
+}
+
 #[tauri::command]
 async fn validate_model_config(input: ModelConfigInput) -> Result<ValidationResult, String> {
     model_provider::validate_config(input).await
@@ -36,6 +52,36 @@ async fn validate_model_config(input: ModelConfigInput) -> Result<ValidationResu
 #[tauri::command]
 async fn generate_page(input: GenerateInput) -> Result<PageSpec, String> {
     model_provider::generate_page(input).await
+}
+
+#[tauri::command]
+async fn generate_page_versioned(
+    input: GenerateInput,
+) -> Result<model_provider::VersionedGenerationResult, model_provider::GenerationFailure> {
+    model_provider::generate_page_versioned(input).await
+}
+
+#[tauri::command]
+async fn generate_page_stream_versioned(
+    window: tauri::WebviewWindow,
+    input: GenerateInput,
+    request_id: String,
+) -> Result<model_provider::VersionedGenerationResult, model_provider::GenerationFailure> {
+    if !valid_request_id(&request_id) {
+        return Err(invalid_request_id_failure());
+    }
+    model_provider::generate_page_stream_versioned(input, |delta| {
+        window
+            .emit(
+                "page-generation-delta",
+                PageGenerationDelta {
+                    request_id: &request_id,
+                    delta,
+                },
+            )
+            .map_err(|_| "发送页面增量失败".to_string())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -402,6 +448,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             validate_model_config,
             generate_page,
+            generate_page_versioned,
+            generate_page_stream_versioned,
             generate_page_detailed,
             generate_page_stream_detailed,
             generate_page_stream,
@@ -479,4 +527,49 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{invalid_request_id_failure, valid_request_id};
+
+    #[test]
+    fn versioned_generation_commands_are_exposed_over_ipc() {
+        let handler = include_str!("app.rs")
+            .split("tauri::generate_handler![")
+            .nth(1)
+            .expect("invoke handler")
+            .split("])")
+            .next()
+            .unwrap();
+        for command in [
+            "generate_page_versioned",
+            "generate_page_stream_versioned",
+            "generate_page",
+            "generate_page_stream",
+            "generate_page_detailed",
+            "generate_page_stream_detailed",
+        ] {
+            assert!(
+                handler.split(',').any(|entry| entry.trim() == command),
+                "{command} 未注册到 invoke handler"
+            );
+        }
+    }
+
+    #[test]
+    fn versioned_stream_requires_a_bounded_request_id() {
+        assert!(!valid_request_id(""));
+        assert!(valid_request_id("r1"));
+        assert!(valid_request_id(&"x".repeat(128)));
+        assert!(!valid_request_id(&"x".repeat(129)));
+    }
+
+    #[test]
+    fn versioned_stream_exposes_a_diagnostic_for_invalid_request_id() {
+        let failure = invalid_request_id_failure();
+        assert!(!failure.retryable);
+        assert_eq!(failure.issues.len(), 1);
+        assert_eq!(failure.issues[0].code, "generation.invalid_request_id");
+    }
 }

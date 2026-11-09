@@ -2,6 +2,7 @@ node_modules/
 dist/
 *.tsbuildinfo
 src-tauri/target/
+src-tauri/target-msrv-1.88/
 .env
 *.local
 src-tauri/tauri.updater.release.json

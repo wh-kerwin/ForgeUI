@@ -1,6 +1,290 @@
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
+/// Provider compatibility projection only; the shared v2 schema remains authoritative.
+pub fn v2_provider_schema(strict: bool) -> Value {
+    let mut schema: Value = serde_json::from_str(include_str!(
+        "../../../contracts/page-definition-v2.schema.json"
+    ))
+    .expect("embedded schema");
+    if strict {
+        project_v2_strict(&mut schema);
+    }
+    schema
+}
+
+// Compatibility inventory: strip dialect/id annotations and string/number/array
+// limits/patterns (host rechecks); const -> typed enum; oneOf -> anyOf (host
+// rechecks exclusivity); optional -> required nullable (transport adapter only).
+// No Anthropic native strict claim: its existing transport is prompt-only.
+fn project_v2_strict(value: &mut Value) {
+    let Some(object) = value.as_object_mut() else {
+        return;
+    };
+    for keyword in [
+        "$schema",
+        "$id",
+        "minLength",
+        "maxLength",
+        "pattern",
+        "minimum",
+        "maximum",
+        "minItems",
+        "maxItems",
+    ] {
+        object.remove(keyword);
+    }
+    if let Some(value) = object.remove("const") {
+        object.insert(
+            "type".into(),
+            json!(if value.is_string() {
+                "string"
+            } else {
+                "integer"
+            }),
+        );
+        object.insert("enum".into(), json!([value]));
+    }
+    if object.contains_key("enum") && !object.contains_key("type") {
+        object.insert("type".into(), json!("string"));
+    }
+    if let Some(branches) = object.remove("oneOf") {
+        object.insert("anyOf".into(), branches);
+    }
+    let required = object
+        .get("required")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if let Some(properties) = object.get_mut("properties").and_then(Value::as_object_mut) {
+        let keys: Vec<Value> = properties.keys().map(|key| json!(key)).collect();
+        for (key, property) in properties.iter_mut() {
+            project_v2_strict(property);
+            if !required.contains(&json!(key)) {
+                *property = json!({"anyOf": [property.clone(), {"type":"null"}]});
+            }
+        }
+        object.insert("required".into(), Value::Array(keys));
+    }
+    if let Some(defs) = object.get_mut("$defs").and_then(Value::as_object_mut) {
+        for definition in defs.values_mut() {
+            project_v2_strict(definition);
+        }
+    }
+    if let Some(items) = object.get_mut("items") {
+        project_v2_strict(items);
+    }
+    if let Some(branches) = object.get_mut("anyOf").and_then(Value::as_array_mut) {
+        for branch in branches {
+            project_v2_strict(branch);
+        }
+    }
+}
+
+pub fn adapt_v2_strict_output(mut value: Value) -> Result<(Value, bool), String> {
+    let schema = v2_provider_schema(false);
+    let changed = adapt_v2_node(&mut value, &schema, &schema)?;
+    Ok((value, changed))
+}
+
+fn adapt_v2_node(value: &mut Value, schema: &Value, root: &Value) -> Result<bool, String> {
+    if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
+        let target = reference
+            .strip_prefix('#')
+            .and_then(|pointer| root.pointer(pointer))
+            .ok_or("invalid schema reference")?;
+        return adapt_v2_node(value, target, root);
+    }
+    if let Some(branches) = schema.get("oneOf").and_then(Value::as_array) {
+        // Authoritative v2 view unions use a required const discriminator. Do
+        // not infer a branch from optional values or accept ambiguous input.
+        let matches: Vec<_> = branches
+            .iter()
+            .filter(|branch| {
+                branch
+                    .get("properties")
+                    .and_then(Value::as_object)
+                    .is_some_and(|properties| {
+                        let constants: Vec<_> = properties
+                            .iter()
+                            .filter_map(|(key, spec)| {
+                                spec.get("const").map(|constant| (key, constant))
+                            })
+                            .collect();
+                        !constants.is_empty()
+                            && constants
+                                .iter()
+                                .all(|(key, constant)| value.get(*key) == Some(*constant))
+                    })
+            })
+            .collect();
+        if matches.len() != 1 {
+            return Err("ambiguous provider schema branch".into());
+        }
+        return adapt_v2_node(value, matches[0], root);
+    }
+    let mut changed = false;
+    if let (Some(object), Some(properties)) = (
+        value.as_object_mut(),
+        schema.get("properties").and_then(Value::as_object),
+    ) {
+        let required = schema
+            .get("required")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        for (key, property) in properties {
+            if object.get(key).is_some_and(Value::is_null) && !required.contains(&json!(key)) {
+                object.remove(key);
+                changed = true;
+            } else if let Some(child) = object.get_mut(key) {
+                changed |= adapt_v2_node(child, property, root)?;
+            }
+        }
+    }
+    if let (Some(items), Some(item_schema)) = (value.as_array_mut(), schema.get("items")) {
+        for item in items {
+            changed |= adapt_v2_node(item, item_schema, root)?;
+        }
+    }
+    Ok(changed)
+}
+
+#[cfg(test)]
+mod v2_projection_tests {
+    use super::*;
+
+    #[test]
+    fn strict_projection_requires_nullable_optionals_and_preserves_authority() {
+        let authoritative = v2_provider_schema(false);
+        let strict = v2_provider_schema(true);
+        assert!(strict["required"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("layout")));
+        assert_eq!(
+            strict["properties"]["layout"]["anyOf"][1],
+            json!({"type":"null"})
+        );
+        assert_eq!(
+            strict["properties"]["styleTokens"]["anyOf"][0]["$ref"],
+            "#/$defs/styleTokens"
+        );
+        assert!(
+            strict["$defs"]["view"]["anyOf"][0]["properties"]["defaultSort"]["anyOf"][1]["type"]
+                == "null"
+        );
+        assert_eq!(
+            strict["$defs"]["styleTokens"]["properties"]["primary"]["anyOf"][1]["type"],
+            "null"
+        );
+        assert_eq!(
+            strict["properties"]["version"],
+            json!({"type":"integer", "enum":[2]})
+        );
+        assert!(strict["$defs"]["view"].get("oneOf").is_none());
+        assert!(strict["$defs"]["view"]["anyOf"].is_array());
+        assert_eq!(authoritative["properties"]["version"], json!({"const":2}));
+        assert!(!authoritative["required"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("layout")));
+    }
+
+    fn assert_provider_subset(schema: &Value, path: &str, issues: &mut Vec<String>) {
+        let Value::Object(object) = schema else {
+            return;
+        };
+        for keyword in [
+            "$schema",
+            "$id",
+            "const",
+            "oneOf",
+            "minLength",
+            "maxLength",
+            "pattern",
+            "minimum",
+            "maximum",
+            "minItems",
+            "maxItems",
+        ] {
+            if object.contains_key(keyword) {
+                issues.push(format!("{path}/{keyword}"));
+            }
+        }
+        if let Some(properties) = object.get("properties").and_then(Value::as_object) {
+            if object.get("additionalProperties") != Some(&json!(false)) {
+                issues.push(format!("{path}/additionalProperties"));
+            }
+            let required = object
+                .get("required")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            for key in properties.keys() {
+                if !required.contains(&json!(key)) {
+                    issues.push(format!("{path}/optional:{key}"));
+                }
+            }
+        }
+        for (key, value) in object {
+            if key == "properties" {
+                // The properties map holds field names, not schema keywords;
+                // only its values are schema nodes.
+                for (name, property) in value.as_object().unwrap() {
+                    assert_provider_subset(property, &format!("{path}/properties/{name}"), issues);
+                }
+            } else {
+                assert_provider_subset(value, &format!("{path}/{key}"), issues);
+            }
+        }
+    }
+
+    #[test]
+    fn strict_projection_stays_within_declared_provider_subset() {
+        let strict = v2_provider_schema(true);
+        let mut issues = Vec::new();
+        assert_provider_subset(&strict, "", &mut issues);
+        assert!(issues.is_empty(), "unsupported strict keywords: {issues:?}");
+    }
+
+    #[test]
+    fn strict_adapter_only_removes_declared_optional_nulls_in_matching_branches() {
+        let mut original: Value = serde_json::from_str(include_str!(
+            "../../../contracts/fixtures/v2/minimal-v2.json"
+        ))
+        .unwrap();
+        original["dataSources"]["primary"]
+            .as_object_mut()
+            .unwrap()
+            .remove("totalPointer");
+        let (unchanged, changed) = adapt_v2_strict_output(original.clone()).unwrap();
+        assert_eq!(unchanged, original);
+        assert!(!changed);
+        let mut wire = original.clone();
+        wire["layout"] = Value::Null;
+        wire["dataSources"]["primary"]["totalPointer"] = Value::Null;
+        wire["views"][0]["defaultSort"] = Value::Null;
+        let (adapted, changed) = adapt_v2_strict_output(wire).unwrap();
+        assert!(changed);
+        assert_eq!(adapted, original);
+        assert!(crate::domain::page_definition_v2::validate_raw(adapted).is_ok());
+        let mut invalid = original.clone();
+        invalid["title"] = Value::Null;
+        invalid["unknown"] = Value::Null;
+        invalid["fields"] = json!([null]);
+        let (adapted, _) = adapt_v2_strict_output(invalid.clone()).unwrap();
+        assert_eq!(adapted, invalid);
+        let issues = crate::domain::page_definition_v2::validate_raw(adapted)
+            .err()
+            .unwrap();
+        assert_eq!(issues[0].code, "PAGE_V2_SCHEMA_INVALID");
+        let mut ambiguous = original;
+        ambiguous["views"][0]["type"] = Value::Null;
+        assert!(adapt_v2_strict_output(ambiguous).is_err());
+    }
+}
+
 pub fn schema() -> Value {
     json!({
         "type": "object",

@@ -1,0 +1,107 @@
+{
+  "version": 2,
+  "title": "Orders",
+  "description": "Order list",
+  "dataSources": {
+    "primary": {
+      "operationRef": "orders.list",
+      "itemsPointer": "/data/items",
+      "totalPointer": "/data/total",
+      "rowKeyPointer": "/id"
+    }
+  },
+  "fields": [
+    {
+      "key": "orderId",
+      "label": "Order ID",
+      "valuePointer": "/id",
+      "type": "string"
+    }
+  ],
+  "filters": [],
+  "operations": [
+    {
+      "key": "orders.list",
+      "apiDocumentId": "orders-doc",
+      "operation_id": "listOrders",
+      "method": "GET",
+      "path": "/orders",
+      "role": "list",
+      "bodySchema": [
+        {
+          "key": "number",
+          "type": "number",
+          "required": true,
+          "constraints": {
+            "nullable": true,
+            "readonly": true,
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "key": "integer",
+          "type": "integer",
+          "required": true,
+          "constraints": {
+            "nullable": true,
+            "readonly": true,
+            "min": 0,
+            "max": 1
+          }
+        },
+        {
+          "key": "string",
+          "type": "string",
+          "required": true,
+          "constraints": {
+            "nullable": true,
+            "readonly": true,
+            "minLength": 1,
+            "maxLength": 2,
+            "pattern": "^[A-Za-z]{1,2}$"
+          }
+        },
+        {
+          "key": "enum",
+          "type": "enum",
+          "required": true,
+          "enumValues": ["ab"],
+          "constraints": {
+            "nullable": true,
+            "readonly": true,
+            "minLength": 1,
+            "maxLength": 2,
+            "pattern": "^[A-Za-z]{1,2}$"
+          }
+        },
+        {
+          "key": "boolean",
+          "type": "boolean",
+          "required": true,
+          "constraints": {
+            "nullable": true,
+            "readonly": true
+          }
+        },
+        {
+          "key": "date",
+          "type": "date",
+          "required": true,
+          "constraints": {
+            "nullable": true,
+            "readonly": true
+          }
+        }
+      ]
+    }
+  ],
+  "views": [
+    {
+      "key": "ordersTable",
+      "type": "list",
+      "dataSourceRef": "primary",
+      "fieldKeys": ["orderId"]
+    }
+  ]
+}

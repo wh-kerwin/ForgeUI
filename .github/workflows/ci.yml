@@ -26,6 +26,7 @@ jobs:
         with:
           components: rustfmt
       - run: npm ci
+      - run: npm run contract:check
       - run: npm run format:check
       - run: npm run lint
       - run: npm run build
