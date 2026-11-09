@@ -91,7 +91,7 @@ function OperationOverlay({
       onCancel={onClose}
       footer={null}
       destroyOnHidden
-      maskClosable={!danger}
+      mask={{ closable: !danger }}
       keyboard={!danger}
       className={
         danger
