@@ -140,6 +140,21 @@ test("contract check uses the OS temp directory without temp environment variabl
   });
 });
 
+test("contract check tolerates CRLF checkouts without rewriting outputs", async () => {
+  await withFixture(async (root) => {
+    for (const output of outputs) {
+      const file = outputPath(root, output);
+      const content = await fs.readFile(file, "utf8");
+      await fs.writeFile(file, content.replace(/\n/g, "\r\n"), "utf8");
+    }
+    const before = await snapshot(root);
+    const result = invoke(root);
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(await snapshot(root), before);
+    await assertTempCleaned(result.stdout);
+  });
+});
+
 for (const output of outputs) {
   test(`contract check rejects stale ${output} without rewriting bytes or mtime`, async () => {
     await withFixture(async (root) => {
