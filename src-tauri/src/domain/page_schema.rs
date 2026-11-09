@@ -1,4 +1,5 @@
 use serde_json::{json, Value};
+#[cfg(test)]
 use std::collections::{HashMap, HashSet};
 
 /// Provider compatibility projection only; the shared v2 schema remains authoritative.
@@ -438,6 +439,9 @@ pub fn decode_json(content: &str) -> Result<Value, String> {
 /// Apply one bounded, deterministic repair pass to common model deviations.
 /// This never introduces executable content or unknown operations; it only
 /// converts display-oriented values into the string shapes PageSpec accepts.
+/// Test-only legacy v1 repair helpers: no production entry point calls them.
+/// Restore a production caller before removing the `cfg(test)` gates below.
+#[cfg(test)]
 pub fn normalize_page_spec(mut value: Value) -> Value {
     let Some(page) = value.as_object_mut() else {
         return value;
@@ -519,6 +523,7 @@ pub fn normalize_page_spec(mut value: Value) -> Value {
     value
 }
 
+#[cfg(test)]
 fn build_column_aliases(columns: Option<&Vec<Value>>) -> HashMap<String, String> {
     let mut aliases = HashMap::new();
     for column in columns.into_iter().flatten() {
@@ -538,6 +543,7 @@ fn build_column_aliases(columns: Option<&Vec<Value>>) -> HashMap<String, String>
     aliases
 }
 
+#[cfg(test)]
 fn normalize_alias(value: &str) -> String {
     value
         .chars()
@@ -546,6 +552,7 @@ fn normalize_alias(value: &str) -> String {
         .collect()
 }
 
+#[cfg(test)]
 fn normalize_column_reference(value: &mut Value, aliases: &HashMap<String, String>) -> bool {
     let Some(reference) = value.as_str() else {
         return false;
@@ -557,6 +564,7 @@ fn normalize_column_reference(value: &mut Value, aliases: &HashMap<String, Strin
     true
 }
 
+#[cfg(test)]
 fn normalize_view(value: &mut Value, aliases: &HashMap<String, String>, depth: usize) -> bool {
     if depth > 4 {
         return false;
@@ -682,6 +690,7 @@ fn normalize_view(value: &mut Value, aliases: &HashMap<String, String>, depth: u
     }
 }
 
+#[cfg(test)]
 fn column_key(value: &Value) -> String {
     if let Some(value) = value.as_str() {
         return value.to_string();
@@ -693,6 +702,7 @@ fn column_key(value: &Value) -> String {
         .to_string()
 }
 
+#[cfg(test)]
 fn display_string(value: &Value) -> String {
     match value {
         Value::String(value) => value.clone(),
