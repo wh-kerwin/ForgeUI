@@ -53,17 +53,18 @@ test("explicit modal and drawer interaction modes parse and resolve", () => {
   assert.equal(usesOverlay(resolved.update), true);
 });
 
-test("CRUD pages always use modal operations regardless of model interaction or prompt scene", () => {
-  const page = {
-    ...legacyPage,
-    interaction: { create: "inline", update: "redirect", delete: "inline", detail: "drawer" },
-  } as const;
-  assert.deepEqual(resolveInteraction(page, true), {
+test("CRUD pages default to modal overlays but honor explicit interaction modes", () => {
+  assert.deepEqual(resolveInteraction(legacyPage, true), {
     create: "modal",
     update: "modal",
     delete: "modal",
     detail: "modal",
   });
+  const page = {
+    ...legacyPage,
+    interaction: { create: "inline", update: "redirect", delete: "inline", detail: "drawer" },
+  } as const;
+  assert.deepEqual(resolveInteraction(page, true), page.interaction);
 });
 
 test("redirect is a dedicated navigation mode, not an overlay", () => {

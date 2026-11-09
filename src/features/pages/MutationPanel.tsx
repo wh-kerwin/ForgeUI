@@ -383,10 +383,12 @@ export function MutationPanel({
               setCreateErrors,
             )
           ) : (
-            <textarea
+            <Input.TextArea
               value={createForm}
               onChange={(event) => setCreateForm(event.target.value)}
               spellCheck={false}
+              aria-label={zh ? "新增记录 JSON" : "Create record JSON"}
+              autoSize={{ minRows: 4 }}
             />
           )}
           {formError && (
@@ -394,9 +396,9 @@ export function MutationPanel({
               {formError}
             </p>
           )}
-          <button className="primary" onClick={() => submitCreate(false)}>
+          <Button type="primary" onClick={() => submitCreate(false)}>
             {zh ? "提交新增" : "Create"}
-          </button>
+          </Button>
         </div>
       )}
       {createOperation && creating && usesRedirect(interaction.create) && (
@@ -420,14 +422,15 @@ export function MutationPanel({
           <span className="eyebrow">DETAIL PANEL</span>
           <h4>{zh ? "查看详情" : "View details"}</h4>
           <div className="delete-row">
-            <input
+            <Input
               placeholder={zh ? "记录 ID" : "Record ID"}
+              aria-label={zh ? "记录 ID" : "Record ID"}
               value={detailId}
               onChange={(event) => setDetailId(event.target.value)}
             />
-            <button className="secondary" onClick={() => onDetail(detailOperation, detailId)}>
+            <Button onClick={() => onDetail(detailOperation, detailId)}>
               {zh ? "加载详情" : "Load details"}
-            </button>
+            </Button>
           </div>
           {renderDetail(detail ?? localDetail)}
         </div>
@@ -460,31 +463,31 @@ export function MutationPanel({
                     ? `确定删除记录 ${rowId(deletingRow)} 吗？此操作不可撤销。`
                     : `Delete record ${rowId(deletingRow)}? This cannot be undone.`)}
               </p>
-              <div className="modal-actions">
-                <button className="secondary" onClick={onCloseDelete}>
-                  {zh ? "取消" : "Cancel"}
-                </button>
-                <button
-                  className="danger"
+              <Space className="modal-actions">
+                <Button onClick={onCloseDelete}>{zh ? "取消" : "Cancel"}</Button>
+                <Button
+                  danger
+                  type="primary"
                   onClick={() => {
                     onDelete(deleteOperation, rowId(deletingRow), true);
                     onCloseDelete();
                   }}
                 >
                   {zh ? "确认删除" : "Delete"}
-                </button>
-              </div>
+                </Button>
+              </Space>
             </>
           ) : (
             <div className="delete-row">
-              <input
+              <Input
                 placeholder={zh ? "记录 ID" : "Record ID"}
+                aria-label={zh ? "记录 ID" : "Record ID"}
                 value={deleteId}
                 onChange={(event) => setDeleteId(event.target.value)}
               />
-              <button className="danger" onClick={() => onDelete(deleteOperation, deleteId)}>
+              <Button danger onClick={() => onDelete(deleteOperation, deleteId)}>
                 {zh ? "删除" : "Delete"}
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -499,20 +502,19 @@ export function MutationPanel({
                 ? `确定删除记录 ${rowId(deletingRow)} 吗？此操作不可撤销。`
                 : `Delete record ${rowId(deletingRow)}? This cannot be undone.`)}
           </p>
-          <div className="modal-actions">
-            <button className="secondary" onClick={onCloseDelete}>
-              {zh ? "取消" : "Cancel"}
-            </button>
-            <button
-              className="danger"
+          <Space className="modal-actions">
+            <Button onClick={onCloseDelete}>{zh ? "取消" : "Cancel"}</Button>
+            <Button
+              danger
+              type="primary"
               onClick={() => {
                 onDelete(deleteOperation, rowId(deletingRow), true);
                 onCloseDelete();
               }}
             >
               {zh ? "确认删除" : "Delete"}
-            </button>
-          </div>
+            </Button>
+          </Space>
         </div>
       )}
 

@@ -1,3 +1,4 @@
+import { Button } from "antd";
 import { PageExportActions } from "./PageExportActions";
 import type { PageSpec, ThemeStyle } from "../../types/domain";
 import { ChevronRight, Plus, RefreshCw } from "lucide-react";
@@ -73,16 +74,14 @@ export function PageHeader({
             ariaLabel={zh ? "切换页面主题" : "Switch page theme"}
           />
           {onLoadData && (
-            <button type="button" className="secondary" disabled={loadingData} onClick={onLoadData}>
-              <RefreshCw size={14} />
+            <Button icon={<RefreshCw size={14} />} loading={loadingData} onClick={onLoadData}>
               {loadingData ? (zh ? "加载中" : "Loading") : zh ? "加载真实数据" : "Load real data"}
-            </button>
+            </Button>
           )}
           {onCreate && (
-            <button type="button" className="primary" onClick={onCreate}>
-              <Plus size={14} />
+            <Button type="primary" icon={<Plus size={14} />} onClick={onCreate}>
               {zh ? "新增" : "New"}
-            </button>
+            </Button>
           )}
           {showPageActions && (
             <PageExportActions

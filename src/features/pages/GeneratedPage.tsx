@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { ArrowLeft, LockKeyhole, Plus } from "lucide-react";
-import { Button, Pagination } from "antd";
+import { Button, ConfigProvider, Pagination, theme as antdTheme, type ThemeConfig } from "antd";
 import type { FieldSchema, PageSpec, PageView, ThemeStyle } from "../../types/domain";
 import { PageHeader } from "./PageHeader";
 import { FilterBar } from "./FilterBar";
@@ -17,7 +17,12 @@ import {
 import { useLanguage } from "../../i18n/LanguageProvider";
 import { MutationPanel } from "./MutationPanel";
 import { resolveInteraction, usesOverlay, usesRedirect } from "./interactionModes";
-import { resolveThemeTokens, themeCssVariables } from "./themePresets";
+import {
+  antdTokenFor,
+  isDarkThemeTokens,
+  resolveThemeTokens,
+  themeCssVariables,
+} from "./themePresets";
 import {
   buildListQuery,
   firstListSort,
@@ -109,14 +114,28 @@ export function GeneratedPage({
     () => resolveThemeTokens(theme, theme === "custom" ? page.styleTokens : undefined),
     [page.styleTokens, theme],
   );
-  useEffect(() => {
+  const antdConfig = useMemo<ThemeConfig>(
+    () => ({
+      algorithm: isDarkThemeTokens(themeTokens)
+        ? antdTheme.darkAlgorithm
+        : antdTheme.defaultAlgorithm,
+      token: antdTokenFor(themeTokens) as unknown as ThemeConfig["token"],
+    }),
+    [themeTokens],
+  );
+  useLayoutEffect(() => {
     const root = document.documentElement;
     const variables = themeCssVariables(themeTokens);
-    Object.entries(variables).forEach(([name, value]) => root.style.setProperty(name, value));
-    root.dataset.density = themeTokens.density ?? "comfortable";
+    const previous = new Map<string, string>();
+    for (const [name, value] of Object.entries(variables)) {
+      previous.set(name, root.style.getPropertyValue(name));
+      root.style.setProperty(name, value);
+    }
     return () => {
-      Object.keys(variables).forEach((name) => root.style.removeProperty(name));
-      delete root.dataset.density;
+      for (const [name, oldValue] of previous) {
+        if (oldValue) root.style.setProperty(name, oldValue);
+        else root.style.removeProperty(name);
+      }
     };
   }, [themeTokens]);
   useEffect(() => {
@@ -183,6 +202,12 @@ export function GeneratedPage({
     close();
     if (usesRedirect(interaction[action]) && isGeneratedActionPath(window.location.pathname))
       window.history.back();
+  };
+  const openAction = (action: GeneratedAction, row: string[] | null = null) => {
+    setCreating(action === "create");
+    setViewingRow(action === "detail" ? row : null);
+    setEditingRow(action === "update" ? row : null);
+    setDeletingRow(action === "delete" ? row : null);
   };
   const redirectAction: GeneratedAction | null =
     creating && usesRedirect(interaction.create)
@@ -290,218 +315,222 @@ export function GeneratedPage({
   );
 
   return (
-    <section
-      className={`generated-page generated-page--${layout}${isCrudPage ? " generated-page--crud" : ""}${isStreaming ? " is-streaming" : ""}`}
-      data-layout={layout}
-      data-mode={isStreaming ? "preview" : "live"}
-      data-permission-role={page.permissionRole || undefined}
-      aria-busy={isStreaming}
-    >
-      {!redirectAction && (
-        <PageHeader
-          page={{ ...page, theme }}
-          projectId={projectId}
-          apiDocumentIds={apiDocumentIds}
-          isStreaming={isStreaming}
-          modelId={modelId}
-          templateId={templateId}
-          templateName={templateName}
-          zh={zh}
-          onSaved={onSaved}
-          theme={theme}
-          onThemeChange={setTheme}
-          loadingData={querying}
-          onLoadData={
-            listOperation
-              ? () => {
-                  setPageNumber(1);
-                  runListQuery(1);
-                }
-              : undefined
-          }
-          showPageActions
-        />
-      )}
-      {isStreaming && (
-        <div className="streaming-progress" role="status">
-          {zh
-            ? "正在接收并校验 PageSpec 草稿，完成前所有业务操作均已禁用。"
-            : "Receiving and validating the PageSpec draft. Business actions remain disabled until completion."}
-        </div>
-      )}
-      {queryMeta.status === "error" && <p role="alert">{queryMeta.error}</p>}
-      {queryMeta.status === "empty" && (
-        <p role="status">{zh ? "查询成功，没有匹配的数据" : "Query succeeded: no matching data"}</p>
-      )}
-      {queryMeta.status === "cancelled" && (
-        <p role="status">
-          {zh ? "查询已取消，请重新加载后操作" : "Query cancelled; reload before making changes"}
-        </p>
-      )}
-      {queryMeta.truncated && (
-        <p role="status">
-          当前加载结果已截断（{queryMeta.truncatedRows ? "行数超限" : ""}
-          {queryMeta.truncatedColumns ? " 字段超限" : ""}）。
-        </p>
-      )}
-      <fieldset className="streaming-content" disabled={isStreaming}>
-        {redirectAction ? (
-          <div className="generated-redirect-view">
-            <button
-              type="button"
-              className="secondary redirect-back"
-              onClick={() =>
-                closeAction(redirectAction, () => {
-                  setCreating(false);
-                  setViewingRow(null);
-                  setEditingRow(null);
-                  setDeletingRow(null);
-                })
-              }
-            >
-              <ArrowLeft size={14} />
-              {zh ? "返回列表" : "Back to list"}
-            </button>
-            {mutationPanel}
-          </div>
-        ) : (
-          <div
-            className={`generated-page-workspace${hasRailContent ? "" : " generated-page-workspace--single"}`}
-          >
-            {hasRailContent && (
-              <aside className="generated-page-rail">
-                {filtersForList.length > 0 && (
-                  <FilterBar
-                    filters={filtersForList}
-                    values={filters}
-                    querying={querying}
-                    zh={zh}
-                    onChange={(name, value) =>
-                      setFilters((current) => ({ ...current, [name]: value }))
-                    }
-                    onQuery={() => {
-                      setPageNumber(1);
-                      runListQuery(1);
-                    }}
-                    onReset={() => {
-                      setFilters({});
-                      setPageNumber(1);
-                    }}
-                  />
-                )}
-                {showStats && <StatsPanel stats={page.stats} />}
-              </aside>
-            )}
-            <div className="generated-page-main">
-              {isCrudPage && (
-                <div className="generated-command-bar">
-                  <div className="generated-command-bar__primary">
-                    {createOperation && interaction.create !== "inline" && (
-                      <Button
-                        type="primary"
-                        icon={<Plus size={15} />}
-                        onClick={() => {
-                          if (isStreaming || querying || queryMeta.status === "error") return;
-                          setCreating(true);
-                          if (usesRedirect(interaction.create)) openRedirect("create");
-                        }}
-                      >
-                        {zh ? "新建" : "New"}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              )}
-              {renderedViews.length > 1 && (
-                <div className="view-tabs" role="tablist">
-                  {renderedViews.map((view, index) => (
-                    <button
-                      key={`${view.type}-${index}`}
-                      type="button"
-                      className={activeViewIndex === index ? "active" : ""}
-                      role="tab"
-                      aria-selected={activeViewIndex === index}
-                      onClick={() => {
-                        setActiveViewIndex(index);
-                        setSort(undefined);
-                      }}
-                    >
-                      {viewLabel(view, zh)}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {isStreaming && page.columns.length === 0 ? (
-                <div className="streaming-table-skeleton" aria-hidden="true">
-                  <span />
-                  <span />
-                  <span />
-                  <span />
-                </div>
-              ) : (
-                <PageViewRenderer
-                  view={renderedActiveView}
-                  columns={page.columns}
-                  columnMeta={page.columnMeta}
-                  rows={localRows}
-                  batchActions={batchActions}
-                  selectedRows={selectedRows}
-                  onSelectionChange={setSelectedRows}
-                  onBatchAction={onBatchAction}
-                  serverSort={Boolean(sortParam)}
-                  onSortChange={(nextSort) => {
-                    setSort(nextSort);
+    <ConfigProvider theme={antdConfig}>
+      <section
+        className={`generated-page generated-page--${layout}${isCrudPage ? " generated-page--crud" : ""}${isStreaming ? " is-streaming" : ""}`}
+        data-layout={layout}
+        data-mode={isStreaming ? "preview" : "live"}
+        data-permission-role={page.permissionRole || undefined}
+        aria-busy={isStreaming}
+      >
+        {!redirectAction && (
+          <PageHeader
+            page={{ ...page, theme }}
+            projectId={projectId}
+            apiDocumentIds={apiDocumentIds}
+            isStreaming={isStreaming}
+            modelId={modelId}
+            templateId={templateId}
+            templateName={templateName}
+            zh={zh}
+            onSaved={onSaved}
+            theme={theme}
+            onThemeChange={setTheme}
+            loadingData={querying}
+            onLoadData={
+              listOperation
+                ? () => {
                     setPageNumber(1);
-                    if (sortParam) runListQuery(1, nextSort);
-                  }}
-                  onRowsChange={setLocalRows}
-                  onView={(row) => {
-                    if (isStreaming || querying || queryMeta.status === "error") return;
-                    setLocalDetail(rowRecord(row));
-                    if (usesOverlay(interaction.detail) || usesRedirect(interaction.detail)) {
-                      setViewingRow(row);
-                      if (usesRedirect(interaction.detail)) openRedirect("detail", rowId(row));
-                    }
-                    if (detailOperation && rowId(row)) onDetail(detailOperation, rowId(row));
-                  }}
-                  onEdit={(row) => {
-                    if (isStreaming || querying || queryMeta.status === "error") return;
-                    setEditingRow(row);
-                    if (usesRedirect(interaction.update)) openRedirect("update", rowId(row));
-                  }}
-                  onDelete={
-                    deleteOperation
-                      ? (row) => {
-                          if (isStreaming || querying || queryMeta.status === "error") return;
-                          setDeletingRow(row);
-                          if (usesRedirect(interaction.delete)) openRedirect("delete", rowId(row));
-                        }
-                      : undefined
+                    runListQuery(1);
                   }
-                />
-              )}
-              {!isStreaming && listOperation && (
-                <div className="pagination">
-                  <Pagination
-                    current={pageNumber}
-                    pageSize={defaultSize}
-                    total={paginationTotal}
-                    showSizeChanger={false}
-                    showQuickJumper={!zh}
-                    disabled={querying}
-                    showTotal={(total) => (zh ? `共 ${total} 条` : `${total} items`)}
-                    onChange={(nextPage) => {
-                      setPageNumber(nextPage);
-                      runListQuery(nextPage);
-                    }}
-                  />
-                </div>
-              )}
-              {!isStreaming && mutationPanel}
-            </div>
+                : undefined
+            }
+            showPageActions
+          />
+        )}
+        {isStreaming && (
+          <div className="streaming-progress" role="status">
+            {zh
+              ? "正在接收并校验 PageSpec 草稿，完成前所有业务操作均已禁用。"
+              : "Receiving and validating the PageSpec draft. Business actions remain disabled until completion."}
           </div>
         )}
-      </fieldset>
-    </section>
+        {queryMeta.status === "error" && <p role="alert">{queryMeta.error}</p>}
+        {queryMeta.status === "empty" && (
+          <p role="status">
+            {zh ? "查询成功，没有匹配的数据" : "Query succeeded: no matching data"}
+          </p>
+        )}
+        {queryMeta.status === "cancelled" && (
+          <p role="status">
+            {zh ? "查询已取消，请重新加载后操作" : "Query cancelled; reload before making changes"}
+          </p>
+        )}
+        {queryMeta.truncated && (
+          <p role="status">
+            当前加载结果已截断（{queryMeta.truncatedRows ? "行数超限" : ""}
+            {queryMeta.truncatedColumns ? " 字段超限" : ""}）。
+          </p>
+        )}
+        <fieldset className="streaming-content" disabled={isStreaming}>
+          {redirectAction ? (
+            <div className="generated-redirect-view">
+              <Button
+                className="redirect-back"
+                icon={<ArrowLeft size={14} />}
+                onClick={() =>
+                  closeAction(redirectAction, () => {
+                    setCreating(false);
+                    setViewingRow(null);
+                    setEditingRow(null);
+                    setDeletingRow(null);
+                  })
+                }
+              >
+                {zh ? "返回列表" : "Back to list"}
+              </Button>
+              {mutationPanel}
+            </div>
+          ) : (
+            <div
+              className={`generated-page-workspace${hasRailContent ? "" : " generated-page-workspace--single"}`}
+            >
+              {hasRailContent && (
+                <aside className="generated-page-rail">
+                  {filtersForList.length > 0 && (
+                    <FilterBar
+                      filters={filtersForList}
+                      values={filters}
+                      querying={querying}
+                      zh={zh}
+                      onChange={(name, value) =>
+                        setFilters((current) => ({ ...current, [name]: value }))
+                      }
+                      onQuery={() => {
+                        setPageNumber(1);
+                        runListQuery(1);
+                      }}
+                      onReset={() => {
+                        setFilters({});
+                        setPageNumber(1);
+                      }}
+                    />
+                  )}
+                  {showStats && <StatsPanel stats={page.stats} />}
+                </aside>
+              )}
+              <div className="generated-page-main">
+                {isCrudPage && (
+                  <div className="generated-command-bar">
+                    <div className="generated-command-bar__primary">
+                      {createOperation && interaction.create !== "inline" && (
+                        <Button
+                          type="primary"
+                          icon={<Plus size={15} />}
+                          onClick={() => {
+                            if (isStreaming || querying || queryMeta.status === "error") return;
+                            openAction("create");
+                            if (usesRedirect(interaction.create)) openRedirect("create");
+                          }}
+                        >
+                          {zh ? "新建" : "New"}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {renderedViews.length > 1 && (
+                  <div className="view-tabs" role="tablist">
+                    {renderedViews.map((view, index) => (
+                      <button
+                        key={`${view.type}-${index}`}
+                        type="button"
+                        className={activeViewIndex === index ? "active" : ""}
+                        role="tab"
+                        aria-selected={activeViewIndex === index}
+                        onClick={() => {
+                          setActiveViewIndex(index);
+                          setSort(undefined);
+                        }}
+                      >
+                        {viewLabel(view, zh)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {isStreaming && page.columns.length === 0 ? (
+                  <div className="streaming-table-skeleton" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                ) : (
+                  <PageViewRenderer
+                    view={renderedActiveView}
+                    columns={page.columns}
+                    columnMeta={page.columnMeta}
+                    rows={localRows}
+                    batchActions={batchActions}
+                    selectedRows={selectedRows}
+                    onSelectionChange={setSelectedRows}
+                    onBatchAction={onBatchAction}
+                    serverSort={Boolean(sortParam)}
+                    onSortChange={(nextSort) => {
+                      setSort(nextSort);
+                      setPageNumber(1);
+                      if (sortParam) runListQuery(1, nextSort);
+                    }}
+                    onRowsChange={setLocalRows}
+                    onView={(row) => {
+                      if (isStreaming || querying || queryMeta.status === "error") return;
+                      setLocalDetail(rowRecord(row));
+                      if (usesOverlay(interaction.detail) || usesRedirect(interaction.detail)) {
+                        openAction("detail", row);
+                        if (usesRedirect(interaction.detail)) openRedirect("detail", rowId(row));
+                      }
+                      if (detailOperation && rowId(row)) onDetail(detailOperation, rowId(row));
+                    }}
+                    onEdit={(row) => {
+                      if (isStreaming || querying || queryMeta.status === "error") return;
+                      openAction("update", row);
+                      if (usesRedirect(interaction.update)) openRedirect("update", rowId(row));
+                    }}
+                    onDelete={
+                      deleteOperation
+                        ? (row) => {
+                            if (isStreaming || querying || queryMeta.status === "error") return;
+                            openAction("delete", row);
+                            if (usesRedirect(interaction.delete))
+                              openRedirect("delete", rowId(row));
+                          }
+                        : undefined
+                    }
+                  />
+                )}
+                {!isStreaming && listOperation && (
+                  <div className="pagination">
+                    <Pagination
+                      current={pageNumber}
+                      pageSize={defaultSize}
+                      total={paginationTotal}
+                      showSizeChanger={false}
+                      showQuickJumper={!zh}
+                      disabled={querying}
+                      showTotal={(total) => (zh ? `共 ${total} 条` : `${total} items`)}
+                      onChange={(nextPage) => {
+                        setPageNumber(nextPage);
+                        runListQuery(nextPage);
+                      }}
+                    />
+                  </div>
+                )}
+                {!isStreaming && mutationPanel}
+              </div>
+            </div>
+          )}
+        </fieldset>
+      </section>
+    </ConfigProvider>
   );
 }

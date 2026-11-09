@@ -95,7 +95,21 @@ const radiusValues: Record<NonNullable<StyleToken["radius"]>, string> = {
   full: "999px",
 };
 
-function onPrimary(background?: string): string | undefined {
+const radiusPixels: Record<NonNullable<StyleToken["radius"]>, number> = {
+  none: 0,
+  sm: 4,
+  md: 7,
+  lg: 10,
+  full: 999,
+};
+
+const densityHeights: Record<NonNullable<StyleToken["density"]>, number> = {
+  compact: 28,
+  comfortable: 34,
+  relaxed: 40,
+};
+
+function relativeLuminance(background?: string): number | undefined {
   if (!background) return undefined;
   const raw = background.slice(1);
   const expanded =
@@ -110,8 +124,56 @@ function onPrimary(background?: string): string | undefined {
   const channels = [0, 2, 4]
     .map((offset) => Number.parseInt(expanded.slice(offset, offset + 2), 16) / 255)
     .map((value) => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4));
-  const luminance = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+}
+
+function onPrimary(background?: string): string | undefined {
+  const luminance = relativeLuminance(background);
+  if (luminance === undefined) return undefined;
   return luminance > 0.179 ? "#101418" : "#ffffff";
+}
+
+/** Both the CSS variables and the antd theme derive from the same StyleToken set. */
+export function isDarkThemeTokens(tokens: StyleToken): boolean {
+  const luminance = relativeLuminance(tokens.surface);
+  return luminance === undefined ? true : luminance < 0.179;
+}
+
+const ANTD_COLOR_KEYS: Record<string, keyof StyleToken> = {
+  colorPrimary: "primary",
+  colorInfo: "primary",
+  colorPrimaryHover: "primaryBgHover",
+  colorPrimaryActive: "primaryBgHover",
+  colorLink: "primary",
+  colorLinkHover: "primaryBgHover",
+  colorBgBase: "surface",
+  colorBgLayout: "surface",
+  colorBgContainer: "surfaceAlt",
+  colorBgElevated: "surfaceAlt",
+  colorBorder: "border",
+  colorBorderSecondary: "borderControl",
+  colorText: "text",
+  colorTextSecondary: "textMuted",
+  colorTextTertiary: "textSubtle",
+  colorTextQuaternary: "textSubtle",
+  colorError: "danger",
+  colorErrorBg: "dangerBg",
+  colorSuccess: "success",
+};
+
+export function antdTokenFor(tokens: StyleToken): Record<string, string | number> {
+  const result: Record<string, string | number> = {
+    fontFamily: "var(--font-ui)",
+    borderRadius: radiusPixels[tokens.radius ?? "md"],
+    controlHeight: densityHeights[tokens.density ?? "comfortable"],
+  };
+  for (const [antdKey, styleKey] of Object.entries(ANTD_COLOR_KEYS)) {
+    const value = tokens[styleKey];
+    if (typeof value === "string") result[antdKey] = value;
+  }
+  const foreground = onPrimary(tokens.primaryBg);
+  if (foreground) result.colorTextLightSolid = foreground;
+  return result;
 }
 
 export function themeCssVariables(tokens: StyleToken): Record<string, string> {

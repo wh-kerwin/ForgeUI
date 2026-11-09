@@ -23,8 +23,8 @@ export function resolveInteraction(
   page: Pick<PageSpec, "interaction">,
   isCrudPage = false,
 ): ResolvedInteraction {
-  if (isCrudPage) return CRUD_MODAL_INTERACTION;
-  return { ...DEFAULT_INTERACTION, ...page.interaction };
+  const defaults = isCrudPage ? CRUD_MODAL_INTERACTION : DEFAULT_INTERACTION;
+  return { ...defaults, ...page.interaction };
 }
 
 export function usesOverlay(mode: InteractionMode): boolean {

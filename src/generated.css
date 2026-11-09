@@ -49,32 +49,7 @@
   font-size: 20px;
   color: #d5fa61;
 }
-.table-wrap {
-  overflow: auto;
-  border: 1px solid #273241;
-  border-radius: 7px;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-th,
-td {
-  text-align: left;
-  padding: 12px;
-  border-bottom: 1px solid #232d3a;
-  white-space: nowrap;
-}
-th {
-  font:
-    10px "Courier New",
-    monospace;
-  color: #78869a;
-}
-td {
-  color: #c7d0dd;
-}
+
 .table-status {
   color: #a9db69;
 }
@@ -180,33 +155,12 @@ td {
   margin: 7px 0 12px;
   font-size: 14px;
 }
-.mutation-box textarea {
-  display: block;
-  width: 100%;
-  min-height: 90px;
-  resize: vertical;
-  background: #0e131a;
-  color: #dce5f1;
-  border: 1px solid #303b4b;
-  border-radius: 6px;
-  padding: 11px;
-  font:
-    12px "Courier New",
-    monospace;
-  margin-bottom: 10px;
-}
+
 .delete-row {
   display: flex;
   gap: 9px;
 }
-.delete-row input {
-  flex: 1;
-  background: #0e131a;
-  color: #e8edf6;
-  border: 1px solid #303b4b;
-  border-radius: 6px;
-  padding: 10px;
-}
+
 .danger {
   background: #5d272d;
   color: #ffdce0;
@@ -323,8 +277,7 @@ td {
   opacity: 0.72;
 }
 .is-streaming .generated-page-workspace,
-.is-streaming .generated-page-main,
-.is-streaming .table-wrap {
+.is-streaming .generated-page-main {
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -388,33 +341,7 @@ td {
   gap: 10px;
   margin: 12px 0;
 }
-.schema-fields label {
-  display: grid;
-  gap: 5px;
-  color: #aeb9c8;
-  font-size: 11px;
-}
-.schema-fields input,
-.schema-fields select {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid #303b4b;
-  border-radius: 5px;
-  padding: 8px;
-  background: #0e131a;
-  color: #dce5f1;
-  font:
-    12px "Courier New",
-    monospace;
-}
-.schema-fields input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-}
-.schema-fields small {
-  color: #718095;
-  font-size: 10px;
-}
+
 .form-error {
   margin: 6px 0;
   color: #ff9ca6;
@@ -684,13 +611,6 @@ td {
   }
   .generated-page .stats-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .table-wrap {
-    max-width: 100%;
-    overflow-x: auto;
-  }
-  .table-wrap table {
-    min-width: 560px;
   }
 }
 @media (max-width: 420px) {
