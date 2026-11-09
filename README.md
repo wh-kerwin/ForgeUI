@@ -123,7 +123,7 @@ npm run tauri:dev
 - React WebView 不直接请求模型服务、Swagger 服务或业务 API；请求、TLS、凭证读取和数据持久化全部经由 Rust/Tauri IPC。
 - 模型只接收页面结构和已授权 operation，不接收已加载的真实业务数据、Token 或 API Key。
 - OpenAPI operation 允许列表和 `PageSpec` 绑定由 Rust 层复核，未授权或不匹配的操作不会执行。
-- 模型、OpenAPI 与业务 API 响应都有长度限制；远程地址默认必须使用 HTTPS，开发模式仅放行 localhost HTTP。
+- 模型、OpenAPI 与业务 API 响应都有长度限制；公网地址必须使用 HTTPS，本地与局域网地址（loopback、RFC1918、link-local、IPv6 ULA、`localhost`/`.local`）允许 HTTP，URL 内不得包含凭证。
 - 新增、编辑、删除必须由用户主动提交，删除操作需要二次确认。
 
 ### 项目结构

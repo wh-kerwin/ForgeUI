@@ -84,6 +84,8 @@
 - 交付后检出复验：Windows `core.autocrlf=true` 会把两个生成产物以 CRLF 检出，而生成器始终输出 LF，导致 `contract:check` 在切分支后误报 stale。已在生成器 `--check` 中仅对既有文件做 CRLF→LF 归一比较（不改写任何文件、不改变生成字节），并补一条 CRLF 检出回归，保证 `npm test`/CI 的逐内容门禁在两种行尾下都成立；stale/missing/临时目录清理断言保留。复验 `contract:check`、Node 285/285、Rust 111/111、build 通过。该修复与交付记录同样按流程快进合并并推送。
 - 警告清理（用户指出）：截图中的 7 条 `warning: function ... is never used` 均来自 `page_schema.rs` 的 legacy v1 归一化辅助；全仓检索确认只有 `#[cfg(test)]` 测试模块调用，生产入口零引用，因此 `cargo check --lib` 报警而 `cargo test` 不报。已给 `normalize_page_spec` 及 6 个辅助函数加 `#[cfg(test)]`，并把仅它们使用的 `HashMap`/`HashSet` 导入一并限定为测试编译；代码与测试覆盖保留，恢复生产调用时移除 cfg 即可。`cargo check --features updater` 与 `cargo check --all-targets` 均零警告，`cargo fmt --check`、Rust 111/111、MSRV 1.88 复验通过。未触及 8 条既有 lint warning、大 chunk 与 dev-only 中危公告等其它保留项。
 
+- 用户反馈（B 端内网）：`validate_https_or_debug_local` 原先仅 debug 构建放行 `localhost/127.0.0.1/::1`，release 包连本地测试后端都拒绝，内网明文 HTTP 的 Swagger/业务 API/模型服务全部被拦。已重命名为 `validate_url_transport` 并改为：HTTPS 一律允许；HTTP 仅放行 loopback、RFC1918（10/8、172.16/12、192.168/16）、169.254/16、IPv6 ULA `fc00::/7` 与 link-local `fe80::/10`、`localhost`/`*.localhost`/`*.local`，不再区分 debug/release；公网 HTTP、仿冒域名（`localhost.evil.com`）、URL 内嵌凭证仍拒绝。三处调用（Swagger 导入与自动发现、模型服务、业务 API）统一生效；保留 `validate_target` same-origin、operation 授权、响应长度与企业 CA 边界。新增 2 项表驱动回归（13 个放行、8 个拒绝样例），Rust 113/113、all-targets 零警告、fmt、build、lint、Node 285/285 与 MSRV 复验通过；前端两个地址 placeholder 与 README 安全边界同步。限制：内部自定义域名（如 `http://erp.corp`）无法自动判定，仍需 HTTPS；如需放行须另加显式开关，不默认放开公网明文。
+
 ### B2 验证与交付记录（2026-10-30）
 
 - 主会话最终验证：Node191/191、Rust79/79、UI17/17、build通过；lint0errors/8既有warnings。Rust fmt/updater已验证；保留旧normalize的7条dead_code与大chunk警告。测试均离线或本地fixture，未调用live模型。

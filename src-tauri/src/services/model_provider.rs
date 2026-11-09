@@ -1,5 +1,5 @@
 use crate::services::url_security::{
-    read_limited_response, validate_content_length, validate_https_or_debug_local,
+    read_limited_response, validate_content_length, validate_url_transport,
 };
 use crate::{
     domain::{
@@ -78,7 +78,7 @@ fn endpoint(base_url: &str, protocol: &str) -> String {
 
 fn validate_transport(base_url: &str, protocol: &str, model: &str) -> Result<(), String> {
     let parsed = url::Url::parse(base_url).map_err(|_| "模型 Base URL 无效".to_string())?;
-    validate_https_or_debug_local(&parsed, "模型服务")?;
+    validate_url_transport(&parsed, "模型服务")?;
     if !matches!(protocol, "openai" | "anthropic") {
         return Err("不支持的模型 API 格式".into());
     }

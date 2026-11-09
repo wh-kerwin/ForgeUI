@@ -108,7 +108,7 @@ export function BusinessConnectionPanel({
         <span className="eyebrow">UPSTREAM AUTH</span>
         <input
           type="url"
-          placeholder="业务 API 基址，例如 https://api.example.com/v1"
+          placeholder="业务 API 基址，例如 http://192.168.1.20:8080 或 https://api.example.com/v1"
           value={businessAuth.apiBaseUrl || ""}
           onChange={(event) =>
             setBusinessAuth((current) => ({ ...current, apiBaseUrl: event.target.value }))

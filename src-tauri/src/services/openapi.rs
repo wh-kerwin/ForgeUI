@@ -1,5 +1,5 @@
 use crate::services::url_security::{
-    read_limited_response, validate_content_length, validate_https_or_debug_local,
+    read_limited_response, validate_content_length, validate_url_transport,
 };
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -335,7 +335,7 @@ pub async fn import_url(url: String) -> Result<OpenApiSummary, String> {
     for _ in 0..2 {
         let parsed =
             url::Url::parse(&current).map_err(|_| "Swagger URL 不是有效地址".to_string())?;
-        validate_https_or_debug_local(&parsed, "Swagger/OpenAPI 地址")?;
+        validate_url_transport(&parsed, "Swagger/OpenAPI 地址")?;
         let response = client
             .get(parsed.clone())
             .send()
@@ -373,7 +373,7 @@ pub async fn import_url(url: String) -> Result<OpenApiSummary, String> {
 
 pub async fn discover_candidates(url: String) -> Result<Vec<String>, String> {
     let parsed = url::Url::parse(&url).map_err(|_| "Swagger URL 不是有效地址".to_string())?;
-    validate_https_or_debug_local(&parsed, "Swagger/OpenAPI 地址")?;
+    validate_url_transport(&parsed, "Swagger/OpenAPI 地址")?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(20))
         .redirect(reqwest::redirect::Policy::none())

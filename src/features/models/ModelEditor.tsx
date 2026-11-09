@@ -100,7 +100,7 @@ export function ModelEditor({ initial, promptTemplates, onClose, onSave, onTest,
           <input
             value={model.baseUrl}
             onChange={(event) => set("baseUrl", event.target.value)}
-            placeholder="https://api.example.com/v1"
+            placeholder="https://api.example.com/v1 或 http://192.168.1.20:8080/v1"
           />
         </label>
         <label>

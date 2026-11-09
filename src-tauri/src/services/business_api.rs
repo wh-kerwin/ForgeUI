@@ -1,6 +1,6 @@
 use crate::repositories::{projects, secrets};
 use crate::services::url_security::{
-    read_limited_response, validate_content_length, validate_https_or_debug_local,
+    read_limited_response, validate_content_length, validate_url_transport,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::Duration};
@@ -180,7 +180,7 @@ pub async fn execute(request: ApiRequest) -> Result<ApiResponse, String> {
         request.operation_key.as_deref(),
     )?;
     validate_target(&parsed, Some(&authorized.base_url))?;
-    validate_https_or_debug_local(&parsed, "业务 API")?;
+    validate_url_transport(&parsed, "业务 API")?;
     if !matches!(method.as_str(), "GET" | "POST" | "PUT" | "PATCH" | "DELETE") {
         return Err("不支持的 HTTP 方法".into());
     }
