@@ -31,3 +31,6 @@ Quiet dark desktop workspace inspired by Linear, Raycast and OpenCode references
 - All interactive targets have visible hover/focus states and at least 36px touch area.
 - At widths below 640px, the sidebar becomes a compact top navigation and content uses 16px horizontal padding.
 - Never use purple gradients, generic dashboard gradients, or unexplained decorative charts.
+- Feedback surfaces are transient or dismissible: success toasts auto-dismiss, failures stay only until the user closes them, and in-progress indicators must be replaced by the flow's terminal state.
+- Every non-progress overlay has an accessible close control; two overlays must never share the same fixed coordinates without an explicit stack or offset.
+- Diagnostics show only what is still valid for the current terminal state: superseded retry errors and duplicated issues are never carried into a successful result.
