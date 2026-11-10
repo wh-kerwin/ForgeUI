@@ -34,6 +34,21 @@
 
 真实 IPC 验收准备（历史记录，后续三项取消 IPC 已通过，见当前状态及验证记录）：只读核对确认数据库路径固定在 Windows LocalApplicationData/ForgeUI，启动即进行迁移/备份；identifier、WebView profile 或 LOCALAPPDATA 环境变量不能可靠隔离。禁止直接启动默认应用验收。增加 debug 专用测试数据目录和隔离 smoke 脚本，release 数据路径不变；临时项目使用无认证的本地 HTTP fixture，不调用模型/凭证接口。此项属于 A1 真实 IPC 门禁的必要测试基础设施，尚未执行桌面验收。
 
+## 前端反馈与诊断 UI 约定（防复发，2026-11-10）
+
+由「生成页双轨 UI」「旧安装包误判代码失效」「诊断提示常驻且无法关闭」三次用户反馈归纳。新增或修改任何浮层、提示、诊断列表前逐条核对，不要只修截图里那一个控件；下方 2026-11-10 记录是首个反例。
+
+| 规则           | 要求                                                                                                                                                             | 守卫                                                                |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 终态明确       | 每个提示状态都要有进入条件和退出条件：成功类自动消失（当前 8s）、失败/API 兜底保留但可手动关闭、进行中进度提示不可关闭且必须被流程终态覆盖。                     | `tests/ui/workbenchGeneration.test.tsx` 成功/失败/8s 生命周期三项    |
+| 关闭入口       | 所有非进度类浮层都要有明确关闭控件与可访问名称（如 `关闭生成诊断`、`关闭提示`）；同类浮层不得出现「一个有 X、另一个没有」。                                        | 同上，两个浮层各按 `getByRole("button", { name: ... })` 断言        |
+| 信息不越期     | 诊断只展示当前终态仍有效的信息：重试/格式修复成功后不再显示已被覆盖的 error 级 issue；warning、失败原因、兜底原因保留；issue 不得在多处拼接时重复累加。          | 同上 + `finalIssues` 单一来源 + `uniqueIssues` 去重                 |
+| 不重叠         | 同时存在多个浮层时要有确定的堆叠或偏移，不能共用同一 `position: fixed` 坐标互相遮挡。                                                                            | `.toast-stack` 单一 flex 容器，禁止硬编码 `bottom` 偏移             |
+| 单一数据源     | 主题、组件、交互模式只能有一个来源：生成页统一局部 antd `ConfigProvider` 与 antd 控件，禁止再用 `.ant-*` 颜色覆盖或原生表单双轨。                                | `tests/generatedTheme.test.ts`、`tests/generatedStyleGuard.test.ts` |
+| 先确认运行产物 | 用户反馈「改了没生效」时先区分源码、`dist`、dev server 与已安装 Tauri 包；旧安装包内嵌旧前端，须先 `npm run tauri:dev` 或重新 `npm run tauri:build` 安装再判断。 | 执行日志「运行环境诊断」条目                                        |
+
+约定：新增成功/失败提示时必须同时补一条「能否关闭、关闭后是否残留」的 UI 用例，只改文案不改生命周期视为未完成；契约/Rust 类问题同样按「先定位运行链路、再判定是否代码缺陷」的顺序处理。
+
 ## 当前任务状态（2026-11-09 更新）
 
 本表是当前状态入口；下方按时间保留的过程记录只代表当时状态。验证数量须与对应提交或工作区快照关联，不以早期通过结果替代最新复验。
@@ -92,12 +107,16 @@
 - 运行环境诊断（用户反馈 UI 根治后仍「不是弹窗、不像 antd」）：在真实浏览器中对当前源码做注入式验证 —— 生成页主按钮 `rgb(22,119,255)`/`padding 0 15px`，点击「新建」后 `.ant-modal-wrap` 为 `position: fixed`、遮罩 `rgba(0,0,0,.45)`，antd CSS-in-JS 注入 9 个组件样式标签；`tauri.conf.json` 的 `style-src 'self' 'unsafe-inline'` 未拦截注入；`dist` 的 CSS 已不含 `.page-modal`/`.ant-btn` 颜色覆盖。结论是代码生效，用户运行的是 `src-tauri/target/release/bundle/` 下 2026-08 打出的安装包，内嵌旧前端，源码/`dist`/git 更新都不会进入已安装程序，需 `npm run tauri:dev` 或重新 `npm run tauri:build` 安装。另修 antd v6 弃用的 `maskClosable` → `mask={{ closable }}`，复验 build、Node 293/293、lint 0errors。注意：Workbench 主界面为自绘 CSS（浏览器实测首页 antd 组件数为 0），只有生成结果页使用 antd，两套界面若需完全统一是独立的产品决策。
 - 自检方法：在应用窗口 DevTools 执行 `getComputedStyle(document.querySelector('.ant-btn-primary')).backgroundColor`，新代码为 `rgb(22, 119, 255)`；再看 `document.querySelector('script[src]').src` 的 hash 是否与 `dist/index.html` 一致（当前 `index-Rs3MpS5E.js`），不一致即为旧构建。
 
+- 用户反馈（2026-11-10，诊断提示常驻且不能关闭）：截图里生成成功后右下角「校验通过，页面已采用」一直挂着、没有关闭入口，下面还列着「模型响应格式无法解析，请重试生成」「PageSpec view 结构无效」等错误。三层根因叠加：①`generationStatus` 成功后不清空，渲染条件仅 `generationStatus && route === "generate"`，只有切换项目/作用域失效或下一次生成才重置；②该诊断 toast 只有内容区，关闭按钮只存在于普通 `notice` toast，两者同为 `.toast` 且共用同一 `position: fixed` 坐标，用户误以为是同一个且找不到 X；③`finalIssues = [...attemptIssues, ...result.issues]` 把重试/格式修复过程中的 error 级诊断带进成功结果，重试路径因 `result.issues` 已含 `attemptIssues` 又重复累加两次（B2 已记录的保留项），于是「成功」与「已失效错误」同屏。修复：成功（非 `apiFallback`）诊断 8 秒自动消失，失败/API 兜底保留到用户处理；所有终态增加「关闭生成诊断」X 按钮，生成中不提供关闭（进度提示）；页面采用后按 severity 过滤已被覆盖的 error issue，warning（预算提示等）保留，进行中/失败/兜底仍显示完整原因；`finalIssues` 改为直接取 `result.issues`，API 兜底结果补回 `attemptIssues`；两个 toast 叠加时诊断框上移。新增 2 项 UI 守卫：成功态可关闭且不含过期 error、失败态保留「重试生成」直到手动关闭。复验 UI 19/19、Node 293/293（含 `contract:check`）、`tsc --noEmit`、lint 0 errors/8 既有 warnings、`npm run build` 通过，`dist` 已确认包含关闭逻辑；Prettier 对两个源码文件报 warning 是 CRLF 工作区既有状态，归一后格式差异 0。边界：未执行 Tauri 打包，旧安装包仍嵌旧前端。防复发规则见本文件上方「前端反馈与诊断 UI 约定」。
+
+- 定向复审与收口（2026-11-10，接续上条）：本批改动在提交前的窄范围只读复审判 FAIL，三项约定未闭合：①普通 `notice` toast 的关闭按钮无可访问名称、样式与诊断按钮不一致，违反「同类浮层都有 X」；②两次失败进入 `apiFallback` 时 `[...attemptIssues, ...failure.issues]` 重复累加相同 error，且该分支完全不含 `promptDiagnosticIssues`，预算 warning 丢失；③成功态 8s 自动消失、失败态不自动消失、双浮层不重叠、兜底 issue 去重均无断言。另有两个 Minor：自动消失只清 `generationStatus`，残留 `generationSource`/`generationIssues`；`bottom: 88px` 硬编码偏移对长 notice 不保证不重叠。收口：`Workbench.tsx` 用 `useCallback` 统一手动关闭与 8s 自动消失的完整状态清理；两次 `buildModelRequest` 提到外层，兜底分支补回两次预算诊断，`finalIssues` 统一经 `uniqueIssues` 去重；两个 toast 改由 `.toast-stack`（flex column + gap + `pointer-events`）单一容器堆叠，普通提示补 `关闭提示`/`type="button"`/统一 `.toast-close` 样式，删除 `.toast-with-notice`。UI 用例补 8s 成功自动消失、失败态不注册 8s timer、双浮层同容器且各自可独立关闭，并给 API 兜底用例加预算 warning 保留与 issue 去重断言；`SUCCESS_DIAGNOSTICS_MS` 与测试内 8000 常量的同步关系由测试注释锁定（改动数值会使生命周期用例失败而非静默通过，代价是常量双份，未为它新增组件文件导出以免触发 fast-refresh 警告）。最终复验：UI 22/22（定向 15/15）、Node 293/293（含 `contract:check`）、Rust 113/113、Rust fmt/updater check、`npm run build`、lint 0 errors/8 既有 warnings 通过。B2 保留项「fallback 预算 warning」至此收口，不再列为待办。边界：未执行 Tauri 打包或像素级视觉回归；旧安装包仍嵌旧前端。
+
 ### B2 验证与交付记录（2026-10-30）
 
 - 主会话最终验证：Node191/191、Rust79/79、UI17/17、build通过；lint0errors/8既有warnings。Rust fmt/updater已验证；保留旧normalize的7条dead_code与大chunk警告。测试均离线或本地fixture，未调用live模型。
 - 审查修复：保留operation全部roles，统计操作不再因首role为list误拒；Rust增加最终user消息合计预算；恢复各文档operation的bodySchemas/queryParameters并与tuple一起按完整块预算，避免同名schema串用。该Important定向复审PASS。
 - 预算提示由本地固定诊断映射为限长warning，正常生成展示已由真实Workbench UI测试覆盖；窄范围复审PASS with minors，无新增过期回写、泄露或重复模型调用。
-- 明确保留的非阻塞项：重试成功可能重复展示首次失败issues；两次失败进入API fallback时预算warning未完整保留。Ruling: 本轮记录后交付、不再扩大修复循环 — 不影响授权、重试次数、有效页面保留 — 代价是部分诊断重复/不完整，后续业务体验收口时补覆盖。
+- 明确保留的非阻塞项：重试成功可能重复展示首次失败issues；两次失败进入API fallback时预算warning未完整保留。Ruling: 本轮记录后交付、不再扩大修复循环 — 不影响授权、重试次数、有效页面保留 — 代价是部分诊断重复/不完整，后续业务体验收口时补覆盖。（2026-11-10 已收口：前一项「重复展示」由 `finalIssues = result.issues` 与成功态 error 过滤解决；后一项「fallback 预算 warning」由两次请求诊断补回与 `uniqueIssues` 去重解决，见上方「定向复审与收口」记录。）
 - 原用户PRD/OPTIMIZATION/implementation-status修改、未跟踪设计/研究文档不混入；默认v2仍关闭。提交推送确认后再开始C1。
 
 ### 提交与恢复断点
@@ -107,6 +126,7 @@
 - 已恢复核对上次中断改动：非法 JSON 信封可重试及 JSON Pointer 修复已在磁盘，新的只读核验确认正确，provider针对20/20、candidate3/3通过。
 - 预览 UI 测试将全页重复 role 扫描缩小到实际 header/fieldset/table/首行区域，仍使用真实组件/userEvent，保留全部零执行断言，未提高30秒超时、未跳过测试。主会话完整UI16/16通过。
 - B1 已完成验证、审查、提交并推送：提交 `c02cda6`，已快进合并本地 `main`，远程 `origin/main` 已核对同一提交。包含共享fixtures、TS/Rust详细诊断、生成来源、候选绑定边界和UI门禁。
+- 2026-11-10 诊断 UI 反馈修复（生成诊断生命周期、双浮层堆叠、API 兜底 warning 去重）已复审收口，代码提交 `66c3305`，本执行记录另作 docs 提交。工作区 `src/route.css` 删除 `.route-panel` 的 3 行与 `src-tauri/Cargo.toml` 的空内容改动与本次反馈无关且日志未记录，按「不混入未确认改动」保留在工作区、未纳入提交；用户原有 DESIGN/OPTIMIZATION/PRD/implementation-status 修改与未跟踪设计/计划/ADR/研究文档同样未混入。默认 v2 仍关闭，C2 未提前实施。
 
 ## 2026-10-23 接续核对与补充覆盖（历史过程记录）
 
