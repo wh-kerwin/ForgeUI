@@ -20,6 +20,8 @@ export function PageHeader({
   onLoadData,
   loadingData,
   showPageActions = true,
+  displayColumns,
+  displayRows,
 }: {
   page: PageSpec;
   projectId: string;
@@ -36,6 +38,8 @@ export function PageHeader({
   onLoadData?: () => void;
   loadingData?: boolean;
   showPageActions?: boolean;
+  displayColumns?: string[];
+  displayRows?: string[][];
 }) {
   return (
     <div className="panel-head">
@@ -92,6 +96,8 @@ export function PageHeader({
               templateId={templateId}
               templateName={templateName}
               onSaved={onSaved}
+              displayColumns={displayColumns}
+              displayRows={displayRows}
             />
           )}
         </div>

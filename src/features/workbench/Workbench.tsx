@@ -618,6 +618,9 @@ export function Workbench() {
         onDelete={generated.deleteRecord}
         querying={generated.querying}
         queryMeta={generated.queryMeta}
+        runtime={generated.runtime}
+        onSelectionKeysChange={generated.setRuntimeSelection}
+        onRuntimeControls={generated.setRuntimeControls}
         sessions={persistence.sessions}
         onOpenSession={openSession}
         onDeleteSession={persistence.removeSession}

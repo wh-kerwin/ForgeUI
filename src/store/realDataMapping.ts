@@ -88,3 +88,61 @@ export function mapRealDataResponse(body: unknown): RealDataMapping {
       : {}),
   };
 }
+
+/**
+ * Same v1-compatible list discovery, but keeps RAW JSON values for the
+ * runtime. `rows` is only a display convenience; C3 consumers must store
+ * `records` and format through runtimeSelectors instead.
+ */
+export type RawDataMapping =
+  | {
+      status: "mapped";
+      records: Record<string, unknown>[];
+      columns: string[];
+      rows: string[][];
+      total?: number;
+      truncated: { rows: boolean; columns: boolean };
+    }
+  | {
+      status: "empty";
+      records: [];
+      columns: [];
+      rows: [];
+      total: number;
+      truncated: { rows: false; columns: false };
+    }
+  | { status: "invalid" };
+
+export function mapRealDataRecords(body: unknown): RawDataMapping {
+  const list = unwrapList(body);
+  if (!list) return { status: "invalid" };
+  const total = findTotal(body);
+  if (list.length === 0) {
+    return {
+      status: "empty",
+      records: [],
+      columns: [],
+      rows: [],
+      total: total ?? 0,
+      truncated: { rows: false, columns: false },
+    };
+  }
+  const rowsTruncated = list.length > MAX_MAPPED_ROWS;
+  const records = list
+    .slice(0, MAX_MAPPED_ROWS)
+    .map((item) => (isRecord(item) ? item : { value: item }));
+  const allColumns = [...new Set(records.flatMap((record) => Object.keys(record)))];
+  const columns = withRecordIdFirst(allColumns.slice(0, MAX_MAPPED_COLUMNS));
+  if (!columns.length) return { status: "invalid" };
+  return {
+    status: "mapped",
+    records,
+    columns,
+    rows: records.map((record) => columns.map((column) => toCell(record[column]))),
+    ...(total !== undefined ? { total } : {}),
+    truncated: {
+      rows: rowsTruncated,
+      columns: allColumns.length > MAX_MAPPED_COLUMNS,
+    },
+  };
+}

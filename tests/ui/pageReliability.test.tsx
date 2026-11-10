@@ -1,11 +1,18 @@
 import { type ComponentProps } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { DataTable } from "../../src/features/pages/DataTable";
 import { GeneratedPage } from "../../src/features/pages/GeneratedPage";
 import { LanguageProvider } from "../../src/i18n/LanguageProvider";
 import type { PageSpec } from "../../src/types/domain";
+import {
+  applyQueryFailure,
+  applyQueryResult,
+  createPageRuntimeState,
+  setRuntimeSelection,
+  type PageRuntimeState,
+} from "../../src/features/pages/runtime/pageRuntimeState";
 
 // Only the desktop IPC boundary is mocked, not AntD or any page component.
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn().mockResolvedValue(null) }));
@@ -231,7 +238,9 @@ describe("GeneratedPage execution gates", () => {
     const table = content?.querySelector<HTMLElement>(".generated-data-table");
     const main = content?.querySelector<HTMLElement>(".generated-page-main");
     const filterBar = content?.querySelector<HTMLElement>(".filter-row");
-    const firstRow = table?.querySelector<HTMLTableRowElement>("tbody tr:not(.ant-table-measure-row)");
+    const firstRow = table?.querySelector<HTMLTableRowElement>(
+      "tbody tr:not(.ant-table-measure-row)",
+    );
     expect(header).not.toBeNull();
     expect(content).not.toBeNull();
     expect(table).not.toBeNull();
@@ -239,8 +248,12 @@ describe("GeneratedPage execution gates", () => {
     expect(filterBar).not.toBeNull();
     expect(firstRow).not.toBeNull();
     expect(within(header!).getByRole("heading", { name: "Orders" })).toBeTruthy();
-    expect(within(header!).queryByRole("button", { name: /保存为模板|Save as template/ })).toBeNull();
-    expect(within(header!).queryByRole("button", { name: /加载真实数据|Load real data/ })).toBeNull();
+    expect(
+      within(header!).queryByRole("button", { name: /保存为模板|Save as template/ }),
+    ).toBeNull();
+    expect(
+      within(header!).queryByRole("button", { name: /加载真实数据|Load real data/ }),
+    ).toBeNull();
     expect(within(main!).queryByRole("button", { name: "batchDelete" })).toBeNull();
     expect(within(table!).queryAllByRole("checkbox")).toHaveLength(0);
     // Exercise the real disabled fieldset, row buttons, and sortable AntD header.
@@ -276,5 +289,168 @@ describe("GeneratedPage execution gates", () => {
       JSON.stringify({ ids: ["a"] }),
     );
     expect((batch as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+function loadedRuntime(records: Record<string, unknown>[], total?: number): PageRuntimeState {
+  return applyQueryResult(createPageRuntimeState("c3"), {
+    records,
+    columns: ["id", "amount"],
+    rowKeyPointer: "/id",
+    ...(total === undefined ? {} : { total }),
+  });
+}
+
+describe("GeneratedPage C3 definition/runtime separation", () => {
+  it("renders runtime records while a frozen page definition stays untouched", () => {
+    const definition: PageSpec = { ...fixture(), rows: [["sample", "0"]] };
+    Object.freeze(definition.rows);
+    Object.freeze(definition);
+    render(
+      <GeneratedPage
+        {...pageProps(definition)}
+        runtime={loadedRuntime([{ id: 7, amount: 20.5 }], 9)}
+      />,
+      { wrapper: LanguageProvider },
+    );
+    expect(rowIds()).toEqual(["7"]);
+    expect(screen.getByText("20.5")).toBeTruthy();
+    expect(definition.rows).toEqual([["sample", "0"]]);
+  });
+
+  it("keeps stale rows visible but blocks writes until a fresh query succeeds", async () => {
+    const user = userEvent.setup();
+    const props = pageProps();
+    const stale = applyQueryFailure(
+      loadedRuntime([{ id: "a", amount: 20 }], 9),
+      { code: "runtime.query.failed", message: "网络中断" },
+      { keepData: true },
+    );
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<GeneratedPage {...props} runtime={stale} />, { wrapper: LanguageProvider });
+    expect(rowIds()).toEqual(["a"]);
+    expect(screen.getByText("当前展示上次成功结果（已过期），写入已禁用")).toBeTruthy();
+    expect(screen.getByText("网络中断")).toBeTruthy();
+    await user.click(screen.getAllByRole("checkbox")[1]);
+    await user.click(screen.getByRole("button", { name: "batchDelete" }));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(props.onMutation).not.toHaveBeenCalled();
+  });
+
+  it("never fabricates a total and keeps data diagnostics dismissible but not stale", async () => {
+    const user = userEvent.setup();
+    const props = pageProps();
+    const runtime = loadedRuntime([{ id: "a", amount: 20 }]);
+    const view = render(<GeneratedPage {...props} runtime={runtime} />, {
+      wrapper: LanguageProvider,
+    });
+    const diagnostic = () =>
+      view.container.querySelector('[data-diagnostic-code="runtime.total.unknown"]');
+    expect(view.container.querySelector(".pagination--unknown-total")).not.toBeNull();
+    expect(screen.queryByText(/共 0 条/)).toBeNull();
+    expect(diagnostic()).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "关闭数据诊断" }));
+    expect(diagnostic()).toBeNull();
+    const failed = applyQueryFailure(
+      runtime,
+      { code: "runtime.query.failed", message: "查询失败" },
+      { keepData: true },
+    );
+    view.rerender(<GeneratedPage {...props} runtime={failed} />);
+    expect(diagnostic()).not.toBeNull();
+    expect(screen.getByText("查询失败")).toBeTruthy();
+  });
+
+  it("stores selection as typed runtime keys, not display indexes", async () => {
+    const user = userEvent.setup();
+    const props = pageProps();
+    const runtime = loadedRuntime(
+      [
+        { id: "1", amount: 1 },
+        { id: 1, amount: 2 },
+      ],
+      9,
+    );
+    const onSelectionKeysChange = vi.fn();
+    const view = render(
+      <GeneratedPage {...props} runtime={runtime} onSelectionKeysChange={onSelectionKeysChange} />,
+      { wrapper: LanguageProvider },
+    );
+    await user.click(screen.getAllByRole("checkbox")[1]);
+    expect(onSelectionKeysChange).toHaveBeenLastCalledWith(["string:1"]);
+    // A selection-only runtime update replaces the runtime object but not its records.
+    view.rerender(
+      <GeneratedPage
+        {...props}
+        runtime={setRuntimeSelection(runtime, ["string:1"])}
+        onSelectionKeysChange={onSelectionKeysChange}
+      />,
+    );
+    expect((screen.getAllByRole("checkbox")[1] as HTMLInputElement).checked).toBe(true);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    await user.click(screen.getByRole("button", { name: "batchDelete" }));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(props.onMutation).toHaveBeenCalledWith(
+      expect.objectContaining({ method: "DELETE", path: "/orders/batch" }),
+      JSON.stringify({ ids: ["1"] }),
+    );
+  });
+
+  it("labels stat scope instead of presenting definition numbers as live aggregates", () => {
+    const definition: PageSpec = {
+      ...fixture(),
+      operations: fixture().operations!.filter((operation) => operation.role === "list"),
+      stats: [{ label: "全部订单", value: "1,280" }],
+    };
+    const props = pageProps(definition);
+    const view = render(
+      <GeneratedPage {...props} runtime={loadedRuntime([{ id: "a", amount: 20 }], 9)} />,
+      { wrapper: LanguageProvider },
+    );
+    expect(screen.getByText("全部订单")).toBeTruthy();
+    expect(screen.getByText("—")).toBeTruthy();
+    expect(screen.getByText("当前页未提供聚合口径")).toBeTruthy();
+    expect(screen.queryByText("1,280")).toBeNull();
+    view.rerender(<GeneratedPage {...props} />);
+    expect(screen.getByText("定义示例，非实时数据")).toBeTruthy();
+  });
+
+  it("saves a pure definition while the table shows loaded runtime rows", async () => {
+    const user = userEvent.setup();
+    vi.mocked(invoke).mockClear();
+    vi.spyOn(window, "alert").mockImplementation(() => {});
+    const definition: PageSpec = { ...fixture(), rows: [["sample", "0"]] };
+    const props = { ...pageProps(definition), templateId: "template-1" };
+    render(<GeneratedPage {...props} runtime={loadedRuntime([{ id: "loaded", amount: 7 }], 9)} />, {
+      wrapper: LanguageProvider,
+    });
+    expect(rowIds()).toEqual(["loaded"]);
+    await user.click(screen.getByRole("button", { name: "更新当前模板" }));
+    const save = vi.mocked(invoke).mock.calls.find(([command]) => command === "save_template");
+    expect(save).toBeTruthy();
+    const payload = JSON.parse((save![1] as { payload: string }).payload);
+    expect(payload.rows).toEqual([["sample", "0"]]);
+    expect(JSON.stringify(payload)).not.toContain("loaded");
+  });
+
+  it("confines identity diagnostics to row writes and keeps create available", () => {
+    // A redirect create has a deterministic, renderer-independent side effect.
+    const props = pageProps({ ...fixture(), interaction: { create: "redirect" } });
+    const duplicated = loadedRuntime(
+      [
+        { id: "a", amount: 1 },
+        { id: "a", amount: 2 },
+      ],
+      9,
+    );
+    render(<GeneratedPage {...props} runtime={duplicated} />, { wrapper: LanguageProvider });
+    expect(screen.getByText("记录 ID 重复，行级写入已禁用")).toBeTruthy();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    fireEvent.click(screen.getByRole("button", { name: "batchDelete" }));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(props.onMutation).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "新建" }));
+    expect(window.location.pathname).toBe("/generate/create");
   });
 });

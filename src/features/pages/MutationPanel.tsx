@@ -23,6 +23,8 @@ import { recordId } from "./recordIdentity";
 type Props = {
   page: PageSpec;
   zh: boolean;
+  /** Loaded display columns; row values come from runtime, not the definition. */
+  displayColumns?: string[];
   fieldSchemas?: Record<string, FieldSchema[]>;
   interaction: ResolvedInteraction;
   createOperation?: RuntimeOperation;
@@ -107,6 +109,7 @@ function OperationOverlay({
 export function MutationPanel({
   page,
   zh,
+  displayColumns,
   fieldSchemas,
   interaction,
   createOperation,
@@ -128,6 +131,7 @@ export function MutationPanel({
   onMutation,
   onDelete,
 }: Props) {
+  const activeColumns = displayColumns ?? page.columns;
   const [createForm, setCreateForm] = useState("{\n  \n}");
   const [createValues, setCreateValues] = useState<Record<string, string>>({});
   const [createErrors, setCreateErrors] = useState<FieldErrors>({});
@@ -152,8 +156,8 @@ export function MutationPanel({
   const visibleCreateFields = visibleFieldSchemas(createFields, createValues);
   const visibleEditFields = visibleFieldSchemas(editFields, editValues);
   const rowRecord = (row: string[]) =>
-    Object.fromEntries(page.columns.map((column, index) => [column, row[index] || ""]));
-  const rowId = (row: string[]) => recordId(page.columns, row);
+    Object.fromEntries(activeColumns.map((column, index) => [column, row[index] || ""]));
+  const rowId = (row: string[]) => recordId(activeColumns, row);
   const deleteBinding = page.operations?.find(
     (binding) =>
       binding.operation_id === deleteOperation?.operationId &&
@@ -265,7 +269,7 @@ export function MutationPanel({
       const next = JSON.parse(result.payload) as Record<string, unknown>;
       onRowsChange((rows) =>
         rows.map((row) =>
-          row === editingRow ? page.columns.map((column) => String(next[column] ?? "")) : row,
+          row === editingRow ? activeColumns.map((column) => String(next[column] ?? "")) : row,
         ),
       );
     }
@@ -288,7 +292,7 @@ export function MutationPanel({
     );
   const renderDeletePreview = (row: string[]) => (
     <dl className="delete-preview">
-      {page.columns.slice(0, 4).map((column, index) => (
+      {activeColumns.slice(0, 4).map((column, index) => (
         <Fragment key={column}>
           <dt>{column}</dt>
           <dd>{row[index] || "-"}</dd>

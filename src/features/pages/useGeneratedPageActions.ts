@@ -21,6 +21,9 @@ export function useGeneratedPageActions({
   const detail = useWorkbenchStore((state) => state.detail);
   const querying = useWorkbenchStore((state) => state.querying);
   const queryMeta = useWorkbenchStore((state) => state.queryMeta);
+  const runtime = useWorkbenchStore((state) => state.runtime);
+  const setRuntimeSelection = useWorkbenchStore((state) => state.setRuntimeSelection);
+  const setRuntimeControls = useWorkbenchStore((state) => state.setRuntimeControls);
   const configureApi = useWorkbenchStore((state) => state.configureApi);
   const cancelPendingQuery = useWorkbenchStore((state) => state.cancelPendingQuery);
   const query = useWorkbenchStore((state) => state.query);
@@ -33,5 +36,18 @@ export function useGeneratedPageActions({
     return cancelPendingQuery;
   }, [apiDocuments, cancelPendingQuery, configureApi, onNotice, projectId, requestScope]);
 
-  return { page, setPage, detail, querying, queryMeta, query, loadDetail, mutate, deleteRecord };
+  return {
+    page,
+    setPage,
+    detail,
+    querying,
+    queryMeta,
+    runtime,
+    setRuntimeSelection,
+    setRuntimeControls,
+    query,
+    loadDetail,
+    mutate,
+    deleteRecord,
+  };
 }

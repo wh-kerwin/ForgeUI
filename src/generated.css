@@ -650,3 +650,53 @@
     animation: none;
   }
 }
+
+.runtime-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 10px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--fg-border, #273241);
+  border-radius: 7px;
+  background: var(--fg-surface-alt, #121923);
+  color: var(--fg-text-muted, #b8c6d8);
+  font-size: 11px;
+}
+.runtime-status p {
+  margin: 0;
+}
+.runtime-status p[role="alert"] {
+  color: #ff9ca6;
+}
+.runtime-scope {
+  padding: 2px 8px;
+  border: 1px solid var(--fg-border, #344052);
+  border-radius: 999px;
+  color: var(--fg-primary, #d5fa61);
+  white-space: nowrap;
+}
+.runtime-diagnostics {
+  position: relative;
+  flex-basis: 100%;
+  padding-right: 28px;
+}
+.runtime-diagnostics ul {
+  margin: 2px 0 0;
+  padding-left: 16px;
+}
+.runtime-diagnostics-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 2px 6px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+}
+.pagination--unknown-total {
+  justify-content: flex-start;
+}

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorkbenchStore } from "../src/store/workbenchStore";
+import { selectDisplayRows } from "../src/features/pages/runtime/runtimeSelectors";
 import { createRequestScope } from "../src/features/pages/requestContext";
 import type { BusinessApiInvoke } from "../src/lib/tauri/businessApi";
 import type { ApiDocument, PageSpec } from "../src/types/domain";
@@ -60,6 +61,10 @@ function fixture() {
   return { store, scope, pending, calls, notices, document };
 }
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+function displayRows(store: ReturnType<typeof createWorkbenchStore>) {
+  const state = store.getState();
+  return state.page ? selectDisplayRows(state.runtime, state.page) : [];
+}
 
 test("project switch blocks late query success and old finally cannot stop a new query", async () => {
   const f = fixture();
@@ -82,7 +87,7 @@ test("project switch blocks late query success and old finally cannot stop a new
   assert.deepEqual(f.notices, []);
   f.pending[1].resolve({ status: 200, body: [{ id: "new-result" }] });
   await current;
-  assert.deepEqual(f.store.getState().page?.rows, [["new-result"]]);
+  assert.deepEqual(displayRows(f.store), [["new-result"]]);
   assert.equal(f.store.getState().querying, false);
   assert.ok(
     f.calls.some(
@@ -111,13 +116,13 @@ for (const dispatched of [false, true]) {
       await f.store.getState().query({}, replacement);
       assert.equal(f.store.getState().queryMeta.status, "error");
       assert.ok(f.store.getState().queryMeta.error);
-      assert.deepEqual(f.store.getState().page?.rows, []);
+      assert.deepEqual(displayRows(f.store), []);
       assert.equal(f.store.getState().querying, false);
       assert.equal(f.store.getState().loadingState, "idle");
       if (dispatched) f.pending[0].resolve({ status: 200, body: [{ id: "obsolete" }] });
       await old;
       assert.equal(f.store.getState().queryMeta.status, "error");
-      assert.deepEqual(f.store.getState().page?.rows, []);
+      assert.deepEqual(displayRows(f.store), []);
       assert.equal(f.store.getState().loadingState, "idle");
     });
   }
@@ -160,7 +165,7 @@ test("successful empty response clears previous rows and total; invalid response
     [{ items: [{ id: 7 }], total: 99 }, "success", [["7"]], 99],
     [{ data: { items: [], total: 0 } }, "empty", [], 0],
     [{ items: [{ id: 8 }], total: 51 }, "success", [["8"]], 51],
-    [{ unrelated: true }, "error", [], undefined],
+    [{ unrelated: true }, "error", [["8"]], undefined],
     [[{ id: 9 }], "success", [["9"]], undefined],
   ] as const) {
     const request = f.store.getState().query(filters, operation);
@@ -170,15 +175,17 @@ test("successful empty response clears previous rows and total; invalid response
     f.pending[f.pending.length - 1]!.resolve({ status: 200, body });
     await request;
     assert.equal(f.store.getState().queryMeta.status, status);
-    assert.deepEqual(f.store.getState().page?.rows, rows);
+    assert.deepEqual(displayRows(f.store), rows);
     assert.equal(f.store.getState().queryMeta.total, total);
     assert.equal(f.store.getState().querying, false);
     assert.equal(f.store.getState().loadingState, "idle");
     assert.deepEqual(filters, { status: "待处理", page: "3", pageSize: "25" });
     const payload = f.calls[f.calls.length - 1]!.args!.request as { url: string };
     assert.deepEqual(Object.fromEntries(new URL(payload.url).searchParams), filters);
-    if (status === "error") assert.ok(f.store.getState().queryMeta.error);
-    else assert.equal(f.store.getState().queryMeta.error, undefined);
+    if (status === "error") {
+      assert.ok(f.store.getState().queryMeta.error);
+      assert.equal(f.store.getState().runtime.stale, true, "old data is explicitly stale");
+    } else assert.equal(f.store.getState().queryMeta.error, undefined);
   }
 });
 
@@ -190,7 +197,7 @@ test("query transport error clears stale data and explicit retry preserves filte
   f.pending[0].reject("业务 API 请求失败");
   await failed;
   assert.equal(f.store.getState().queryMeta.status, "error");
-  assert.deepEqual(f.store.getState().page?.rows, []);
+  assert.deepEqual(displayRows(f.store), []);
   assert.equal(f.store.getState().queryMeta.total, undefined);
   assert.equal(f.store.getState().querying, false);
   assert.equal(f.store.getState().loadingState, "idle");
@@ -210,7 +217,7 @@ test("query transport error clears stale data and explicit retry preserves filte
   assert.equal(f.store.getState().queryMeta.status, "success");
   assert.equal(f.store.getState().queryMeta.error, undefined);
   assert.equal(f.store.getState().queryMeta.total, 81);
-  assert.deepEqual(f.store.getState().page?.rows, [["retry"]]);
+  assert.deepEqual(displayRows(f.store), [["retry"]]);
   assert.equal(f.store.getState().querying, false);
   assert.equal(f.store.getState().loadingState, "idle");
 });
@@ -238,7 +245,7 @@ for (const method of ["POST", "DELETE"] as const) {
     assert.equal(f.calls[0].command, "execute_api");
     assert.equal("request_id" in (f.calls[0].args!.request as object), false);
     assert.deepEqual(f.notices, ["写入结果尚未确认，请先刷新核对服务端状态，勿直接重试。"]);
-    assert.deepEqual(f.store.getState().page?.rows, page.rows);
+    assert.deepEqual(f.store.getState().page, page, "unknown writes must not touch the definition");
   });
 }
 
@@ -262,4 +269,32 @@ test("changing the definition blocks an old query error and resets its loading",
   assert.equal(f.store.getState().page?.title, "Replacement");
   assert.equal(f.store.getState().loadingState, "idle");
   assert.deepEqual(f.notices, []);
+});
+
+function freezeDeep<T>(value: T): T {
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) freezeDeep(item);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+test("a frozen page definition is never modified by query results", async () => {
+  const f = fixture();
+  const frozen = freezeDeep({ ...page, columns: ["id"], rows: [["sample"]] });
+  f.store.getState().setPage(frozen);
+  const request = f.store.getState().query({}, operation);
+  await settle();
+  f.pending[f.pending.length - 1].resolve({
+    status: 200,
+    body: [{ id: 7, amount: 20.5, active: false }],
+  });
+  await request;
+  assert.deepEqual(f.store.getState().page, frozen, "query must not write into the definition");
+  const runtime = f.store.getState().runtime;
+  assert.equal(runtime.source, "query");
+  assert.equal(runtime.records[0].amount, 20.5);
+  assert.equal(typeof runtime.records[0].amount, "number");
+  assert.equal(runtime.records[0].active, false);
+  assert.deepEqual(selectDisplayRows(runtime, frozen), [["7", "20.5", "false"]]);
 });

@@ -14,14 +14,17 @@ type Props = {
   templateId?: string;
   templateName?: string;
   onSaved: () => void;
+  /** Loaded display data. C3 never reads business rows from the definition. */
+  displayColumns?: string[];
+  displayRows?: string[][];
 };
-function exportCsv(page: PageSpec) {
+function exportCsv(columns: string[], rows: string[][], title: string) {
   const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
-  const csv = [page.columns, ...page.rows].map((row) => row.map(escape).join(",")).join("\r\n");
+  const csv = [columns, ...rows].map((row) => row.map(escape).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
   const anchor = window.document.createElement("a");
   anchor.href = url;
-  anchor.download = `${page.title}.csv`;
+  anchor.download = `${title}.csv`;
   anchor.click();
   URL.revokeObjectURL(url);
 }
@@ -34,18 +37,29 @@ export function PageExportActions({
   templateId,
   templateName,
   onSaved,
+  displayColumns,
+  displayRows,
 }: Props) {
   const { language } = useLanguage();
   const zh = language === "zh";
+  // Data exports use loaded display values; template saves use the pure definition.
+  const exportView: PageSpec = {
+    ...page,
+    columns: displayColumns ?? page.columns,
+    rows: displayRows ?? page.rows,
+  };
   return (
     <Space className="page-actions" wrap>
-      <Button icon={<Download size={15} />} onClick={() => exportCsv(page)}>
+      <Button
+        icon={<Download size={15} />}
+        onClick={() => exportCsv(exportView.columns, exportView.rows, page.title)}
+      >
         {zh ? "导出 CSV" : "Export CSV"}
       </Button>
       <Button
         icon={<Download size={15} />}
         onClick={() =>
-          downloadXlsx(page).catch(() =>
+          downloadXlsx(exportView).catch(() =>
             alert(zh ? "请在桌面客户端中导出 XLSX" : "Export XLSX from the desktop client"),
           )
         }

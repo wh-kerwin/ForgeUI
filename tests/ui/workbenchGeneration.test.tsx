@@ -6,6 +6,7 @@ import { LanguageProvider } from "../../src/i18n/LanguageProvider";
 import { useWorkbenchStore } from "../../src/store/workbenchStore";
 import type { PageSpec } from "../../src/types/domain";
 import type { PageIssue } from "../../src/features/pages/pageIssues";
+import { selectDisplayRows } from "../../src/features/pages/runtime/runtimeSelectors";
 
 // Keep Workbench, workspace, persistence, generated actions and the rendered UI real.
 // Only the desktop IPC/event boundaries are replaced with controllable promises.
@@ -13,6 +14,12 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+
+/** C3: query results live in runtime; the definition is never rewritten. */
+function loadedRows(): string[][] {
+  const state = useWorkbenchStore.getState();
+  return state.page ? selectDisplayRows(state.runtime, state.page) : [];
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -198,26 +205,23 @@ const SUCCESS_DIAGNOSTICS_MS = 8000;
 function trackTransientTimers() {
   const nativeSetTimeout = window.setTimeout.bind(window);
   const timers: (() => void)[] = [];
-  const spy = vi
-    .spyOn(window, "setTimeout")
-    .mockImplementation(((
-      callback: Parameters<typeof window.setTimeout>[0],
-      ms?: number,
-      ...args: unknown[]
-    ) => {
-      if (ms === SUCCESS_DIAGNOSTICS_MS && typeof callback === "function") {
-        timers.push(() => (callback as (...a: unknown[]) => void)(...args));
-        return timers.length;
-      }
-      return Reflect.apply(nativeSetTimeout, window, [callback, ms, ...args]) as number;
-    }) as typeof window.setTimeout);
+  const spy = vi.spyOn(window, "setTimeout").mockImplementation(((
+    callback: Parameters<typeof window.setTimeout>[0],
+    ms?: number,
+    ...args: unknown[]
+  ) => {
+    if (ms === SUCCESS_DIAGNOSTICS_MS && typeof callback === "function") {
+      timers.push(() => (callback as (...a: unknown[]) => void)(...args));
+      return timers.length;
+    }
+    return Reflect.apply(nativeSetTimeout, window, [callback, ms, ...args]) as number;
+  }) as typeof window.setTimeout);
   return { timers, restore: () => spy.mockRestore() };
 }
 
 function injectBudgetDiagnostic(command: string) {
   const call = vi.mocked(invoke).mock.calls.find(([name]) => name === command)?.[1] as
-    | { input: { prompt_diagnostics?: { code: string; message: string }[] } }
-    | undefined;
+    { input: { prompt_diagnostics?: { code: string; message: string }[] } } | undefined;
   if (call) {
     call.input.prompt_diagnostics = [{ code: "prompt_budget", message: "预算提示仍可见" }];
   }
@@ -403,12 +407,13 @@ it("generation hands auto-query loading ownership to the store when a user query
   });
   expect(useWorkbenchStore.getState().querying).toBe(true);
   expect(useWorkbenchStore.getState().loadingState).toBe("querying");
-  expect(useWorkbenchStore.getState().page?.rows).toEqual([]);
+  expect(loadedRows()).toEqual([]);
   await act(async () => {
     f.queries[1].resolve({ status: 200, body: [{ id: "current" }] });
     await replacement;
   });
-  expect(useWorkbenchStore.getState().page?.rows).toEqual([["current"]]);
+  expect(loadedRows()).toEqual([["current"]]);
+  expect(useWorkbenchStore.getState().page?.rows).toEqual([]);
   expect(useWorkbenchStore.getState().querying).toBe(false);
   expect(useWorkbenchStore.getState().loadingState).toBe("idle");
 });
@@ -504,7 +509,8 @@ it("project switch while saving a session prevents stale commit and old finally 
   await act(async () => {
     f.queries[0].resolve({ status: 200, body: [{ id: "b" }] });
   });
-  expect(useWorkbenchStore.getState().page?.rows).toEqual([["b"]]);
+  expect(loadedRows()).toEqual([["b"]]);
+  expect(useWorkbenchStore.getState().page?.rows).toEqual([]);
   expect(useWorkbenchStore.getState().loadingState).toBe("idle");
 });
 

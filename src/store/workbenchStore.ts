@@ -1,8 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
-import type { ApiDocument, LoadingState, PageSpec } from "../types/domain";
+import type { ApiDocument, LoadingState, PageSpec, ResponseBinding } from "../types/domain";
 import type { RuntimeOperation } from "../features/pages/pageOperations";
-import { mapRealDataResponse } from "./realDataMapping";
+import { mapRealDataRecords } from "./realDataMapping";
 import { toUserMessage } from "../lib/errors";
 import {
   executeBusinessApi,
@@ -10,6 +10,24 @@ import {
   type BusinessApiInvoke,
 } from "../lib/tauri/businessApi";
 import { createRequestScope, type RequestScope } from "../features/pages/requestContext";
+import {
+  applyQueryCancelled,
+  applyQueryFailure,
+  applyQueryResult,
+  applyQueryUnbound,
+  beginQuery,
+  clearRuntime,
+  createPageRuntimeState,
+  setRuntimeBinding as updateRuntimeBinding,
+  setRuntimeControls as updateRuntimeControls,
+  setRuntimeSelection as updateRuntimeSelection,
+  type PageRuntimeState,
+  type RuntimeControls,
+} from "../features/pages/runtime/pageRuntimeState";
+import {
+  queryMetaFromRuntime,
+  runtimeFromV1Definition,
+} from "../features/pages/runtime/runtimeSelectors";
 
 type ApiContext = {
   projectId: string;
@@ -32,6 +50,8 @@ type WorkbenchState = {
   detail: Record<string, unknown> | null;
   querying: boolean;
   queryMeta: QueryMeta;
+  /** Loaded business data and interaction state; never part of a page definition. */
+  runtime: PageRuntimeState;
   loadingState: LoadingState;
   apiContext: ApiContext | null;
   executionMode: "live" | "preview";
@@ -43,6 +63,9 @@ type WorkbenchState = {
   setLoadingState: (loadingState: LoadingState) => void;
   configureApi: (context: ApiContext) => void;
   cancelPendingQuery: () => void;
+  setRuntimeControls: (controls: RuntimeControls) => void;
+  setRuntimeSelection: (keys: string[]) => void;
+  setRuntimeBinding: (binding: ResponseBinding | undefined) => void;
   query: (filters?: Record<string, string>, operation?: RuntimeOperation) => Promise<void>;
   loadDetail: (operation: RuntimeOperation, id: string) => Promise<void>;
   mutate: (operation: RuntimeOperation, text: string) => Promise<void>;
@@ -163,6 +186,10 @@ export function createWorkbenchStore(
   }
 
   return create<WorkbenchState>((set, get) => {
+    /** Single writer for runtime; queryMeta is only a compatibility projection. */
+    function commitRuntime(next: PageRuntimeState) {
+      set({ runtime: next, queryMeta: queryMetaFromRuntime(next) });
+    }
     function snapshot() {
       const owner = scope;
       const context = owner.capture();
@@ -193,13 +220,6 @@ export function createWorkbenchStore(
           ...(requestId ? { newRequestId: () => requestId } : {}),
         },
       );
-    }
-    function queryFailure(message: string) {
-      set((state) => ({
-        page: state.page ? { ...state.page, rows: [] } : null,
-        detail: null,
-        queryMeta: { status: "error", error: message },
-      }));
     }
     async function write(
       operation: RuntimeOperation,
@@ -257,6 +277,7 @@ export function createWorkbenchStore(
       detail: null,
       querying: false,
       queryMeta: {},
+      runtime: createPageRuntimeState(),
       loadingState: "idle",
       apiContext: null,
       executionMode: "live",
@@ -267,12 +288,15 @@ export function createWorkbenchStore(
         revision++;
         busySequence++;
         detailSequence++;
+        const nextRuntime = clearRuntime(get().runtime, `mode:${mode}`);
         set({
           executionMode: mode,
           detail: null,
           querying: false,
           loadingState: "idle",
           mutationStatus: "idle",
+          runtime: nextRuntime,
+          queryMeta: queryMetaFromRuntime(nextRuntime),
         });
       },
       setPage(page) {
@@ -280,14 +304,23 @@ export function createWorkbenchStore(
         revision++;
         busySequence++;
         detailSequence++;
-        set((state) => ({
-          page: typeof page === "function" ? page(state.page) : page,
-          detail: null,
-          queryMeta: { status: "idle" },
-          querying: false,
-          loadingState: "idle",
-          mutationStatus: "idle",
-        }));
+        set((state) => {
+          const nextPage = typeof page === "function" ? page(state.page) : page;
+          // v1 adapter only READS definition sample rows; it never writes
+          // loaded business data back into the definition.
+          const nextRuntime = nextPage
+            ? runtimeFromV1Definition(nextPage, { status: "idle" })
+            : clearRuntime(state.runtime, `definition:${revision}`);
+          return {
+            page: nextPage,
+            detail: null,
+            runtime: nextRuntime,
+            queryMeta: queryMetaFromRuntime(nextRuntime),
+            querying: false,
+            loadingState: "idle",
+            mutationStatus: "idle",
+          };
+        });
       },
       setDetail: (detail) => set({ detail }),
       setQuerying: (querying) => set({ querying }),
@@ -312,20 +345,23 @@ export function createWorkbenchStore(
             revision++;
             busySequence++;
             detailSequence++;
-            set((state) => ({
+            const scopedRuntime = clearRuntime(get().runtime, `scope:${revision}`);
+            set({
               detail: null,
               querying: false,
               loadingState: "idle",
-              queryMeta: { status: "idle" },
+              runtime: scopedRuntime,
+              queryMeta: queryMetaFromRuntime(scopedRuntime),
               mutationStatus: "idle",
-              page: state.page ? { ...state.page, rows: [] } : null,
-            }));
+            });
           });
+          const nextRuntime = clearRuntime(get().runtime, `context:${context.projectId}`);
           set((state) => ({
             detail: null,
             querying: false,
             loadingState: "idle",
-            queryMeta: { status: "idle" },
+            runtime: nextRuntime,
+            queryMeta: queryMetaFromRuntime(nextRuntime),
             mutationStatus: "idle",
             page: previous?.projectId === context.projectId ? state.page : null,
           }));
@@ -334,11 +370,22 @@ export function createWorkbenchStore(
       },
       cancelPendingQuery() {
         cancelPending();
+        const nextRuntime = applyQueryCancelled(get().runtime);
         set({
           querying: false,
           loadingState: get().mutationStatus === "submitting" ? "mutating" : "idle",
-          queryMeta: { ...get().queryMeta, status: "cancelled" },
+          runtime: nextRuntime,
+          queryMeta: queryMetaFromRuntime(nextRuntime),
         });
+      },
+      setRuntimeControls(controls) {
+        commitRuntime(updateRuntimeControls(get().runtime, controls));
+      },
+      setRuntimeSelection(keys) {
+        commitRuntime(updateRuntimeSelection(get().runtime, keys));
+      },
+      setRuntimeBinding(binding) {
+        commitRuntime(updateRuntimeBinding(get().runtime, binding));
       },
       async query(filters = {}, operation) {
         if (get().executionMode !== "live") return;
@@ -352,16 +399,29 @@ export function createWorkbenchStore(
             querying: false,
             loadingState: get().mutationStatus === "submitting" ? "mutating" : "idle",
           });
-          queryFailure(resolved.error);
+          commitRuntime(
+            applyQueryUnbound(get().runtime, {
+              code: "runtime.binding.unbound",
+              message: resolved.error,
+            }),
+          );
           context?.onNotice(resolved.error);
           return;
         }
         const busy = ++busySequence;
+        const requestId = crypto.randomUUID();
+        const pageValue = Number.parseInt(filters.page ?? "", 10);
+        const sizeValue = Number.parseInt(filters.pageSize ?? filters.limit ?? "", 10);
+        const controls: RuntimeControls = {
+          ...(Number.isFinite(pageValue) && pageValue > 0 ? { page: pageValue } : {}),
+          ...(Number.isFinite(sizeValue) && sizeValue > 0 ? { pageSize: sizeValue } : {}),
+          filters: { ...filters },
+        };
+        commitRuntime(beginQuery(get().runtime, requestId, controls));
         set({
           querying: true,
           loadingState: "querying",
           detail: null,
-          queryMeta: { status: "loading" },
         });
         await new Promise<void>((resolve) => {
           queryDelayResolve = resolve;
@@ -370,7 +430,6 @@ export function createWorkbenchStore(
         if (current !== sequence || !valid()) return;
         queryTimer = undefined;
         queryDelayResolve = undefined;
-        const requestId = crypto.randomUUID();
         activeQueryRequestId = requestId;
         const queryString = new URLSearchParams(
           Object.entries(filters).filter(([, value]) => value.trim()),
@@ -382,45 +441,34 @@ export function createWorkbenchStore(
             requestId,
           );
           if (current !== sequence || !valid()) return;
-          const mapped = mapRealDataResponse(response.body);
-          if (mapped.status === "invalid") throw new Error("业务 API 响应无法识别为列表数据");
-          if (mapped.status === "empty") {
-            set((state) => ({
-              page: state.page ? { ...state.page, rows: [] } : null,
-              queryMeta: { status: "empty", total: mapped.total },
-            }));
-            resolved.context.onNotice("查询成功，没有匹配的数据");
-          } else {
-            set((state) => ({
-              page: state.page
-                ? {
-                    ...state.page,
-                    columns: mapped.columns,
-                    columnMeta: state.page.columnMeta?.filter((meta) =>
-                      mapped.columns.includes(meta.name),
-                    ),
-                    rows: mapped.rows,
-                  }
-                : null,
-              queryMeta: {
-                status: "success",
-                total: mapped.total,
-                truncated: mapped.truncated,
-                truncatedRows: mapped.truncatedRows,
-                truncatedColumns: mapped.truncatedColumns,
-              },
-            }));
-            resolved.context.onNotice(
-              `当前加载结果：${mapped.rows.length} 条${mapped.truncated ? "（已截断，请使用服务端分页或调整字段）" : ""}`,
-            );
-          }
+          const raw = mapRealDataRecords(response.body);
+          if (raw.status === "invalid") throw new Error("业务 API 响应无法识别为列表数据");
+          commitRuntime(
+            applyQueryResult(get().runtime, {
+              records: raw.records,
+              columns: raw.columns,
+              ...(raw.total !== undefined ? { total: raw.total } : {}),
+              truncated: raw.truncated,
+            }),
+          );
+          resolved.context.onNotice(
+            raw.status === "empty"
+              ? "查询成功，没有匹配的数据"
+              : `当前加载结果：${raw.records.length} 条${raw.truncated.rows || raw.truncated.columns ? "（已截断，请使用服务端分页或调整字段）" : ""}`,
+          );
         } catch (error) {
           if (current !== sequence || !valid()) return;
           if ((error as Error & { kind?: string }).kind === "cancelled") {
-            set({ queryMeta: { status: "cancelled" } });
+            commitRuntime(applyQueryCancelled(get().runtime));
           } else {
             const message = toUserMessage(error);
-            queryFailure(message);
+            commitRuntime(
+              applyQueryFailure(
+                get().runtime,
+                { code: "runtime.query.failed", message },
+                { keepData: true },
+              ),
+            );
             resolved.context.onNotice(message);
           }
         } finally {
