@@ -1,4 +1,9 @@
-import type { AllowedOperation, ApiDocument, OpenApiSummary } from "../../types/domain";
+import type {
+  AllowedOperation,
+  ApiDocument,
+  OpenApiSummary,
+  ResponseSchemaSummary,
+} from "../../types/domain";
 
 export function toAllowedOperations(
   spec: OpenApiSummary | null,
@@ -65,6 +70,25 @@ export function inferOperationRoles(operations: AllowedOperation[]): Record<stri
       return [operation.operation_id, [...new Set(roles)]];
     }),
   );
+}
+
+/**
+ * Resolve a response shape summary by BOTH the API document and the full
+ * operation key. An operationId alone is ambiguous across documents (and
+ * within one document when two paths reuse it), so it is never the sole key.
+ */
+export function responseSchemaForOperation(
+  documents: readonly ApiDocument[],
+  apiDocumentId: string | undefined,
+  operationKey: string,
+): ResponseSchemaSummary | undefined {
+  if (!apiDocumentId || !operationKey) return undefined;
+  const document = documents.find((entry) => entry.id === apiDocumentId);
+  const schemas = document?.spec.responseSchemas;
+  if (!schemas) return undefined;
+  const direct = schemas[operationKey];
+  if (direct?.operationKey === operationKey) return direct;
+  return Object.values(schemas).find((entry) => entry.operationKey === operationKey);
 }
 
 export function buildOpenApiContext(documents: readonly ApiDocument[]) {

@@ -132,6 +132,54 @@ export type PageView =
   | { type: "tabs"; items: { key: string; label: string; view: PageView }[] }
   | { type: "split"; left: PageView; right: PageView; splitRatio?: number };
 
+/** RFC 6901 JSON Pointer; the empty string addresses the whole response. */
+export type JsonPointer = string;
+
+export type ResponseFieldSchema = {
+  /** Pointer relative to a single record. */
+  pointer: JsonPointer;
+  name: string;
+  type: "string" | "number" | "integer" | "boolean" | "object" | "array" | "unknown";
+};
+
+/** Where a suggested pointer came from; inferred and unresolved require user confirmation. */
+export type PointerOrigin = "schema" | "inferred" | "unresolved";
+
+export type ResponseSchemaIssue = { code: string; message: string };
+
+/** Bounded, data-free summary derived from an OpenAPI success response schema. */
+export type ResponseSchemaSummary = {
+  operationKey: string;
+  operationId: string;
+  itemsPointer: JsonPointer | null;
+  itemsPointerOrigin: PointerOrigin;
+  totalPointer: JsonPointer | null;
+  totalPointerOrigin: PointerOrigin;
+  rowKeyPointer: JsonPointer | null;
+  rowKeyPointerOrigin: PointerOrigin;
+  fields: ResponseFieldSchema[];
+  issues: ResponseSchemaIssue[];
+};
+
+/** Explicit mapping chosen in the client; only a confirmed binding enables writes. */
+export type ResponseBinding = {
+  apiDocumentId?: string;
+  operationKey: string;
+  itemsPointer: JsonPointer;
+  totalPointer?: JsonPointer;
+  rowKeyPointer: JsonPointer;
+  fieldPointers: JsonPointer[];
+  confirmed: boolean;
+};
+
+/** Raw-typed identity: string "001" and number 1 must never collide. */
+export type RecordKey = {
+  type: "string" | "number" | "boolean";
+  value: string | number | boolean;
+  identity: string;
+  pathValue: string;
+};
+
 export type OpenApiSummary = {
   title: string;
   version: string;
@@ -142,6 +190,7 @@ export type OpenApiSummary = {
   discovered_url: string;
   fieldSchemas?: Record<string, FieldSchema[]>;
   queryParameters?: Record<string, string[]>;
+  responseSchemas?: Record<string, ResponseSchemaSummary>;
 };
 
 export type Project = {

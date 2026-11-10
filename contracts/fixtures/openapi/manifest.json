@@ -1,0 +1,94 @@
+{
+  "cases": [
+    {
+      "id": "3.1-envelope-string-and-number-ids",
+      "spec": "orders-3.1.json",
+      "specVersion": "3.1.0",
+      "operation": "GET /orders · listOrders",
+      "operationId": "listOrders",
+      "itemsPointer": "/data/items",
+      "itemsPointerOrigin": "schema",
+      "totalPointer": "/data/total",
+      "rowKeyPointer": "/id",
+      "fieldPointers": ["/id", "/amount", "/status", "/a~1b", "/~0key"],
+      "sampleResponse": {
+        "data": {
+          "items": [
+            { "id": "001", "amount": 10.5, "status": "new", "a/b": "sample-a", "~key": true },
+            { "id": 1, "amount": 20.0, "status": "done", "a/b": "sample-b", "~key": false },
+            { "id": "001", "amount": 30.25, "status": "new", "a/b": "sample-c", "~key": true }
+          ],
+          "total": 3
+        }
+      },
+      "expected": {
+        "status": "mapped",
+        "recordCount": 3,
+        "total": 3,
+        "keys": ["string:001", "number:1", "string:001"],
+        "writable": false
+      }
+    },
+    {
+      "id": "2.0-root-array-unique-ids",
+      "spec": "orders-2.0.json",
+      "specVersion": "2.0",
+      "operation": "GET /orders · listOrders",
+      "operationId": "listOrders",
+      "itemsPointer": "",
+      "itemsPointerOrigin": "schema",
+      "totalPointer": null,
+      "rowKeyPointer": "/id",
+      "fieldPointers": ["/id", "/name"],
+      "sampleResponse": [
+        { "id": 1, "name": "alpha-sample" },
+        { "id": 2, "name": "beta-sample" }
+      ],
+      "expected": {
+        "status": "mapped",
+        "recordCount": 2,
+        "keys": ["number:1", "number:2"],
+        "writable": true
+      }
+    },
+    {
+      "id": "broken-envelope-items-not-array",
+      "spec": "broken-envelope.json",
+      "specVersion": "3.0.3",
+      "operation": "GET /orders · listOrders",
+      "operationId": "listOrders",
+      "itemsPointer": null,
+      "itemsPointerOrigin": "unresolved",
+      "totalPointer": null,
+      "rowKeyPointer": null,
+      "fieldPointers": [],
+      "sampleResponse": { "items": "not-an-array" },
+      "expected": {
+        "status": "invalid",
+        "recordCount": 0,
+        "keys": [],
+        "writable": false
+      }
+    },
+    {
+      "id": "3.1-empty-list-preserves-total-zero",
+      "spec": "orders-3.1.json",
+      "specVersion": "3.1.0",
+      "operation": "GET /orders · listOrders",
+      "operationId": "listOrders",
+      "itemsPointer": "/data/items",
+      "itemsPointerOrigin": "schema",
+      "totalPointer": "/data/total",
+      "rowKeyPointer": "/id",
+      "fieldPointers": ["/id", "/amount", "/status", "/a~1b", "/~0key"],
+      "sampleResponse": { "data": { "items": [], "total": 0 } },
+      "expected": {
+        "status": "empty",
+        "recordCount": 0,
+        "total": 0,
+        "keys": [],
+        "writable": false
+      }
+    }
+  ]
+}

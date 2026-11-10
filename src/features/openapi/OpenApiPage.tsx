@@ -1,8 +1,9 @@
-import { ChangeEvent, useRef, type ReactNode } from "react";
+import { ChangeEvent, useRef, useState, type ReactNode } from "react";
 import { FileJson, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import type { SetStateAction } from "react";
-import type { ApiDocument, BusinessAuth } from "../../types/domain";
+import type { ApiDocument, BusinessAuth, ResponseBinding } from "../../types/domain";
 import { useLanguage } from "../../i18n/LanguageProvider";
+import { DataBindingPanel } from "../pages/DataBindingPanel";
 
 type Props = {
   documents: ApiDocument[];
@@ -32,6 +33,7 @@ export function OpenApiPage({
   onDelete,
 }: Props) {
   const fileInput = useRef<HTMLInputElement>(null);
+  const [binding, setBinding] = useState<ResponseBinding | undefined>(undefined);
   const { language } = useLanguage();
   const zh = language === "zh";
   const activeDocument = documents.find((document) => document.id === activeDocumentId) ?? null;
@@ -182,6 +184,10 @@ export function OpenApiPage({
             </button>
           </>
         ) : null}
+        <DataBindingPanel documents={documents} binding={binding} onChange={setBinding} />
+        <p className="muted">
+          绑定仅用于当前会话预览；本地样本预览入口与持久化在后续任务接入
+        </p>
         <button className="add-row" onClick={onImport}>
           <Plus size={15} /> {zh ? "添加 Swagger / OpenAPI 地址" : "Add a Swagger / OpenAPI URL"}
         </button>
