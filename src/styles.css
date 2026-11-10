@@ -331,10 +331,18 @@ h3 {
   padding: 10px;
   font-size: 12px;
 }
-.toast {
+.toast-stack {
   position: fixed;
   right: 24px;
   bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  max-width: min(420px, calc(100vw - 48px));
+  pointer-events: none;
+}
+.toast {
   background: #d5fa61;
   color: #11170d;
   border-radius: 7px;
@@ -344,11 +352,25 @@ h3 {
   display: flex;
   gap: 14px;
   align-items: center;
+  max-width: 100%;
+  pointer-events: auto;
 }
 .toast button {
   background: transparent;
   border: 0;
   color: #11170d;
+}
+.toast-close {
+  flex: 0 0 auto;
+  line-height: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.generation-toast {
+  align-items: flex-start;
+}
+.generation-toast > div {
+  min-width: 0;
 }
 .modal-backdrop {
   position: fixed;

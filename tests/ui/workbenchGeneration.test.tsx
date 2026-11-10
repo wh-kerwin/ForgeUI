@@ -5,6 +5,7 @@ import { Workbench } from "../../src/features/workbench/Workbench";
 import { LanguageProvider } from "../../src/i18n/LanguageProvider";
 import { useWorkbenchStore } from "../../src/store/workbenchStore";
 import type { PageSpec } from "../../src/types/domain";
+import type { PageIssue } from "../../src/features/pages/pageIssues";
 
 // Keep Workbench, workspace, persistence, generated actions and the rendered UI real.
 // Only the desktop IPC/event boundaries are replaced with controllable promises.
@@ -39,10 +40,10 @@ const page = (title: string): PageSpec => ({
     },
   ],
 });
-const result = (title: string, generationSource = "model") => ({
+const result = (title: string, generationSource = "model", issues: PageIssue[] = []) => ({
   page: page(title),
   generationSource,
-  issues: [],
+  issues,
 });
 const invalid = {
   retryable: true,
@@ -191,6 +192,37 @@ async function commit(f: ReturnType<typeof fixture>, index: number, title: strin
   await waitFor(() => expect(f.queries).toHaveLength(index + 1));
 }
 
+// Keep in sync with SUCCESS_DIAGNOSTICS_MS in Workbench.tsx: a change to the
+// success lifetime makes these lifecycle guards fail instead of silently passing.
+const SUCCESS_DIAGNOSTICS_MS = 8000;
+function trackTransientTimers() {
+  const nativeSetTimeout = window.setTimeout.bind(window);
+  const timers: (() => void)[] = [];
+  const spy = vi
+    .spyOn(window, "setTimeout")
+    .mockImplementation(((
+      callback: Parameters<typeof window.setTimeout>[0],
+      ms?: number,
+      ...args: unknown[]
+    ) => {
+      if (ms === SUCCESS_DIAGNOSTICS_MS && typeof callback === "function") {
+        timers.push(() => (callback as (...a: unknown[]) => void)(...args));
+        return timers.length;
+      }
+      return Reflect.apply(nativeSetTimeout, window, [callback, ms, ...args]) as number;
+    }) as typeof window.setTimeout);
+  return { timers, restore: () => spy.mockRestore() };
+}
+
+function injectBudgetDiagnostic(command: string) {
+  const call = vi.mocked(invoke).mock.calls.find(([name]) => name === command)?.[1] as
+    | { input: { prompt_diagnostics?: { code: string; message: string }[] } }
+    | undefined;
+  if (call) {
+    call.input.prompt_diagnostics = [{ code: "prompt_budget", message: "预算提示仍可见" }];
+  }
+}
+
 it("shows repaired provenance and safe diagnostics without exposing raw provider errors", async () => {
   const f = fixture();
   const user = await mount();
@@ -298,10 +330,12 @@ it("uses an identifiable API fallback only after the one failed retry", async ()
     f.listeners[0].ready.resolve(f.listeners[0].unlisten);
   });
   await waitFor(() => expect(f.generations).toHaveLength(1));
+  injectBudgetDiagnostic("generate_page_stream_detailed");
   await act(async () => {
     f.generations[0].reject(invalid);
   });
   await waitFor(() => expect(f.generations).toHaveLength(2));
+  injectBudgetDiagnostic("generate_page_detailed");
   await act(async () => {
     f.generations[1].reject(invalid);
   });
@@ -312,6 +346,8 @@ it("uses an identifiable API fallback only after the one failed retry", async ()
   await waitFor(() => expect(screen.getByText("来源：API 基础页面（非模型输出）")).toBeTruthy());
   expect(f.generations).toHaveLength(2);
   expect(screen.getByRole("button", { name: "重试生成" })).toBeTruthy();
+  expect(screen.getAllByText(/预算提示仍可见/)).toHaveLength(1);
+  expect(screen.getAllByText(/页面结构不符合 v1 契约/)).toHaveLength(1);
 });
 
 it("does not commit an invalid final result over the previous page", async () => {
@@ -470,4 +506,144 @@ it("project switch while saving a session prevents stale commit and old finally 
   });
   expect(useWorkbenchStore.getState().page?.rows).toEqual([["b"]]);
   expect(useWorkbenchStore.getState().loadingState).toBe("idle");
+});
+
+it("dismisses successful diagnostics and drops errors already superseded by a retry", async () => {
+  const f = fixture();
+  const user = await mount();
+  await start(user, f);
+  expect(screen.queryByRole("button", { name: "关闭生成诊断" })).toBeNull();
+  await act(async () => {
+    f.listeners[0].ready.resolve(f.listeners[0].unlisten);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(1));
+  await act(async () => {
+    f.generations[0].reject(invalid);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(2));
+  await act(async () => {
+    f.generations[1].resolve(
+      result("Recovered page", "retry", [
+        {
+          code: "prompt.prompt_budget",
+          path: "",
+          severity: "warning",
+          stage: "permission",
+          message: "预算提示仍可见",
+        },
+      ]),
+    );
+  });
+  await waitFor(() => expect(f.saves).toHaveLength(1));
+  await act(async () => {
+    f.saves[0].resolve();
+  });
+  await waitFor(() => expect(screen.getByText("校验通过，页面已采用")).toBeTruthy());
+  expect(screen.getByText("来源：重试")).toBeTruthy();
+  expect(screen.queryByText(/页面结构不符合 v1 契约/)).toBeNull();
+  expect(screen.getAllByText(/预算提示仍可见/)).toHaveLength(1);
+  await user.click(screen.getByRole("button", { name: "关闭生成诊断" }));
+  expect(screen.queryByLabelText("页面生成诊断")).toBeNull();
+  expect(screen.queryByText("校验通过，页面已采用")).toBeNull();
+});
+
+it("keeps failure diagnostics with a retry action until the user dismisses them", async () => {
+  const f = fixture();
+  const user = await mount();
+  await start(user, f);
+  await act(async () => {
+    f.listeners[0].ready.resolve(f.listeners[0].unlisten);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(1));
+  await act(async () => {
+    f.generations[0].reject(new Error("fatal provider failure"));
+  });
+  await waitFor(() => expect(screen.getByText("生成未完成，已保留上一有效页面")).toBeTruthy());
+  expect(screen.getByText(/模型请求未完成，请检查连接与授权配置后重试/)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "重试生成" })).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "关闭生成诊断" }));
+  expect(screen.queryByLabelText("页面生成诊断")).toBeNull();
+  expect(screen.queryByRole("button", { name: "重试生成" })).toBeNull();
+});
+
+it("auto-dismisses successful diagnostics when the success lifetime expires", async () => {
+  const { timers, restore } = trackTransientTimers();
+  try {
+    const f = fixture();
+    const user = await mount();
+    await start(user, f);
+    await act(async () => {
+      f.listeners[0].ready.resolve(f.listeners[0].unlisten);
+    });
+    await waitFor(() => expect(f.generations).toHaveLength(1));
+    await act(async () => {
+      f.generations[0].resolve(result("Transient success"));
+    });
+    await waitFor(() => expect(f.saves).toHaveLength(1));
+    await act(async () => {
+      f.saves[0].resolve();
+    });
+    await waitFor(() => expect(screen.getByText("校验通过，页面已采用")).toBeTruthy());
+    expect(timers).toHaveLength(1);
+    await act(async () => {
+      timers[0]();
+    });
+    expect(screen.queryByLabelText("页面生成诊断")).toBeNull();
+    expect(screen.queryByText("来源：模型")).toBeNull();
+  } finally {
+    restore();
+  }
+});
+
+it("does not schedule a transient dismissal for failed generations", async () => {
+  const { timers, restore } = trackTransientTimers();
+  try {
+    const f = fixture();
+    const user = await mount();
+    await start(user, f);
+    await act(async () => {
+      f.listeners[0].ready.resolve(f.listeners[0].unlisten);
+    });
+    await waitFor(() => expect(f.generations).toHaveLength(1));
+    await act(async () => {
+      f.generations[0].reject(new Error("fatal provider failure"));
+    });
+    await waitFor(() => expect(screen.getByText("生成未完成，已保留上一有效页面")).toBeTruthy());
+    expect(timers).toHaveLength(0);
+    expect(screen.getByLabelText("页面生成诊断")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "重试生成" })).toBeTruthy();
+  } finally {
+    restore();
+  }
+});
+
+it("stacks both overlays with accessible dismiss controls and clears only the chosen one", async () => {
+  const f = fixture();
+  const user = await mount();
+  await start(user, f);
+  await act(async () => {
+    f.listeners[0].ready.resolve(f.listeners[0].unlisten);
+  });
+  await waitFor(() => expect(f.generations).toHaveLength(1));
+  await act(async () => {
+    f.generations[0].resolve(result("Stacked page"));
+  });
+  await waitFor(() => expect(f.saves).toHaveLength(1));
+  await act(async () => {
+    f.saves[0].resolve();
+  });
+  await waitFor(() => expect(screen.getByText("校验通过，页面已采用")).toBeTruthy());
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "" } });
+  await user.click(screen.getByRole("button", { name: "生成页面" }));
+  const notice = await screen.findByText("请先描述你想生成的业务页面");
+  const stack = document.querySelector(".toast-stack");
+  expect(stack).toBeTruthy();
+  expect(stack?.querySelector('[aria-label="页面生成诊断"]')).toBeTruthy();
+  expect(notice.closest(".toast-stack")).toBe(stack);
+  expect(screen.getAllByRole("button", { name: /关闭(生成诊断|提示)/ })).toHaveLength(2);
+  await user.click(screen.getByRole("button", { name: "关闭提示" }));
+  expect(screen.queryByText("请先描述你想生成的业务页面")).toBeNull();
+  expect(screen.getByLabelText("页面生成诊断")).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "关闭生成诊断" }));
+  expect(screen.queryByLabelText("页面生成诊断")).toBeNull();
 });

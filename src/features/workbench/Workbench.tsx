@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { RequestContext } from "../pages/requestContext";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -86,6 +86,24 @@ function generationFailure(error: unknown): { issues: PageIssue[]; retryable: bo
   };
 }
 
+/** Retry and fallback paths merge the same diagnostics more than once; keep one actionable copy. */
+function uniqueIssues(issues: PageIssue[]): PageIssue[] {
+  const seen = new Set<string>();
+  return issues.filter((issue) => {
+    const key = JSON.stringify([
+      issue.code,
+      issue.path,
+      issue.severity,
+      issue.stage,
+      issue.message,
+      issue.suggestedFix ?? "",
+    ]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 const sourceLabels: Record<GenerationSource, string> = {
   model: "模型",
   repaired: "安全格式修复",
@@ -99,6 +117,9 @@ const stageLabels: Record<string, string> = {
   binding: "API 绑定",
   permission: "授权与连接",
 };
+
+/** Success diagnostics are transient; failures and API fallbacks stay until dismissed. */
+const SUCCESS_DIAGNOSTICS_MS = 8000;
 
 export function Workbench() {
   const [notice, setNotice] = useState("");
@@ -172,6 +193,24 @@ export function Workbench() {
       generationTicket.current = null;
     };
   }, [generationScope, setExecutionMode, setLoadingState]);
+
+  const transientGenerationSuccess =
+    !generating &&
+    !generationFailed &&
+    generationSource !== null &&
+    generationSource !== "apiFallback" &&
+    generationStatus !== "";
+  const dismissGenerationDiagnostics = useCallback(() => {
+    setGenerationStatus("");
+    setGenerationSource(null);
+    setGenerationIssues([]);
+    setGenerationFailed(false);
+  }, []);
+  useEffect(() => {
+    if (!transientGenerationSuccess) return;
+    const timer = window.setTimeout(dismissGenerationDiagnostics, SUCCESS_DIAGNOSTICS_MS);
+    return () => window.clearTimeout(timer);
+  }, [transientGenerationSuccess, generationStatus, dismissGenerationDiagnostics]);
 
   function currentGeneration(context: RequestContext) {
     return generationTicket.current === context && generationScope.isLatest("generation", context);
@@ -359,6 +398,8 @@ export function Workbench() {
     try {
       let result: GenerationResult;
       let attemptIssues: PageIssue[] = [];
+      let firstRequest: ReturnType<typeof buildModelRequest> | undefined;
+      let retryRequest: ReturnType<typeof buildModelRequest> | undefined;
       try {
         const request = buildModelRequest(
           active,
@@ -367,6 +408,7 @@ export function Workbench() {
           parseTemplate(selectedTemplate),
           selectedPromptTemplate,
         );
+        firstRequest = request;
         result = await requestPage(request, context);
         result = {
           ...result,
@@ -382,18 +424,19 @@ export function Workbench() {
         try {
           // Retry once without streaming so OpenAI-compatible providers can
           // enforce response_format=json_schema instead of relying on prompts.
-          const retryRequest = buildModelRequest(
+          const retry = buildModelRequest(
             { ...active, streaming: false, structuredOutput: "jsonSchema" },
             prompt,
             generationDocuments,
             parseTemplate(selectedTemplate),
             selectedPromptTemplate,
           );
-          result = await requestPage(retryRequest, context);
+          retryRequest = retry;
+          result = await requestPage(retry, context);
           result = {
             ...result,
             generationSource: "retry",
-            issues: [...attemptIssues, ...promptDiagnosticIssues(retryRequest), ...result.issues],
+            issues: [...attemptIssues, ...promptDiagnosticIssues(retry), ...result.issues],
           };
         } catch (retryError) {
           if (!currentGeneration(context)) return;
@@ -403,13 +446,18 @@ export function Workbench() {
           result = {
             page: createApiFallbackPage(prompt, generationDocuments),
             generationSource: "apiFallback",
-            issues: failure.issues,
+            issues: [
+              ...(firstRequest ? promptDiagnosticIssues(firstRequest) : []),
+              ...(retryRequest ? promptDiagnosticIssues(retryRequest) : []),
+              ...attemptIssues,
+              ...failure.issues,
+            ],
           };
         }
       }
       if (!currentGeneration(context)) return;
       const page = validateGenerationCandidate(result.page, prompt, generationOperations);
-      const finalIssues = [...attemptIssues, ...result.issues];
+      const finalIssues = uniqueIssues(result.issues);
       const apiDocumentIds = pageApiDocumentIds(
         page,
         generationDocuments.map((document) => document.id),
@@ -669,6 +717,11 @@ export function Workbench() {
     ),
   };
   const page = routeViews[route];
+  // Errors from a superseded retry are no longer actionable once a page was adopted.
+  const keepAllIssues = generating || generationFailed || generationSource === "apiFallback";
+  const visibleIssues = keepAllIssues
+    ? generationIssues
+    : generationIssues.filter((issue) => issue.severity !== "error");
   return (
     <div className="app">
       <WorkbenchSidebar
@@ -683,37 +736,54 @@ export function Workbench() {
         onProjectDelete={workspace.deleteProject}
       />
       {page}
-      {generationStatus && route === "generate" && (
-        <section className="toast" aria-label="页面生成诊断" aria-live="polite">
-          <div>
-            <strong>{generationStatus}</strong>
-            {generationSource && <p>来源：{sourceLabels[generationSource]}</p>}
-            {generationIssues.length > 0 && (
-              <ul>
-                {generationIssues.map((issue, index) => (
-                  <li key={index}>
-                    {stageLabels[issue.stage] ?? "页面校验"}：{issue.message}
-                    {issue.suggestedFix && <small> · {issue.suggestedFix}</small>}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {(generationFailed || generationSource === "apiFallback") && (
-              <button type="button" disabled={generating} onClick={() => void generate()}>
-                重试生成
+      <div className="toast-stack" aria-live="polite">
+        {generationStatus && route === "generate" && (
+          <section className="toast generation-toast" aria-label="页面生成诊断">
+            <div>
+              <strong>{generationStatus}</strong>
+              {generationSource && <p>来源：{sourceLabels[generationSource]}</p>}
+              {visibleIssues.length > 0 && (
+                <ul>
+                  {visibleIssues.map((issue, index) => (
+                    <li key={index}>
+                      {stageLabels[issue.stage] ?? "页面校验"}：{issue.message}
+                      {issue.suggestedFix && <small> · {issue.suggestedFix}</small>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {(generationFailed || generationSource === "apiFallback") && (
+                <button type="button" disabled={generating} onClick={() => void generate()}>
+                  重试生成
+                </button>
+              )}
+            </div>
+            {!generating && (
+              <button
+                type="button"
+                className="toast-close"
+                aria-label="关闭生成诊断"
+                onClick={dismissGenerationDiagnostics}
+              >
+                <X size={14} />
               </button>
             )}
+          </section>
+        )}
+        {notice && (
+          <div className="toast notice-toast" role="status">
+            {notice}
+            <button
+              type="button"
+              className="toast-close"
+              aria-label="关闭提示"
+              onClick={() => setNotice("")}
+            >
+              <X size={14} />
+            </button>
           </div>
-        </section>
-      )}
-      {notice && (
-        <div className="toast">
-          {notice}
-          <button onClick={() => setNotice("")}>
-            <X size={14} />
-          </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
