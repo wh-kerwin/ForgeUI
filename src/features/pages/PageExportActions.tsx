@@ -3,6 +3,12 @@ import type { PageSpec } from "../../types/domain";
 import { downloadXlsx } from "../../lib/tauri/exports";
 import { toUserMessage } from "../../lib/errors";
 import { useLanguage } from "../../i18n/LanguageProvider";
+import {
+  csvSafe,
+  forTemplate,
+  toExportDataset,
+  type ExportDataset,
+} from "./contracts/pageProjections";
 import { Button, Space } from "antd";
 import { Download, Save } from "lucide-react";
 
@@ -17,14 +23,16 @@ type Props = {
   /** Loaded display data. C3 never reads business rows from the definition. */
   displayColumns?: string[];
   displayRows?: string[][];
+  /** Where the displayed values came from; never implied by row count. */
+  dataScope?: ExportDataset["scope"];
 };
-function exportCsv(columns: string[], rows: string[][], title: string) {
-  const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
-  const csv = [columns, ...rows].map((row) => row.map(escape).join(",")).join("\r\n");
+function exportCsv(dataset: ExportDataset) {
+  const cell = (value: string) => `"${csvSafe(value).replace(/"/g, '""')}"`;
+  const csv = [dataset.columns, ...dataset.rows].map((row) => row.map(cell).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
   const anchor = window.document.createElement("a");
   anchor.href = url;
-  anchor.download = `${title}.csv`;
+  anchor.download = `${dataset.title}.csv`;
   anchor.click();
   URL.revokeObjectURL(url);
 }
@@ -39,27 +47,27 @@ export function PageExportActions({
   onSaved,
   displayColumns,
   displayRows,
+  dataScope = "current-page",
 }: Props) {
   const { language } = useLanguage();
   const zh = language === "zh";
-  // Data exports use loaded display values; template saves use the pure definition.
-  const exportView: PageSpec = {
-    ...page,
+  // Data exports carry only loaded display values; template saves use a pure structural projection.
+  const dataset = toExportDataset({
+    title: page.title,
     columns: displayColumns ?? page.columns,
-    rows: displayRows ?? page.rows,
-  };
+    rows: displayRows ?? [],
+    scope: dataScope,
+    zh,
+  });
   return (
     <Space className="page-actions" wrap>
-      <Button
-        icon={<Download size={15} />}
-        onClick={() => exportCsv(exportView.columns, exportView.rows, page.title)}
-      >
+      <Button icon={<Download size={15} />} onClick={() => exportCsv(dataset)}>
         {zh ? "导出 CSV" : "Export CSV"}
       </Button>
       <Button
         icon={<Download size={15} />}
         onClick={() =>
-          downloadXlsx(exportView).catch(() =>
+          downloadXlsx(dataset).catch(() =>
             alert(zh ? "请在桌面客户端中导出 XLSX" : "Export XLSX from the desktop client"),
           )
         }
@@ -73,13 +81,13 @@ export function PageExportActions({
             id: templateId || crypto.randomUUID(),
             projectId,
             name: templateName || page.title,
-            payload: JSON.stringify(page),
+            payload: JSON.stringify(forTemplate(page)),
             modelId: modelId || null,
             apiDocumentIds,
           })
             .then(() => {
               onSaved();
-              alert(zh ? "模板已保存" : "Template saved");
+              alert(zh ? "模板已保存（仅页面结构）" : "Template saved (structure only)");
             })
             .catch((error) => alert(toUserMessage(error)))
         }

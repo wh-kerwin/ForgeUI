@@ -1,8 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { PageSpec } from "../../types/domain";
+import type { ExportDataset } from "../../features/pages/contracts/pageProjections";
 
-export async function downloadXlsx(page: PageSpec) {
-  const bytes = await invoke<number[]>("export_xlsx", { page });
+/** Data export uses the bounded display dataset, never the page definition. */
+export async function downloadXlsx(dataset: ExportDataset) {
+  const bytes = await invoke<number[]>("export_xlsx", { dataset });
   const objectUrl = URL.createObjectURL(
     new Blob([new Uint8Array(bytes)], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -10,7 +11,7 @@ export async function downloadXlsx(page: PageSpec) {
   );
   const anchor = window.document.createElement("a");
   anchor.href = objectUrl;
-  anchor.download = `${page.title || "数据导出"}.xlsx`;
+  anchor.download = `${dataset.title || "数据导出"}.xlsx`;
   anchor.click();
   URL.revokeObjectURL(objectUrl);
 }

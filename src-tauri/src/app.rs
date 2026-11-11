@@ -350,8 +350,8 @@ fn import_template(document: String, project_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn export_xlsx(page: PageSpec) -> Result<Vec<u8>, String> {
-    exporter::xlsx(page)
+fn export_xlsx(dataset: exporter::ExportDataset) -> Result<Vec<u8>, String> {
+    exporter::xlsx(dataset)
 }
 
 #[tauri::command]

@@ -429,8 +429,12 @@ describe("GeneratedPage C3 definition/runtime separation", () => {
     const save = vi.mocked(invoke).mock.calls.find(([command]) => command === "save_template");
     expect(save).toBeTruthy();
     const payload = JSON.parse((save![1] as { payload: string }).payload);
-    expect(payload.rows).toEqual([["sample", "0"]]);
+    // C4: a template is a pure structural definition, never loaded rows or samples.
+    expect(payload.rows).toEqual([]);
+    expect(payload.stats).toEqual([]);
+    expect(typeof payload.title).toBe("string");
     expect(JSON.stringify(payload)).not.toContain("loaded");
+    expect(JSON.stringify(payload)).not.toContain("sample");
   });
 
   it("confines identity diagnostics to row writes and keeps create available", () => {

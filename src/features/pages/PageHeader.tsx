@@ -22,6 +22,7 @@ export function PageHeader({
   showPageActions = true,
   displayColumns,
   displayRows,
+  dataScope,
 }: {
   page: PageSpec;
   projectId: string;
@@ -40,6 +41,7 @@ export function PageHeader({
   showPageActions?: boolean;
   displayColumns?: string[];
   displayRows?: string[][];
+  dataScope?: "current-page" | "definition-sample";
 }) {
   return (
     <div className="panel-head">
@@ -98,6 +100,7 @@ export function PageHeader({
               onSaved={onSaved}
               displayColumns={displayColumns}
               displayRows={displayRows}
+              dataScope={dataScope}
             />
           )}
         </div>

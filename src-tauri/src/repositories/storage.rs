@@ -1,8 +1,72 @@
 use crate::{
-    domain::page_spec::{validate, PageSpec},
+    domain::{
+        artifact_projection,
+        page_spec::{validate, PageSpec},
+    },
     repositories::database,
 };
-use rusqlite::{params, Transaction};
+use rusqlite::{params, Connection, Transaction};
+
+/// Project, then validate, every definition before it reaches any persistence boundary.
+pub fn safe_artifact_payload(payload: &str) -> Result<String, String> {
+    let projected = artifact_projection::project_payload(payload)?;
+    if artifact_projection::has_payload_data(&projected)? {
+        return Err("页面定义仍包含数据字段".into());
+    }
+    let mut value: serde_json::Value =
+        serde_json::from_str(&projected).map_err(|e| format!("页面 DSL 无效：{e}"))?;
+    // v1 DTO requires these structural arrays even when their data was dropped.
+    if let serde_json::Value::Object(map) = &mut value {
+        map.insert("stats".into(), serde_json::Value::Array(vec![]));
+        map.insert("rows".into(), serde_json::Value::Array(vec![]));
+        for key in ["filters", "columns"] {
+            map.entry(key)
+                .or_insert_with(|| serde_json::Value::Array(vec![]));
+        }
+        for key in ["title", "description"] {
+            map.entry(key)
+                .or_insert_with(|| serde_json::Value::String(String::new()));
+        }
+        // A dropped custom batch payload must not leave an invalid "custom" action.
+        if let Some(serde_json::Value::Array(actions)) = map.get_mut("batchActions") {
+            for action in actions {
+                if let Some(builder) = action.get_mut("payloadBuilder") {
+                    let custom =
+                        builder.get("type").and_then(|value| value.as_str()) == Some("custom");
+                    if custom && builder.get("customPayload").is_none() {
+                        if let Some(fields) = builder.as_object_mut() {
+                            fields.insert("type".into(), serde_json::Value::String("ids".into()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let spec: PageSpec =
+        serde_json::from_value(value).map_err(|e| format!("页面 DSL 无效：{e}"))?;
+    validate(&spec)?;
+    // Persist the validated DTO, not the caller's string.
+    serde_json::to_string(&spec).map_err(|_| "页面定义序列化失败".to_string())
+}
+
+/// Legacy rows can predate the projection, so reads re-validate the payload too.
+fn sanitize_loaded_row(row: &str) -> String {
+    const MINIMUM: &str = r#"{"version":1,"title":"","description":"","filters":[],"stats":[],"columns":[],"rows":[]}"#;
+    let mut value: serde_json::Value = match serde_json::from_str(row) {
+        Ok(value) => value,
+        Err(_) => return row.to_string(),
+    };
+    let payload = value
+        .get("payload")
+        .and_then(|item| item.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let clean = safe_artifact_payload(&payload).unwrap_or_else(|_| MINIMUM.to_string());
+    if let Some(slot) = value.get_mut("payload") {
+        *slot = serde_json::Value::String(clean);
+    }
+    serde_json::to_string(&value).unwrap_or_else(|_| row.to_string())
+}
 
 fn validate_artifact_scope(
     transaction: &Transaction<'_>,
@@ -157,9 +221,8 @@ pub fn save_generation_session(
     payload: String,
     api_document_ids: Vec<String>,
 ) -> Result<(), String> {
-    let spec: PageSpec =
-        serde_json::from_str(&payload).map_err(|e| format!("页面 DSL 无效：{e}"))?;
-    validate(&spec)?;
+    artifact_projection::validate_session_prompt(&prompt)?;
+    let payload = safe_artifact_payload(&payload)?;
     let mut db = database::open()?;
     let transaction = db.transaction().map_err(|e| e.to_string())?;
     let api_document_ids = validate_artifact_scope(&transaction, &project_id, &api_document_ids)?;
@@ -179,7 +242,10 @@ pub fn load_generation_sessions(project_id: String) -> Result<Vec<String>, Strin
     let db = database::open()?;
     let mut statement = db.prepare("SELECT json_object('id',id,'projectId',project_id,'modelId',model_id,'prompt',prompt,'payload',payload,'createdAt',created_at,'apiDocumentIds',json(COALESCE((SELECT json_group_array(api_document_id) FROM generation_session_api_documents refs WHERE refs.session_id=generation_sessions.id),'[]'))) FROM generation_sessions WHERE project_id=?1 ORDER BY created_at DESC LIMIT 100").map_err(|e| e.to_string())?;
     let rows = statement
-        .query_map(params![project_id], |row| row.get::<_, String>(0))
+        .query_map(params![project_id], |row| {
+            let raw: String = row.get(0)?;
+            Ok(sanitize_loaded_row(&raw))
+        })
         .map_err(|e| e.to_string())?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())
@@ -223,9 +289,31 @@ pub fn save_template(
     model_id: Option<String>,
     api_document_ids: Vec<String>,
 ) -> Result<(), String> {
+    let payload = safe_artifact_payload(&payload)?;
     let mut db = database::open()?;
     let transaction = db.transaction().map_err(|e| e.to_string())?;
-    let api_document_ids = validate_artifact_scope(&transaction, &project_id, &api_document_ids)?;
+    save_template_in(
+        &transaction,
+        &id,
+        &project_id,
+        &name,
+        &payload,
+        model_id.as_deref(),
+        api_document_ids,
+    )?;
+    transaction.commit().map_err(|e| e.to_string())
+}
+
+fn save_template_in(
+    transaction: &Transaction<'_>,
+    id: &str,
+    project_id: &str,
+    name: &str,
+    payload: &str,
+    model_id: Option<&str>,
+    api_document_ids: Vec<String>,
+) -> Result<(), String> {
+    let api_document_ids = validate_artifact_scope(transaction, project_id, &api_document_ids)?;
     transaction.execute("INSERT INTO templates (id,project_id,name,payload,model_id,version,updated_at) VALUES (?1,?2,?3,?4,?5,1,datetime('now')) ON CONFLICT(id) DO UPDATE SET project_id=excluded.project_id,name=excluded.name,payload=excluded.payload,model_id=excluded.model_id,version=templates.version+1,updated_at=excluded.updated_at", params![id, project_id, name, payload, model_id]).map_err(|e| e.to_string())?;
     let version: i64 = transaction
         .query_row(
@@ -249,7 +337,7 @@ pub fn save_template(
             )
             .map_err(|e| e.to_string())?;
     }
-    transaction.commit().map_err(|e| e.to_string())
+    Ok(())
 }
 
 pub fn rename_template(id: String, name: String) -> Result<(), String> {
@@ -272,9 +360,16 @@ pub fn rename_template(id: String, name: String) -> Result<(), String> {
 
 pub fn load_templates(project_id: String) -> Result<Vec<String>, String> {
     let db = database::open()?;
+    load_templates_in(&db, &project_id)
+}
+
+fn load_templates_in(db: &Connection, project_id: &str) -> Result<Vec<String>, String> {
     let mut statement = db.prepare("SELECT json_object('id',id,'projectId',project_id,'name',name,'payload',payload,'modelId',model_id,'version',version,'updatedAt',updated_at,'apiDocumentIds',json(COALESCE((SELECT json_group_array(api_document_id) FROM template_api_documents refs WHERE refs.template_id=templates.id),'[]'))) FROM templates WHERE project_id=?1 ORDER BY updated_at DESC").map_err(|e| e.to_string())?;
     let rows = statement
-        .query_map(params![project_id], |row| row.get::<_, String>(0))
+        .query_map(params![project_id], |row| {
+            let raw: String = row.get(0)?;
+            Ok(sanitize_loaded_row(&raw))
+        })
         .map_err(|e| e.to_string())?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())
@@ -302,7 +397,10 @@ pub fn load_template_versions(id: String) -> Result<Vec<String>, String> {
     let db = database::open()?;
     let mut statement = db.prepare("SELECT json_object('version',version,'payload',payload,'createdAt',created_at) FROM template_versions WHERE template_id=?1 ORDER BY version DESC").map_err(|e| e.to_string())?;
     let rows = statement
-        .query_map(params![id], |row| row.get::<_, String>(0))
+        .query_map(params![id], |row| {
+            let raw: String = row.get(0)?;
+            Ok(sanitize_loaded_row(&raw))
+        })
         .map_err(|e| e.to_string())?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())
@@ -310,6 +408,11 @@ pub fn load_template_versions(id: String) -> Result<Vec<String>, String> {
 
 pub fn restore_template_version(id: String, version: i64) -> Result<(), String> {
     let db = database::open()?;
+    restore_template_version_in(&db, &id, version)
+}
+
+/// A historical payload can predate the projection; restoring it must not revive data.
+fn restore_template_version_in(db: &Connection, id: &str, version: i64) -> Result<(), String> {
     let payload: String = db
         .query_row(
             "SELECT payload FROM template_versions WHERE template_id=?1 AND version=?2",
@@ -317,6 +420,7 @@ pub fn restore_template_version(id: String, version: i64) -> Result<(), String> 
             |row| row.get(0),
         )
         .map_err(|e| e.to_string())?;
+    let payload = safe_artifact_payload(&payload)?;
     db.execute(
         "UPDATE templates SET payload=?2,version=version+1,updated_at=datetime('now') WHERE id=?1",
         params![id, payload],
@@ -327,14 +431,60 @@ pub fn restore_template_version(id: String, version: i64) -> Result<(), String> 
 
 pub fn export_template(id: String) -> Result<String, String> {
     let db = database::open()?;
-    db.query_row("SELECT json_object('format','forge-template-v1','id',id,'name',name,'payload',payload,'version',version) FROM templates WHERE id=?1", params![id], |row| row.get(0)).map_err(|error| format!("模板不存在：{error}"))
+    export_template_in(&db, &id)
+}
+
+fn export_template_in(db: &Connection, id: &str) -> Result<String, String> {
+    let (name, payload, version): (String, String, i64) = db
+        .query_row(
+            "SELECT name,payload,version FROM templates WHERE id=?1",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .map_err(|error| format!("模板不存在：{error}"))?;
+    let raw: serde_json::Value =
+        serde_json::from_str(&payload).map_err(|_| "模板页面内容无效".to_string())?;
+    let is_v2 = raw.get("version").and_then(|value| value.as_f64()) == Some(2.0);
+    // The v1 projection would destroy v2 structure; with the write gate closed no
+    // legitimate v2 template can exist, so refuse instead of silently corrupting it.
+    if is_v2 {
+        return Err("v2 模板导出尚未启用：默认写入门禁未打开".into());
+    }
+    let payload = safe_artifact_payload(&payload)?;
+    Ok(serde_json::json!({
+        "format": "forge-template-v1",
+        "id": id,
+        "name": name,
+        "payload": payload,
+        "version": version
+    })
+    .to_string())
 }
 
 pub fn import_template(document: String, project_id: String) -> Result<(), String> {
+    let mut db = database::open()?;
+    let transaction = db.transaction().map_err(|e| e.to_string())?;
+    import_template_in(&transaction, &document, &project_id)?;
+    transaction.commit().map_err(|e| e.to_string())
+}
+
+fn import_template_in(
+    transaction: &Transaction<'_>,
+    document: &str,
+    project_id: &str,
+) -> Result<(), String> {
     let value: serde_json::Value =
-        serde_json::from_str(&document).map_err(|e| format!("模板 JSON 无效：{e}"))?;
-    if value.get("format").and_then(|item| item.as_str()) != Some("forge-template-v1") {
-        return Err("不支持的模板格式".into());
+        serde_json::from_str(document).map_err(|_| "模板 JSON 无效".to_string())?;
+    match value.get("format").and_then(|item| item.as_str()) {
+        Some("forge-template-v1") => {}
+        // v2 writes stay behind the explicit gate until every entry point accepts v2.
+        Some("forge-template-v2") => {
+            if artifact_projection::DEFAULT_WRITE_VERSION < 2 {
+                return Err("v2 模板写入尚未启用：请先预览迁移并确认重绑定".into());
+            }
+            return Err("v2 模板导入需要显式重绑定确认".into());
+        }
+        _ => return Err("不支持的模板格式".into()),
     }
     let id = value
         .get("id")
@@ -348,14 +498,14 @@ pub fn import_template(document: String, project_id: String) -> Result<(), Strin
         .get("payload")
         .and_then(|item| item.as_str())
         .ok_or("模板缺少页面内容")?;
-    let page_spec: PageSpec =
-        serde_json::from_str(payload).map_err(|e| format!("页面 DSL 无效：{e}"))?;
-    validate(&page_spec)?;
-    save_template(
-        format!("imported-{id}"),
+    let payload = safe_artifact_payload(payload)?;
+    // Document IDs, secret refs and base URLs were projected away; the host rebinds.
+    save_template_in(
+        transaction,
+        &format!("imported-{id}"),
         project_id,
-        name.into(),
-        payload.into(),
+        name,
+        &payload,
         None,
         Vec::new(),
     )
@@ -376,5 +526,200 @@ mod tests {
         assert_eq!(value["customHeaders"]["X-Trace"], "");
         assert_eq!(value["customHeaders"]["X-Team"], "");
         assert_eq!(value["customHeaderSecretRefs"]["X-Trace"], "forge-header");
+    }
+}
+
+#[cfg(test)]
+mod artifact_tests {
+    use super::*;
+    use crate::repositories::migrations;
+    use rusqlite::Connection;
+    use serde_json::json;
+
+    const MARKERS: &[&str] = &[
+        "marker-row",
+        "marker-stat",
+        "marker-payload",
+        "marker-header",
+        "marker-secret",
+        "other-project-doc",
+    ];
+
+    fn polluted_payload() -> String {
+        json!({
+            "version": 1, "title": "Orders", "description": "",
+            "filters": [], "columns": ["id"],
+            "rows": [["marker-row"]],
+            "stats": [{"label": "count", "value": "marker-stat"}],
+            "batchActions": [{"operation_id":"batchDelete","method":"DELETE","path":"/orders",
+                "payloadBuilder":{"type":"custom","customPayload":"marker-payload"}}],
+            "headers": {"X-Trace": "marker-header"},
+            "secretRef": "marker-secret", "apiDocumentId": "other-project-doc",
+            "operations": [{"operation_id":"listOrders","method":"GET","path":"/orders","role":"list"}]
+        })
+        .to_string()
+    }
+
+    /// An in-memory database, never the developer's real data directory.
+    fn memory_db() -> Connection {
+        let db = Connection::open_in_memory().unwrap();
+        migrations::apply(&db).unwrap();
+        migrations::apply(&db).unwrap(); // idempotent on an existing database
+        db.execute(
+            "INSERT INTO projects (id,name,created_at,updated_at) VALUES ('p1','Project','now','now')",
+            [],
+        )
+        .unwrap();
+        db
+    }
+
+    fn assert_clean(text: &str) {
+        for marker in MARKERS {
+            assert!(!text.contains(marker), "leaked {marker}");
+        }
+    }
+
+    #[test]
+    fn projection_purges_every_injected_marker_before_validation() {
+        let clean = safe_artifact_payload(&polluted_payload()).unwrap();
+        assert_clean(&clean);
+        let value: serde_json::Value = serde_json::from_str(&clean).unwrap();
+        assert_eq!(value["title"], "Orders");
+        assert_eq!(value["rows"], json!([]));
+        assert_eq!(value["stats"], json!([]));
+    }
+
+    #[test]
+    fn save_export_import_roundtrip_never_persists_or_reimports_data() {
+        let mut db = memory_db();
+        let clean = safe_artifact_payload(&polluted_payload()).unwrap();
+        {
+            let transaction = db.transaction().unwrap();
+            save_template_in(&transaction, "t1", "p1", "Orders", &clean, None, Vec::new()).unwrap();
+            transaction.commit().unwrap();
+        }
+        let stored: String = db
+            .query_row("SELECT payload FROM templates WHERE id='t1'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_clean(&stored);
+        let document = export_template_in(&db, "t1").unwrap();
+        assert_clean(&document);
+        let envelope: serde_json::Value = serde_json::from_str(&document).unwrap();
+        assert_eq!(envelope["format"], "forge-template-v1");
+        {
+            let transaction = db.transaction().unwrap();
+            import_template_in(&transaction, &document, "p1").unwrap();
+            transaction.commit().unwrap();
+        }
+        let imported: String = db
+            .query_row(
+                "SELECT payload FROM templates WHERE id='imported-t1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_clean(&imported);
+    }
+
+    #[test]
+    fn restoring_a_legacy_version_cannot_revive_its_data() {
+        let db = memory_db();
+        let clean = safe_artifact_payload(&polluted_payload()).unwrap();
+        db.execute(
+            "INSERT INTO templates(id,project_id,name,payload,version,updated_at) VALUES('t1','p1','Orders',?1,1,'now')",
+            params![clean],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO template_versions(template_id,version,payload,created_at) VALUES('t1',1,?1,'now')",
+            params![polluted_payload()],
+        )
+        .unwrap();
+        restore_template_version_in(&db, "t1", 1).unwrap();
+        let restored: String = db
+            .query_row("SELECT payload FROM templates WHERE id='t1'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_clean(&restored);
+    }
+
+    #[test]
+    fn a_failed_scope_check_rolls_back_the_whole_transaction() {
+        let mut db = memory_db();
+        let clean = safe_artifact_payload(&polluted_payload()).unwrap();
+        {
+            let transaction = db.transaction().unwrap();
+            save_template_in(&transaction, "t1", "p1", "Orders", &clean, None, Vec::new()).unwrap();
+            assert!(save_template_in(
+                &transaction,
+                "t2",
+                "p1",
+                "Bad",
+                &clean,
+                None,
+                vec!["missing-doc".into()],
+            )
+            .is_err());
+            transaction.rollback().unwrap();
+        }
+        let count: i64 = db
+            .query_row("SELECT COUNT(*) FROM templates", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn loading_legacy_templates_never_returns_their_data() {
+        let db = memory_db();
+        db.execute(
+            "INSERT INTO templates(id,project_id,name,payload,version,updated_at) VALUES('legacy','p1','Legacy',?1,1,'now')",
+            params![polluted_payload()],
+        )
+        .unwrap();
+        let rows = load_templates_in(&db, "p1").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_clean(&rows[0]);
+        let record: serde_json::Value = serde_json::from_str(&rows[0]).unwrap();
+        let payload: serde_json::Value =
+            serde_json::from_str(record["payload"].as_str().unwrap()).unwrap();
+        assert_eq!(payload["rows"], json!([]));
+        assert_eq!(payload["stats"], json!([]));
+    }
+
+    #[test]
+    fn a_v2_history_payload_is_refused_instead_of_being_corrupted() {
+        let db = memory_db();
+        let historical = json!({
+            "version": 2, "title": "V2",
+            "dataSources": {"primary": {"operationRef": "orders.list"}},
+            "fields": [], "filters": [], "operations": [], "views": []
+        })
+        .to_string();
+        db.execute(
+            "INSERT INTO templates(id,project_id,name,payload,version,updated_at) VALUES('v2t','p1','V2',?1,1,'now')",
+            params![historical],
+        )
+        .unwrap();
+        let error = export_template_in(&db, "v2t").unwrap_err();
+        assert!(error.contains("v2"), "{error}");
+    }
+
+    #[test]
+    fn unknown_formats_and_v2_writes_are_rejected() {
+        let mut db = memory_db();
+        let documents = [
+            r#"{"format":"unknown","payload":"{}"}"#.to_string(),
+            json!({"format": "forge-template-v2", "payload": {"version": 2}}).to_string(),
+        ];
+        for document in documents {
+            let transaction = db.transaction().unwrap();
+            let error = import_template_in(&transaction, &document, "p1").unwrap_err();
+            assert!(!error.contains("marker"));
+            transaction.rollback().unwrap();
+        }
+        assert_eq!(crate::domain::artifact_projection::DEFAULT_WRITE_VERSION, 1);
     }
 }

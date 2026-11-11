@@ -1,26 +1,17 @@
 import type { PageSpec } from "../../types/domain";
+import { forModel, projectArtifact } from "./contracts/pageProjections";
 
 /** Only UI structure can be sent to a model; loaded business rows and metrics stay local. */
 export function toModelSafePageSpec(page: PageSpec): PageSpec {
-  return {
-    version: page.version,
-    title: page.title,
-    description: page.description,
-    layout: page.layout,
-    breadcrumb: page.breadcrumb,
-    permissionRole: page.permissionRole,
-    createdAt: page.createdAt,
-    updatedAt: page.updatedAt,
-    filters: page.filters,
-    columns: page.columns,
-    columnMeta: page.columnMeta,
-    operations: page.operations,
-    views: page.views,
-    interaction: page.interaction,
-    batchActions: page.batchActions,
-    theme: page.theme,
-    styleTokens: page.styleTokens,
-    stats: [],
-    rows: [],
-  };
+  return forModel(page);
+}
+
+/**
+ * Dropping data fields is expected, but losing structure to a size limit must be
+ * rejected by the caller rather than silently shrinking the model context.
+ */
+export function modelProjectionBlockingIssues(page: PageSpec): string[] {
+  return projectArtifact(page, "model").issues.filter(
+    (code) => code === "projection.text_limit" || code === "projection.array_limit",
+  );
 }

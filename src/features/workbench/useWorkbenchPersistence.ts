@@ -17,6 +17,7 @@ import {
   saveGenerationSession,
 } from "../../lib/tauri/storage";
 import { toUserMessage } from "../../lib/errors";
+import { forSession, sessionPromptPolicy } from "../pages/contracts/pageProjections";
 import {
   createRequestScope,
   createSnapshotStore,
@@ -139,8 +140,8 @@ export function createWorkbenchPersistence(
         await deps.saveGenerationSession(
           t.context.projectId,
           modelId,
-          prompt,
-          JSON.stringify(page),
+          sessionPromptPolicy(prompt).value,
+          JSON.stringify(forSession(page)),
           [...apiDocumentIds],
         );
         if (t.valid()) await refreshSessions(t.context);
@@ -184,7 +185,7 @@ export function createWorkbenchPersistence(
         const document = await deps.exportTemplate(id);
         if (!t.valid()) return;
         deps.download(document, name);
-        notify(t, "模板已导出（不包含任何密钥或业务数据）");
+        notify(t, "模板已导出：仅含页面结构，不含已加载记录、字面统计、自定义载荷或凭证");
       });
     },
     async importTemplate(file: File) {

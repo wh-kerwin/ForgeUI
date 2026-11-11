@@ -1,6 +1,6 @@
 import type { AllowedOperation, PageSpec, PromptTemplate } from "../../types/domain";
 import { inferOperationRoles } from "../connections/openApiOperations";
-import { toModelSafePageSpec } from "../pages/modelSafePageSpec";
+import { modelProjectionBlockingIssues, toModelSafePageSpec } from "../pages/modelSafePageSpec";
 import {
   capabilityForScene,
   capabilityPrompt,
@@ -50,6 +50,11 @@ function sceneCapability(template?: PromptTemplate | string): BusinessCapability
 }
 function safeTemplateContext(template?: PageSpec): string {
   if (!template) return "None";
+  // A projected-out oversized field is a structural loss, not a compact template.
+  if (modelProjectionBlockingIssues(template).length > 0)
+    throw new PromptCompositionError(
+      `模板结构包含超限字段；请缩小模板后重试（预算 ${TEMPLATE_BUDGET} 字符）。`,
+    );
   const full = JSON.stringify(toModelSafePageSpec(template));
   if (full.length > TEMPLATE_BUDGET)
     throw new PromptCompositionError(

@@ -1,3 +1,4 @@
+pub mod artifact_projection;
 pub mod page_definition_v2;
 pub mod page_definition_v2_schema;
 pub mod page_definition_v2_types;

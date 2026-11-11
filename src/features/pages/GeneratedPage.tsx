@@ -447,6 +447,9 @@ export function GeneratedPage({
             loadingData={querying}
             displayColumns={displayColumns}
             displayRows={displayRows}
+            dataScope={
+              resolvedRuntime.source === "definition" ? "definition-sample" : "current-page"
+            }
             onLoadData={
               listOperation
                 ? () => {
