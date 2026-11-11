@@ -64,7 +64,11 @@ type WorkbenchState = {
   /** Bounded, field-keyed backend errors; cleared on success and context changes. */
   mutationFieldErrors: FieldErrors;
   setExecutionMode: (mode: "live" | "preview") => void;
-  setPage: (page: PageSpec | null | ((current: PageSpec | null) => PageSpec | null)) => void;
+  setPage: (
+    page: PageSpec | null | ((current: PageSpec | null) => PageSpec | null),
+    /** Cosmetic refinements keep loaded records; a data-source change must not. */
+    options?: { preserveRuntime?: boolean },
+  ) => void;
   setDetail: (detail: Record<string, unknown> | null) => void;
   setQuerying: (querying: boolean) => void;
   setLoadingState: (loadingState: LoadingState) => void;
@@ -330,7 +334,7 @@ export function createWorkbenchStore(
           queryMeta: queryMetaFromRuntime(nextRuntime),
         });
       },
-      setPage(page) {
+      setPage(page, options) {
         cancelPending();
         revision++;
         busySequence++;
@@ -338,9 +342,12 @@ export function createWorkbenchStore(
         set((state) => {
           const nextPage = typeof page === "function" ? page(state.page) : page;
           // v1 adapter only READS definition sample rows; it never writes
-          // loaded business data back into the definition.
+          // loaded business data back into the definition. A cosmetic refinement
+          // may keep the loaded records, but never the previous selection.
           const nextRuntime = nextPage
-            ? runtimeFromV1Definition(nextPage, { status: "idle" })
+            ? options?.preserveRuntime
+              ? updateRuntimeSelection(state.runtime, [])
+              : runtimeFromV1Definition(nextPage, { status: "idle" })
             : clearRuntime(state.runtime, `definition:${revision}`);
           return {
             page: nextPage,

@@ -169,7 +169,9 @@ async function mount() {
   const user = userEvent.setup();
   render(<Workbench />, { wrapper: LanguageProvider });
   await waitFor(() => expect(screen.getByRole("checkbox", { name: /Orders API/ })).toBeTruthy());
-  fireEvent.change(screen.getByRole("textbox"), { target: { value: "订单列表" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "页面描述" }), {
+    target: { value: "订单列表" },
+  });
   return user;
 }
 async function start(user: ReturnType<typeof userEvent.setup>, f: ReturnType<typeof fixture>) {
@@ -639,7 +641,7 @@ it("stacks both overlays with accessible dismiss controls and clears only the ch
     f.saves[0].resolve();
   });
   await waitFor(() => expect(screen.getByText("校验通过，页面已采用")).toBeTruthy());
-  fireEvent.change(screen.getByRole("textbox"), { target: { value: "" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "页面描述" }), { target: { value: "" } });
   await user.click(screen.getByRole("button", { name: "生成页面" }));
   const notice = await screen.findByText("请先描述你想生成的业务页面");
   const stack = document.querySelector(".toast-stack");

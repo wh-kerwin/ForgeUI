@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { RequestContext } from "../pages/requestContext";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -21,11 +29,16 @@ import { PromptGenerator } from "./PromptGenerator";
 import { WorkbenchSidebar } from "./WorkbenchSidebar";
 import { GeneratedWorkbenchView } from "./GeneratedWorkbenchView";
 import { TemplateRoute } from "./TemplateRoute";
-import { parsePageSpecJson } from "../pages/parsePageSpec";
+import { parsePageSpecDetailed, parsePageSpecJson } from "../pages/parsePageSpec";
 import { validateGenerationCandidate } from "./generationCandidate";
-import { toModelSafePageSpec } from "../pages/modelSafePageSpec";
 import { useWorkbenchPersistence } from "./useWorkbenchPersistence";
-import { buildModelRequest } from "./modelRequest";
+import { buildModelRequest, buildRefineModelRequest } from "./modelRequest";
+import {
+  diffPageDefinitions,
+  initialRefineState,
+  reconcileRefinement,
+  refineReducer,
+} from "../pages/pageRefinement";
 import "../../route.css";
 import "../../wide-layout.css";
 import { useAppRouter } from "../../app/useAppRouter";
@@ -130,8 +143,7 @@ export function Workbench() {
   const [prompt, setPrompt] = useState("");
   const [showEditor, setShowEditor] = useState(false);
   const [editorModel, setEditorModel] = useState<ModelConfig | undefined>();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see TODO(refine)
-  const [refining, setRefining] = useState(false);
+  const [refine, dispatchRefine] = useReducer(refineReducer, initialRefineState);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [streamingPage, setStreamingPage] = useState<PageSpec | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -174,7 +186,7 @@ export function Workbench() {
       generationTicket.current = null;
       activeRequestId.current = null;
       setGenerating(false);
-      setRefining(false);
+      dispatchRefine({ type: "discard" });
       setIsStreaming(false);
       setStreamingPage(null);
       setExecutionMode("live");
@@ -271,6 +283,8 @@ export function Workbench() {
     generated.setPage(null);
     setSelectedTemplateId("");
     setActivePageDocumentIds([]);
+    // Pending previews, undo snapshots and issues belong to the old project.
+    dispatchRefine({ type: "project-changed" });
   }, [workspace.activeProjectId]);
 
   function updatePromptTemplates(templates: PromptTemplate[]) {
@@ -504,74 +518,178 @@ export function Workbench() {
       }
     }
   }
-  // TODO(refine): fully implemented but currently unreachable — PageRefineBox
-  // (src/features/pages/PageRefineBox.tsx) is the intended trigger UI and is
-  // not yet rendered anywhere. Either wire it into GeneratedPage or drop this.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async function refinePage(instruction: string) {
+  function toRefineIssues(error: unknown) {
+    return generationFailure(error).issues.map(({ code, message }) => ({ code, message }));
+  }
+  /** Only documents already bound to the original definition are in scope. */
+  function currentRefinementScope(documentIds: readonly string[], projectId: string) {
+    const documents = workspace.documents.filter(
+      (document) =>
+        document.enabled && document.projectId === projectId && documentIds.includes(document.id),
+    );
+    const operations = documents.flatMap((document) =>
+      runtimeOperations(
+        document.auth.authorizedOperations ?? [],
+        document.id,
+        document.spec.queryParameters,
+      ),
+    );
+    return { documents, operations };
+  }
+
+  /** Returns true only when a reviewable preview was produced; nothing is saved yet. */
+  async function refinePage(instruction: string): Promise<boolean> {
     const current = generated.page;
-    if (!active || !current || generationTicket.current) return;
+    if (!active || !current || generationTicket.current) return false;
+    if (
+      refine.status === "generating" ||
+      refine.status === "applying" ||
+      refine.status === "previewDiff"
+    )
+      return false;
     const context = generationScope.begin("generation");
     generationTicket.current = context;
-    setExecutionMode("preview");
-    setRefining(true);
+    dispatchRefine({ type: "submit" });
     setLoadingState("generating");
     try {
-      const refinementPrompt = `Modify the existing PageSpec according to this instruction: ${instruction}\nExisting PageSpec structure (loaded rows and metrics intentionally excluded): ${JSON.stringify(toModelSafePageSpec(current))}`;
-      const refinementIds = new Set(pageApiDocumentIds(current, activePageDocumentIds));
+      const refinementIds = [...new Set(pageApiDocumentIds(current, activePageDocumentIds))];
+      const { documents, operations } = currentRefinementScope(refinementIds, context.projectId);
       const refinedResult = await requestPage(
-        buildModelRequest(
-          active,
-          refinementPrompt,
-          workspace.documents.filter(
-            (document) =>
-              document.enabled &&
-              document.projectId === context.projectId &&
-              refinementIds.has(document.id),
-          ),
-          current,
-          selectedPromptTemplate,
-        ),
+        buildRefineModelRequest(active, instruction, documents, current, selectedPromptTemplate),
         context,
       );
-      const refinedPage = refinedResult.page;
-      if (!currentGeneration(context)) return;
-      const refinementOperations = workspace.documents
-        .filter((document) => refinementIds.has(document.id) && document.enabled)
-        .flatMap((document) =>
-          runtimeOperations(
-            document.auth.authorizedOperations ?? [],
-            document.id,
-            document.spec.queryParameters,
-          ),
-        );
-      const page = validateGenerationCandidate(
-        refinedPage,
+      if (!currentGeneration(context)) return false;
+      const candidate = validateGenerationCandidate(
+        refinedResult.page,
         `${current.title} ${instruction}`,
-        refinementOperations,
+        operations,
       );
-      const apiDocumentIds = pageApiDocumentIds(page, activePageDocumentIds);
-      await persistence.saveSession(active.id, instruction, page, apiDocumentIds, context);
-      if (!currentGeneration(context)) return;
-      setExecutionMode("live");
-      generated.setPage(page);
-      setPageRevision((revision) => revision + 1);
-      setActivePageDocumentIds(apiDocumentIds);
-      setNotice("页面已按对话要求更新");
-    } catch (error) {
-      if (currentGeneration(context)) {
-        setGenerationIssues(generationFailure(error).issues);
-        setGenerationStatus("生成未完成，已保留上一有效页面");
-        setGenerationFailed(true);
+      const reconciliation = reconcileRefinement(current, candidate, {
+        allowedDocumentIds: refinementIds,
+        allowedOperations: operations,
+      });
+      if (!reconciliation.accepted) {
+        dispatchRefine({ type: "error", issues: reconciliation.issues });
+        return false;
       }
+      if (!currentGeneration(context)) return false;
+      dispatchRefine({
+        type: "preview",
+        preview: {
+          candidate,
+          diff: diffPageDefinitions(current, candidate),
+          instruction,
+          projectId: context.projectId,
+          apiDocumentIds: refinementIds,
+        },
+      });
+      return true;
+    } catch (error) {
+      if (currentGeneration(context))
+        dispatchRefine({ type: "error", issues: toRefineIssues(error) });
+      return false;
     } finally {
       if (currentGeneration(context)) {
         generationTicket.current = null;
-        setRefining(false);
-        setExecutionMode("live");
         setLoadingState("idle");
       }
     }
+  }
+
+  function applyRefine() {
+    const preview = refine.preview;
+    const current = generated.page;
+    if (!preview || !current || refine.status !== "previewDiff") return;
+    if (preview.projectId !== workspace.activeProjectId) {
+      dispatchRefine({ type: "project-changed" });
+      return;
+    }
+    const { documents, operations } = currentRefinementScope(
+      preview.apiDocumentIds,
+      workspace.activeProjectId,
+    );
+    if (documents.length !== new Set(preview.apiDocumentIds).size) {
+      dispatchRefine({
+        type: "error",
+        issues: [{ code: "REFINE_SCOPE_EXPIRED", message: "原授权文档已变更，请重新预览修改" }],
+      });
+      return;
+    }
+    try {
+      // Re-validate against the current authorization before writing anything.
+      const candidate = validateGenerationCandidate(
+        preview.candidate,
+        `${preview.candidate.title} ${preview.instruction}`,
+        operations,
+      );
+      const reconciliation = reconcileRefinement(current, candidate, {
+        allowedDocumentIds: preview.apiDocumentIds,
+        allowedOperations: operations,
+      });
+      if (!reconciliation.accepted) {
+        dispatchRefine({ type: "error", issues: reconciliation.issues });
+        return;
+      }
+      dispatchRefine({ type: "apply" });
+      const undo = {
+        page: current,
+        apiDocumentIds: [...activePageDocumentIds],
+        projectId: workspace.activeProjectId,
+        requiresRequery: preview.diff.requiresRequery,
+      };
+      generated.setPage(candidate, { preserveRuntime: !preview.diff.requiresRequery });
+      setActivePageDocumentIds(preview.apiDocumentIds);
+      setPageRevision((revision) => revision + 1);
+      if (preview.diff.requiresRequery) void generated.query({});
+      void persistence
+        .saveSession(active?.id ?? "", preview.instruction, candidate, preview.apiDocumentIds)
+        .catch(() => setNotice("修改已应用，但生成历史保存失败"));
+      dispatchRefine({ type: "applied", undo });
+      setNotice("页面修改已应用");
+    } catch (error) {
+      dispatchRefine({ type: "error", issues: toRefineIssues(error) });
+    }
+  }
+
+  function undoRefine() {
+    const undo = refine.undo;
+    if (!undo || refine.status !== "idle") return;
+    if (undo.projectId !== workspace.activeProjectId) {
+      dispatchRefine({ type: "project-changed" });
+      return;
+    }
+    const currentDocumentIds = workspace.documents
+      .filter((document) => document.enabled && document.projectId === workspace.activeProjectId)
+      .map((document) => document.id);
+    const { operations } = currentRefinementScope(currentDocumentIds, workspace.activeProjectId);
+    const reconciliation = reconcileRefinement(undo.page, undo.page, {
+      allowedDocumentIds: currentDocumentIds,
+      allowedOperations: operations,
+    });
+    const checked = parsePageSpecDetailed(undo.page);
+    const expired = undo.apiDocumentIds.some((id) => !currentDocumentIds.includes(id));
+    if (!reconciliation.accepted || !checked.page || expired) {
+      dispatchRefine({
+        type: "error",
+        issues: reconciliation.accepted
+          ? [
+              {
+                code: expired ? "REFINE_UNDO_SCOPE_EXPIRED" : "REFINE_UNDO_INVALID",
+                message: expired
+                  ? "上一版本绑定的文档已失效，无法撤销"
+                  : "上一版本定义已失效，无法撤销",
+              },
+            ]
+          : reconciliation.issues,
+      });
+      return;
+    }
+    generated.setPage(checked.page, { preserveRuntime: !undo.requiresRequery });
+    setActivePageDocumentIds(undo.apiDocumentIds);
+    setPageRevision((revision) => revision + 1);
+    if (undo.requiresRequery) void generated.query({});
+    dispatchRefine({ type: "undone" });
+    setNotice("已撤销上次修改");
   }
   const openSession = (page: PageSpec, session: (typeof persistence.sessions)[number]) => {
     replacePage(page);
@@ -627,6 +745,16 @@ export function Workbench() {
         onOpenSession={openSession}
         onDeleteSession={persistence.removeSession}
         onInvalid={setNotice}
+        refine={{
+          status: refine.status,
+          diff: refine.preview?.diff ?? null,
+          issues: refine.issues,
+          canUndo: Boolean(refine.undo),
+          onRefine: refinePage,
+          onApply: applyRefine,
+          onDiscard: () => dispatchRefine({ type: "discard" }),
+          onUndo: undoRefine,
+        }}
       />
     </main>
   );

@@ -14,6 +14,7 @@ export function PromptBox({ prompt, onPromptChange, onGenerate, generating }: Pr
   return (
     <div className="prompt-box">
       <textarea
+        aria-label={zh ? "页面描述" : "Page description"}
         disabled={generating}
         value={prompt}
         onChange={(event) => onPromptChange(event.target.value)}

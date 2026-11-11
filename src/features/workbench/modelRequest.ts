@@ -12,6 +12,8 @@ export function buildModelRequest(
   documents: readonly ApiDocument[],
   template?: PageSpec,
   promptTemplate?: PromptTemplate | string,
+  /** Refinements modify an already-authorized definition; no new capability discovery. */
+  options?: { skipCapabilityGap?: boolean },
 ) {
   const allowedOperations = allowedOperationsForDocuments(documents);
   const composed = composeModelPrompt({ prompt, template, promptTemplate, allowedOperations });
@@ -19,6 +21,7 @@ export function buildModelRequest(
     typeof promptTemplate === "object" ? promptTemplate.scene : "query",
   );
   const gap =
+    !options?.skipCapabilityGap &&
     capability &&
     capabilityGap(
       capability,
@@ -39,6 +42,8 @@ export function buildModelRequest(
   }
 
   return {
+    // composeModelPrompt embeds only the structural template projection here;
+    // loaded rows, literal stats and credentials never enter the request.
     prompt: composed.prompt,
     base_url: model.baseUrl,
     protocol: model.protocol,
@@ -57,4 +62,28 @@ export function buildModelRequest(
     streaming: model.streaming,
     system_prompt: composed.systemPrompt,
   };
+}
+
+/**
+ * Refinement requests carry only the bounded user instruction, the structural
+ * projection of the current definition (added by composeModelPrompt) and the
+ * documents already authorized for that definition — never the active document
+ * union. Callers must filter `documents` to the original scope first.
+ */
+export function buildRefineModelRequest(
+  model: ModelConfig,
+  instruction: string,
+  documents: readonly ApiDocument[],
+  current: PageSpec,
+  promptTemplate?: PromptTemplate | string,
+) {
+  const bounded = instruction.slice(0, 1000);
+  return buildModelRequest(
+    model,
+    `局部修改现有页面定义，只输出一个完整的页面定义 JSON，不输出解释。用户指令：${bounded}`,
+    documents,
+    current,
+    promptTemplate,
+    { skipCapabilityGap: true },
+  );
 }

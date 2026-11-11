@@ -5,6 +5,21 @@ import type { RuntimeOperation } from "../pages/pageOperations";
 import type { PageRuntimeState, RuntimeControls } from "../pages/runtime/pageRuntimeState";
 import type { QueryMeta } from "../../store/workbenchStore";
 import type { MutationOutcome } from "../pages/mutationOutcome";
+import type { PageDefinitionDiff as PageDiff, RefineStatus } from "../pages/pageRefinement";
+import { PageRefineBox } from "../pages/PageRefineBox";
+import { PageDefinitionDiff as DiffReview } from "../pages/PageDefinitionDiff";
+import { useLanguage } from "../../i18n/LanguageProvider";
+
+export type RefineViewState = {
+  status: RefineStatus;
+  diff: PageDiff | null;
+  issues: { code: string; message: string }[];
+  canUndo: boolean;
+  onRefine: (instruction: string) => Promise<boolean>;
+  onApply: () => void;
+  onDiscard: () => void;
+  onUndo: () => void;
+};
 
 type Props = {
   page: PageSpec | null;
@@ -38,6 +53,7 @@ type Props = {
   onOpenSession: (page: PageSpec, session: GenerationSession) => void;
   onDeleteSession: (id: string) => void;
   onInvalid: (message: string) => void;
+  refine: RefineViewState;
 };
 
 export function GeneratedWorkbenchView({
@@ -68,7 +84,10 @@ export function GeneratedWorkbenchView({
   onOpenSession,
   onDeleteSession,
   onInvalid,
+  refine,
 }: Props) {
+  const { language } = useLanguage();
+  const zh = language === "zh";
   return (
     <>
       {page && (
@@ -97,6 +116,26 @@ export function GeneratedWorkbenchView({
           onSelectionKeysChange={onSelectionKeysChange}
           onRuntimeControls={onRuntimeControls}
         />
+      )}
+      {page && !isStreaming && (
+        <>
+          <PageRefineBox
+            onRefine={refine.onRefine}
+            status={refine.status}
+            issues={refine.issues}
+            canUndo={refine.canUndo}
+            onUndo={refine.onUndo}
+          />
+          {(refine.status === "previewDiff" || refine.status === "applying") && refine.diff && (
+            <DiffReview
+              diff={refine.diff}
+              zh={zh}
+              applying={refine.status === "applying"}
+              onApply={refine.onApply}
+              onDiscard={refine.onDiscard}
+            />
+          )}
+        </>
       )}
       <GenerationHistory
         sessions={sessions}
