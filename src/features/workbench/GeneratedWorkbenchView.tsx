@@ -4,6 +4,7 @@ import { GenerationHistory } from "../sessions/GenerationHistory";
 import type { RuntimeOperation } from "../pages/pageOperations";
 import type { PageRuntimeState, RuntimeControls } from "../pages/runtime/pageRuntimeState";
 import type { QueryMeta } from "../../store/workbenchStore";
+import type { MutationOutcome } from "../pages/mutationOutcome";
 
 type Props = {
   page: PageSpec | null;
@@ -20,10 +21,16 @@ type Props = {
   onDetail: (operation: RuntimeOperation, id: string) => void;
   onSaved: () => void;
   onQuery: (filters: Record<string, string>, operation?: RuntimeOperation) => void;
-  onMutation: (operation: RuntimeOperation, body: string) => void;
-  onDelete: (operation: RuntimeOperation, id: string, confirmed?: boolean) => void;
+  onMutation: (operation: RuntimeOperation, body: string) => Promise<MutationOutcome> | void;
+  onDelete: (
+    operation: RuntimeOperation,
+    id: string,
+    confirmed?: boolean,
+  ) => Promise<MutationOutcome> | void;
   querying: boolean;
   queryMeta: QueryMeta;
+  mutationStatus?: "idle" | "submitting" | "success" | "error" | "unknown";
+  mutationFieldErrors?: Record<string, string>;
   runtime: PageRuntimeState;
   onSelectionKeysChange: (keys: string[]) => void;
   onRuntimeControls: (controls: RuntimeControls) => void;
@@ -52,6 +59,8 @@ export function GeneratedWorkbenchView({
   onDelete,
   querying,
   queryMeta,
+  mutationStatus,
+  mutationFieldErrors,
   runtime,
   onSelectionKeysChange,
   onRuntimeControls,
@@ -82,6 +91,8 @@ export function GeneratedWorkbenchView({
           onDelete={onDelete}
           querying={querying}
           queryMeta={queryMeta}
+          mutationStatus={mutationStatus}
+          mutationFieldErrors={mutationFieldErrors}
           runtime={runtime}
           onSelectionKeysChange={onSelectionKeysChange}
           onRuntimeControls={onRuntimeControls}

@@ -618,6 +618,8 @@ export function Workbench() {
         onDelete={generated.deleteRecord}
         querying={generated.querying}
         queryMeta={generated.queryMeta}
+        mutationStatus={generated.mutationStatus}
+        mutationFieldErrors={generated.mutationFieldErrors}
         runtime={generated.runtime}
         onSelectionKeysChange={generated.setRuntimeSelection}
         onRuntimeControls={generated.setRuntimeControls}

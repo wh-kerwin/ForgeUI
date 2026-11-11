@@ -672,6 +672,29 @@ mod artifact_tests {
     }
 
     #[test]
+    fn structural_constraints_survive_persistence_but_oversized_patterns_are_rejected() {
+        let payload = json!({
+            "version": 1, "title": "Orders", "description": "",
+            "filters": [], "stats": [], "columns": ["id"], "rows": [],
+            "operations": [{
+                "operation_id": "updateOrder", "method": "PATCH", "path": "/orders/{id}", "role": "update",
+                "bodySchema": [{"name": "amount", "type": "number", "required": true,
+                    "constraints": {"min": 1, "max": 10, "minLength": 2, "maxLength": 8,
+                        "pattern": "[0-9]+", "readonly": false}}]
+            }]
+        })
+        .to_string();
+        let clean = safe_artifact_payload(&payload).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&clean).unwrap();
+        let constraints = &value["operations"][0]["bodySchema"][0]["constraints"];
+        assert_eq!(constraints["min"].as_f64(), Some(1.0));
+        assert_eq!(constraints["pattern"].as_str(), Some("[0-9]+"));
+        assert_eq!(constraints["readonly"].as_bool(), Some(false));
+        let oversized = payload.replace("[0-9]+", &"x".repeat(201));
+        assert!(safe_artifact_payload(&oversized).is_err());
+    }
+
+    #[test]
     fn loading_legacy_templates_never_returns_their_data() {
         let db = memory_db();
         db.execute(

@@ -78,6 +78,16 @@ function columnMeta(v: unknown, columns: string[]): boolean {
     )
   );
 }
+function constraints(v: unknown): boolean {
+  if (!record(v) || Object.keys(v).length > 7) return false;
+  return Object.entries(v).every(([key, value]) => {
+    if (["min", "max", "minLength", "maxLength"].includes(key))
+      return typeof value === "number" && Number.isFinite(value);
+    if (key === "pattern") return string(value) && text(value, 200);
+    if (key === "nullable" || key === "readonly") return typeof value === "boolean";
+    return false;
+  });
+}
 function fields(v: unknown): boolean {
   if (!Array.isArray(v) || v.length > 50 || !v.every(record)) return false;
   const names = new Set(v.map((f) => f.name));
@@ -104,7 +114,8 @@ function fields(v: unknown): boolean {
               (Array.isArray(x.equals) &&
                 x.equals.length > 0 &&
                 array(x.equals, 50, (y) => text(y, 120)))),
-        ),
+        ) &&
+        optional(f.constraints, constraints),
     )
   );
 }

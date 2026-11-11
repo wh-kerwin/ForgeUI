@@ -212,6 +212,17 @@ export type ApiDocument = {
   updatedAt: string;
 };
 
+/** Bounded body-field constraints; readonly fields are displayed but never submitted. */
+export type FieldConstraints = {
+  min?: number;
+  max?: number;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  nullable?: boolean;
+  readonly?: boolean;
+};
+
 export type FieldSchema = {
   name: string;
   type: "string" | "number" | "integer" | "boolean" | "date" | "enum";
@@ -219,6 +230,7 @@ export type FieldSchema = {
   required: boolean;
   description?: string;
   visibleWhen?: { field: string; equals: string | string[] };
+  constraints?: FieldConstraints;
 };
 
 export type AllowedOperation = {

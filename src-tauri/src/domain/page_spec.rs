@@ -148,6 +148,27 @@ pub struct FieldSchema {
     pub required: bool,
     pub description: Option<String>,
     pub visible_when: Option<VisibleWhen>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub constraints: Option<FieldConstraints>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldConstraints {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_length: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nullable: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub readonly: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -484,6 +505,20 @@ pub(crate) fn valid_field_schema(fields: &[FieldSchema]) -> bool {
                                     && values.iter().all(|value| value.len() <= 120)
                             }
                         }
+                })
+                && field.constraints.as_ref().is_none_or(|constraints| {
+                    constraints
+                        .pattern
+                        .as_ref()
+                        .is_none_or(|pattern| pattern.len() <= 200)
+                        && [constraints.min, constraints.max]
+                            .into_iter()
+                            .flatten()
+                            .all(|value| value.is_finite())
+                        && [constraints.min_length, constraints.max_length]
+                            .into_iter()
+                            .flatten()
+                            .all(|value| value <= 4096)
                 })
         })
 }

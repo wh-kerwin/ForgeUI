@@ -21,6 +21,8 @@ export function useGeneratedPageActions({
   const detail = useWorkbenchStore((state) => state.detail);
   const querying = useWorkbenchStore((state) => state.querying);
   const queryMeta = useWorkbenchStore((state) => state.queryMeta);
+  const mutationStatus = useWorkbenchStore((state) => state.mutationStatus);
+  const mutationFieldErrors = useWorkbenchStore((state) => state.mutationFieldErrors);
   const runtime = useWorkbenchStore((state) => state.runtime);
   const setRuntimeSelection = useWorkbenchStore((state) => state.setRuntimeSelection);
   const setRuntimeControls = useWorkbenchStore((state) => state.setRuntimeControls);
@@ -42,6 +44,8 @@ export function useGeneratedPageActions({
     detail,
     querying,
     queryMeta,
+    mutationStatus,
+    mutationFieldErrors,
     runtime,
     setRuntimeSelection,
     setRuntimeControls,

@@ -90,6 +90,14 @@ const ALLOWED_KEYS: &[&str] = &[
     "danger",
     "dangerBg",
     "success",
+    "constraints",
+    "min",
+    "max",
+    "minLength",
+    "maxLength",
+    "pattern",
+    "nullable",
+    "readonly",
 ];
 
 /// Fields that carry data or environment bindings rather than structure.

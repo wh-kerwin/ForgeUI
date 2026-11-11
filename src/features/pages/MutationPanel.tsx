@@ -18,6 +18,7 @@ import {
   type FieldErrors,
 } from "./formValidation";
 import type { RuntimeOperation } from "./pageOperations";
+import type { MutationOutcome } from "./mutationOutcome";
 import { recordId } from "./recordIdentity";
 
 type Props = {
@@ -25,6 +26,11 @@ type Props = {
   zh: boolean;
   /** Loaded display columns; row values come from runtime, not the definition. */
   displayColumns?: string[];
+  /** Typed raw record identity; falls back to a display-column heuristic. */
+  identityForRow?: (row: string[]) => string;
+  /** Bounded backend field errors, keyed by declared field name. */
+  fieldErrors?: Record<string, string>;
+  submitting?: boolean;
   fieldSchemas?: Record<string, FieldSchema[]>;
   interaction: ResolvedInteraction;
   createOperation?: RuntimeOperation;
@@ -43,8 +49,15 @@ type Props = {
   onCloseDetail: () => void;
   onRowsChange: Dispatch<SetStateAction<string[][]>>;
   onDetail: (operation: RuntimeOperation, id: string) => void;
-  onMutation: (operation: RuntimeOperation, body: string) => void;
-  onDelete: (operation: RuntimeOperation, id: string, confirmed?: boolean) => void;
+  onMutation: (
+    operation: RuntimeOperation,
+    body: string,
+  ) => Promise<MutationOutcome | void> | MutationOutcome | void;
+  onDelete: (
+    operation: RuntimeOperation,
+    id: string,
+    confirmed?: boolean,
+  ) => Promise<MutationOutcome | void> | MutationOutcome | void;
 };
 
 function OperationOverlay({
@@ -110,6 +123,9 @@ export function MutationPanel({
   page,
   zh,
   displayColumns,
+  identityForRow,
+  fieldErrors,
+  submitting = false,
   fieldSchemas,
   interaction,
   createOperation,
@@ -139,8 +155,14 @@ export function MutationPanel({
   const [editValues, setEditValues] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState("");
+  const [pending, setPending] = useState(false);
+  const [serverErrors, setServerErrors] = useState<FieldErrors>({});
+  const [errorMode, setErrorMode] = useState<"create" | "edit" | null>(null);
   const [deleteId, setDeleteId] = useState("");
   const [detailId, setDetailId] = useState("");
+  useEffect(() => {
+    setServerErrors(fieldErrors ?? {});
+  }, [fieldErrors]);
   const operationFields = (operation?: RuntimeOperation) => {
     const id = operation?.operationId;
     if (!id) return [];
@@ -157,7 +179,7 @@ export function MutationPanel({
   const visibleEditFields = visibleFieldSchemas(editFields, editValues);
   const rowRecord = (row: string[]) =>
     Object.fromEntries(activeColumns.map((column, index) => [column, row[index] || ""]));
-  const rowId = (row: string[]) => recordId(activeColumns, row);
+  const rowId = (row: string[]) => identityForRow?.(row) || recordId(activeColumns, row);
   const deleteBinding = page.operations?.find(
     (binding) =>
       binding.operation_id === deleteOperation?.operationId &&
@@ -194,31 +216,41 @@ export function MutationPanel({
     setValues: Dispatch<SetStateAction<Record<string, string>>>,
     errors: FieldErrors,
     setErrors: Dispatch<SetStateAction<FieldErrors>>,
-  ) => (
-    <Form className="schema-fields" layout="vertical">
-      {fields.map((field) => (
-        <Form.Item
-          className="modal-form-field"
-          key={field.name}
-          label={field.name}
-          required={field.required}
-          help={errors[field.name] || field.description}
-          validateStatus={errors[field.name] ? "error" : undefined}
-        >
-          <FieldRenderer
-            field={field}
-            value={values[field.name] ?? ""}
-            invalid={Boolean(errors[field.name])}
-            onBlur={() => setFieldError(field, values[field.name] ?? "", setErrors)}
-            onChange={(value) => {
-              setValues((current) => ({ ...current, [field.name]: value }));
-              if (errors[field.name]) setFieldError(field, value, setErrors);
-            }}
-          />
-        </Form.Item>
-      ))}
-    </Form>
-  );
+    mode: "create" | "edit",
+  ) => {
+    const allErrors = { ...(errorMode === mode ? serverErrors : {}), ...errors };
+    return (
+      <Form className="schema-fields" layout="vertical">
+        {fields.map((field) => (
+          <Form.Item
+            className="modal-form-field"
+            key={field.name}
+            label={field.name}
+            required={field.required}
+            help={allErrors[field.name] || field.description}
+            validateStatus={allErrors[field.name] ? "error" : undefined}
+          >
+            <FieldRenderer
+              field={field}
+              value={values[field.name] ?? ""}
+              invalid={Boolean(allErrors[field.name])}
+              onBlur={() => setFieldError(field, values[field.name] ?? "", setErrors)}
+              onChange={(value) => {
+                setValues((current) => ({ ...current, [field.name]: value }));
+                if (serverErrors[field.name])
+                  setServerErrors((current) => {
+                    const next = { ...current };
+                    delete next[field.name];
+                    return next;
+                  });
+                if (errors[field.name]) setFieldError(field, value, setErrors);
+              }}
+            />
+          </Form.Item>
+        ))}
+      </Form>
+    );
+  };
 
   const rawPayload = (value: string) => {
     try {
@@ -231,6 +263,34 @@ export function MutationPanel({
     }
   };
 
+  /** A non-success outcome keeps the dialog open and all field values intact. */
+  const runSubmit = async (
+    task: () => Promise<MutationOutcome | void> | MutationOutcome | void,
+    onSuccess: () => void,
+    mode?: "create" | "edit",
+  ) => {
+    if (pending || submitting) return;
+    setPending(true);
+    if (mode) setErrorMode(mode);
+    setFormError("");
+    try {
+      const outcome = await task();
+      if (outcome === "success") {
+        setServerErrors({});
+        setErrorMode(null);
+        onSuccess();
+      } else if (outcome && outcome !== "skipped") {
+        setFormError(
+          zh
+            ? "提交未成功，请检查字段错误后重试；输入已保留"
+            : "Submission failed; review field errors and retry. Your input is kept.",
+        );
+      }
+    } finally {
+      setPending(false);
+    }
+  };
+
   const submitCreate = (closeAfter: boolean) => {
     if (!createOperation) return;
     const result = createFields.length
@@ -238,10 +298,17 @@ export function MutationPanel({
       : { payload: rawPayload(createForm), errors: {} };
     setCreateErrors(result.errors);
     if (!result.payload) return;
-    onMutation(createOperation, result.payload);
-    setCreateValues({});
-    setCreateForm("{\n  \n}");
-    if (closeAfter) onCloseCreate();
+    const payload = result.payload;
+    void runSubmit(
+      () => onMutation(createOperation, payload),
+      () => {
+        setCreateValues({});
+        setCreateForm("{\n  \n}");
+        setCreateErrors({});
+        if (closeAfter) onCloseCreate();
+      },
+      "create",
+    );
   };
 
   const submitEdit = (closeAfter: boolean) => {
@@ -260,20 +327,31 @@ export function MutationPanel({
       );
       return;
     }
-    if (editOperation)
-      onMutation(
-        { ...editOperation, path: editOperation.path.replace(/\{[^}]+\}/, encodeURIComponent(id)) },
-        result.payload,
-      );
-    else {
-      const next = JSON.parse(result.payload) as Record<string, unknown>;
-      onRowsChange((rows) =>
-        rows.map((row) =>
-          row === editingRow ? activeColumns.map((column) => String(next[column] ?? "")) : row,
-        ),
-      );
-    }
-    if (closeAfter) onCloseEdit();
+    const payload = result.payload;
+    void runSubmit(
+      () => {
+        if (editOperation)
+          return onMutation(
+            {
+              ...editOperation,
+              path: editOperation.path.replace(/\{[^}]+\}/, encodeURIComponent(id)),
+            },
+            payload,
+          );
+        const next = JSON.parse(payload) as Record<string, unknown>;
+        onRowsChange((rows) =>
+          rows.map((row) =>
+            row === editingRow ? activeColumns.map((column) => String(next[column] ?? "")) : row,
+          ),
+        );
+        return "success" as const;
+      },
+      () => {
+        setEditErrors({});
+        if (closeAfter) onCloseEdit();
+      },
+      "edit",
+    );
   };
 
   const detailValues = viewingRow
@@ -319,6 +397,7 @@ export function MutationPanel({
           setCreateValues,
           createErrors,
           setCreateErrors,
+          "create",
         )
       ) : (
         <Input.TextArea
@@ -331,7 +410,12 @@ export function MutationPanel({
       {formError && <Alert className="form-error" type="error" showIcon message={formError} />}
       <Space className="modal-actions">
         <Button onClick={onCloseCreate}>{zh ? "取消" : "Cancel"}</Button>
-        <Button type="primary" onClick={() => submitCreate(true)}>
+        <Button
+          type="primary"
+          loading={pending || submitting}
+          disabled={pending || submitting}
+          onClick={() => submitCreate(true)}
+        >
           {zh ? "提交" : "Submit"}
         </Button>
       </Space>
@@ -340,7 +424,14 @@ export function MutationPanel({
   const editContent = editingRow && (
     <>
       {editFields.length ? (
-        renderFields(visibleEditFields, editValues, setEditValues, editErrors, setEditErrors)
+        renderFields(
+          visibleEditFields,
+          editValues,
+          setEditValues,
+          editErrors,
+          setEditErrors,
+          "edit",
+        )
       ) : (
         <Input.TextArea
           value={editForm}
@@ -365,7 +456,12 @@ export function MutationPanel({
       {formError && <Alert className="form-error" type="error" showIcon message={formError} />}
       <Space className="modal-actions">
         <Button onClick={onCloseEdit}>{zh ? "取消" : "Cancel"}</Button>
-        <Button type="primary" onClick={() => submitEdit(true)}>
+        <Button
+          type="primary"
+          loading={pending || submitting}
+          disabled={pending || submitting}
+          onClick={() => submitEdit(true)}
+        >
           {zh ? "保存编辑" : "Save changes"}
         </Button>
       </Space>
@@ -385,6 +481,7 @@ export function MutationPanel({
               setCreateValues,
               createErrors,
               setCreateErrors,
+              "create",
             )
           ) : (
             <Input.TextArea
@@ -400,7 +497,12 @@ export function MutationPanel({
               {formError}
             </p>
           )}
-          <Button type="primary" onClick={() => submitCreate(false)}>
+          <Button
+            type="primary"
+            loading={pending || submitting}
+            disabled={pending || submitting}
+            onClick={() => submitCreate(false)}
+          >
             {zh ? "提交新增" : "Create"}
           </Button>
         </div>
@@ -472,10 +574,14 @@ export function MutationPanel({
                 <Button
                   danger
                   type="primary"
-                  onClick={() => {
-                    onDelete(deleteOperation, rowId(deletingRow), true);
-                    onCloseDelete();
-                  }}
+                  loading={pending || submitting}
+                  disabled={pending || submitting}
+                  onClick={() =>
+                    void runSubmit(
+                      () => onDelete(deleteOperation, rowId(deletingRow), true),
+                      onCloseDelete,
+                    )
+                  }
                 >
                   {zh ? "确认删除" : "Delete"}
                 </Button>
@@ -489,7 +595,17 @@ export function MutationPanel({
                 value={deleteId}
                 onChange={(event) => setDeleteId(event.target.value)}
               />
-              <Button danger onClick={() => onDelete(deleteOperation, deleteId)}>
+              <Button
+                danger
+                loading={pending || submitting}
+                disabled={pending || submitting}
+                onClick={() =>
+                  void runSubmit(
+                    () => onDelete(deleteOperation, deleteId),
+                    () => setDeleteId(""),
+                  )
+                }
+              >
                 {zh ? "删除" : "Delete"}
               </Button>
             </div>
@@ -511,10 +627,14 @@ export function MutationPanel({
             <Button
               danger
               type="primary"
-              onClick={() => {
-                onDelete(deleteOperation, rowId(deletingRow), true);
-                onCloseDelete();
-              }}
+              loading={pending || submitting}
+              disabled={pending || submitting}
+              onClick={() =>
+                void runSubmit(
+                  () => onDelete(deleteOperation, rowId(deletingRow), true),
+                  onCloseDelete,
+                )
+              }
             >
               {zh ? "确认删除" : "Delete"}
             </Button>
@@ -571,10 +691,17 @@ export function MutationPanel({
               <Button
                 danger
                 type="primary"
-                onClick={() => {
-                  if (deleteOperation) onDelete(deleteOperation, rowId(deletingRow), true);
-                  onCloseDelete();
-                }}
+                loading={pending || submitting}
+                disabled={pending || submitting}
+                onClick={() =>
+                  void runSubmit(
+                    () =>
+                      deleteOperation
+                        ? onDelete(deleteOperation, rowId(deletingRow), true)
+                        : ("skipped" as const),
+                    onCloseDelete,
+                  )
+                }
               >
                 {zh ? "确认删除" : "Delete"}
               </Button>

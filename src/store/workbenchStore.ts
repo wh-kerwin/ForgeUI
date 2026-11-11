@@ -28,6 +28,11 @@ import {
   queryMetaFromRuntime,
   runtimeFromV1Definition,
 } from "../features/pages/runtime/runtimeSelectors";
+import {
+  fieldErrorsFrom,
+  type FieldErrors,
+  type MutationOutcome,
+} from "../features/pages/mutationOutcome";
 
 type ApiContext = {
   projectId: string;
@@ -56,6 +61,8 @@ type WorkbenchState = {
   apiContext: ApiContext | null;
   executionMode: "live" | "preview";
   mutationStatus: "idle" | "submitting" | "success" | "error" | "unknown";
+  /** Bounded, field-keyed backend errors; cleared on success and context changes. */
+  mutationFieldErrors: FieldErrors;
   setExecutionMode: (mode: "live" | "preview") => void;
   setPage: (page: PageSpec | null | ((current: PageSpec | null) => PageSpec | null)) => void;
   setDetail: (detail: Record<string, unknown> | null) => void;
@@ -68,8 +75,12 @@ type WorkbenchState = {
   setRuntimeBinding: (binding: ResponseBinding | undefined) => void;
   query: (filters?: Record<string, string>, operation?: RuntimeOperation) => Promise<void>;
   loadDetail: (operation: RuntimeOperation, id: string) => Promise<void>;
-  mutate: (operation: RuntimeOperation, text: string) => Promise<void>;
-  deleteRecord: (operation: RuntimeOperation, id: string, confirmed?: boolean) => Promise<void>;
+  mutate: (operation: RuntimeOperation, text: string) => Promise<MutationOutcome>;
+  deleteRecord: (
+    operation: RuntimeOperation,
+    id: string,
+    confirmed?: boolean,
+  ) => Promise<MutationOutcome>;
 };
 
 type DocumentResolution =
@@ -221,33 +232,45 @@ export function createWorkbenchStore(
         },
       );
     }
+    /** Returns a terminal outcome so the form can keep its input on failure. */
     async function write(
       operation: RuntimeOperation,
       text?: string,
       id?: string,
       confirmed = false,
-    ) {
-      if (get().executionMode !== "live" || get().mutationStatus === "submitting") return;
+    ): Promise<MutationOutcome> {
+      if (get().executionMode !== "live" || get().mutationStatus === "submitting") return "skipped";
       const context = get().apiContext;
       const resolved = resolveRequest(context, operation);
-      if (!resolved.ok) return context?.onNotice(resolved.error);
+      if (!resolved.ok) {
+        context?.onNotice(resolved.error);
+        return "skipped";
+      }
       const valid = snapshot();
-      if (id !== undefined && !id.trim()) return context?.onNotice("请输入要删除的记录 ID");
+      if (id !== undefined && !id.trim()) {
+        context?.onNotice("请输入要删除的记录 ID");
+        return "skipped";
+      }
       if (
         id !== undefined &&
         !confirmed &&
         !window.confirm("确定要删除这条记录吗？此操作不可撤销。")
       )
-        return;
-      if (!valid()) return;
+        return "skipped";
+      if (!valid()) return "skipped";
       let body: unknown;
       try {
         body = text?.trim() ? JSON.parse(text) : undefined;
       } catch {
-        return context?.onNotice("请求体必须是合法 JSON");
+        context?.onNotice("请求体必须是合法 JSON");
+        return "skipped";
       }
       const busy = ++busySequence;
-      set({ loadingState: "mutating", mutationStatus: "submitting" });
+      set({
+        loadingState: "mutating",
+        mutationStatus: "submitting",
+        mutationFieldErrors: {},
+      });
       try {
         const response = await execute(
           resolved,
@@ -257,16 +280,22 @@ export function createWorkbenchStore(
           undefined,
           body,
         );
-        if (!valid()) return;
-        set({ mutationStatus: "success" });
+        if (!valid()) return "skipped";
+        set({ mutationStatus: "success", mutationFieldErrors: {} });
         resolved.context.onNotice(`操作成功（HTTP ${response.status}）`);
+        return "success";
       } catch (error) {
-        if (!valid()) return;
+        if (!valid()) return "skipped";
         const unknown = (error as Error & { kind?: string }).kind === "mutation-outcome-unknown";
-        set({ mutationStatus: unknown ? "unknown" : "error" });
+        set({
+          mutationStatus: unknown ? "unknown" : "error",
+          mutationFieldErrors: unknown ? {} : fieldErrorsFrom(error),
+        });
         resolved.context.onNotice(
           unknown ? "写入结果尚未确认，请先刷新核对服务端状态，勿直接重试。" : toUserMessage(error),
         );
+        // Unknown is deliberately not retried automatically.
+        return unknown ? "unknown" : "error";
       } finally {
         if (valid() && busy === busySequence)
           set({ loadingState: get().querying ? "querying" : "idle" });
@@ -282,6 +311,7 @@ export function createWorkbenchStore(
       apiContext: null,
       executionMode: "live",
       mutationStatus: "idle",
+      mutationFieldErrors: {},
       setExecutionMode(mode) {
         if (mode === get().executionMode) return;
         cancelPending();
@@ -295,6 +325,7 @@ export function createWorkbenchStore(
           querying: false,
           loadingState: "idle",
           mutationStatus: "idle",
+          mutationFieldErrors: {},
           runtime: nextRuntime,
           queryMeta: queryMetaFromRuntime(nextRuntime),
         });
@@ -319,6 +350,7 @@ export function createWorkbenchStore(
             querying: false,
             loadingState: "idle",
             mutationStatus: "idle",
+            mutationFieldErrors: {},
           };
         });
       },
@@ -353,6 +385,7 @@ export function createWorkbenchStore(
               runtime: scopedRuntime,
               queryMeta: queryMetaFromRuntime(scopedRuntime),
               mutationStatus: "idle",
+              mutationFieldErrors: {},
             });
           });
           const nextRuntime = clearRuntime(get().runtime, `context:${context.projectId}`);
@@ -363,6 +396,7 @@ export function createWorkbenchStore(
             runtime: nextRuntime,
             queryMeta: queryMetaFromRuntime(nextRuntime),
             mutationStatus: "idle",
+            mutationFieldErrors: {},
             page: previous?.projectId === context.projectId ? state.page : null,
           }));
         }

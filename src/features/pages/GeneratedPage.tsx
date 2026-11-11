@@ -36,6 +36,7 @@ import {
 import { resolvePageLayout } from "./pageLayout";
 import type { QueryMeta } from "../../store/workbenchStore";
 import { recordId } from "./recordIdentity";
+import type { FieldErrors, MutationOutcome } from "./mutationOutcome";
 import type { PageRuntimeState, RuntimeControls } from "./runtime/pageRuntimeState";
 import {
   runtimeFromV1Definition,
@@ -87,6 +88,8 @@ export function GeneratedPage({
   onDelete,
   querying,
   queryMeta,
+  mutationStatus,
+  mutationFieldErrors,
   runtime,
   onSelectionKeysChange,
   onRuntimeControls,
@@ -105,10 +108,19 @@ export function GeneratedPage({
   onDetail: (operation: RuntimeOperation, id: string) => void;
   onSaved: () => void;
   onQuery: (filters: Record<string, string>, operation?: RuntimeOperation) => void;
-  onMutation: (operation: RuntimeOperation, body: string) => void;
-  onDelete: (operation: RuntimeOperation, id: string, confirmed?: boolean) => void;
+  onMutation: (
+    operation: RuntimeOperation,
+    body: string,
+  ) => Promise<MutationOutcome | void> | MutationOutcome | void;
+  onDelete: (
+    operation: RuntimeOperation,
+    id: string,
+    confirmed?: boolean,
+  ) => Promise<MutationOutcome | void> | MutationOutcome | void;
   querying: boolean;
   queryMeta: QueryMeta;
+  mutationStatus?: "idle" | "submitting" | "success" | "error" | "unknown";
+  mutationFieldErrors?: FieldErrors;
   runtime?: PageRuntimeState;
   onSelectionKeysChange?: (keys: string[]) => void;
   onRuntimeControls?: (controls: RuntimeControls) => void;
@@ -256,11 +268,19 @@ export function GeneratedPage({
   const interaction = resolveInteraction(page, isCrudPage);
   const rowRecord = (row: string[]) =>
     Object.fromEntries(displayColumns.map((column, index) => [column, row[index] || ""]));
-  const rowId = (row: string[]) => recordId(displayColumns, row);
+  // Prefer the typed runtime identity over a display-column heuristic.
+  const rowId = (row: string[]) => {
+    const index = localRows.indexOf(row);
+    const identity = rowIdentities[index];
+    return identity ? String(identity.value) : recordId(displayColumns, row);
+  };
   const batchActions = isStreaming ? [] : (page.batchActions ?? []);
   const activeSort = sort === undefined ? firstListSort(activeView) : sort;
   const runListQuery = (nextPage: number, nextSort: PageSort | null = activeSort) => {
     if (isStreaming) return;
+    // A new query replaces the loaded records; never carry a selection over.
+    onSelectionKeysChange?.([]);
+    if (!runtime) setSelectedKeys([]);
     onRuntimeControls?.({
       page: nextPage,
       pageSize: defaultSize,
@@ -280,6 +300,36 @@ export function GeneratedPage({
       }),
       listOperation,
     );
+  };
+  const deletingPage = useRef<{ page: number; rows: number } | null>(null);
+  /** Success refreshes the original query; a non-success result is left to the form. */
+  const handleMutation = async (
+    operation: RuntimeOperation,
+    body: string,
+  ): Promise<MutationOutcome | void> => {
+    const outcome = await onMutation(operation, body);
+    if (outcome === "success" && !deletingPage.current) runListQuery(pageNumber);
+    return outcome;
+  };
+  /** Deleting the last row of the last page steps back once, then refreshes. */
+  const handleDelete = async (
+    operation: RuntimeOperation,
+    id: string,
+    confirmed?: boolean,
+  ): Promise<MutationOutcome | void> => {
+    deletingPage.current = { page: pageNumber, rows: displayRows.length };
+    try {
+      const outcome = await onDelete(operation, id, confirmed);
+      const target = deletingPage.current;
+      if (outcome === "success" && target) {
+        const page = target.rows <= 1 && target.page > 1 ? target.page - 1 : target.page;
+        setPageNumber(page);
+        runListQuery(page);
+      }
+      return outcome;
+    } finally {
+      deletingPage.current = null;
+    }
   };
   const openRedirect = (action: GeneratedAction, id?: string) => {
     window.history.pushState({ forgeGeneratedAction: action }, "", generatedActionPath(action, id));
@@ -354,7 +404,7 @@ export function GeneratedPage({
       action.payloadBuilder.type === "ids"
         ? JSON.stringify({ ids })
         : (action.payloadBuilder.customPayload ?? JSON.stringify({ ids }));
-    onMutation(
+    void handleMutation(
       {
         key: operationKey(action.method, action.path, action.operation_id),
         method: action.method,
@@ -393,6 +443,9 @@ export function GeneratedPage({
       page={page}
       zh={zh}
       displayColumns={displayColumns}
+      identityForRow={rowId}
+      fieldErrors={mutationFieldErrors}
+      submitting={mutationStatus === "submitting"}
       fieldSchemas={fieldSchemas}
       interaction={interaction}
       createOperation={createOperation}
@@ -414,10 +467,12 @@ export function GeneratedPage({
         if (!isStreaming) onDetail(...args);
       }}
       onMutation={(...args) => {
-        if (!isStreaming && !querying && !writesDisabled) onMutation(...args);
+        if (!isStreaming && !querying && !writesDisabled) return handleMutation(...args);
+        return "skipped" as const;
       }}
       onDelete={(...args) => {
-        if (!isStreaming && !querying && !writesDisabled) onDelete(...args);
+        if (!isStreaming && !querying && !writesDisabled) return handleDelete(...args);
+        return "skipped" as const;
       }}
     />
   );
