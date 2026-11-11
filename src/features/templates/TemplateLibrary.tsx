@@ -1,17 +1,33 @@
 import { ChangeEvent, useMemo, useRef, useState } from "react";
 import { Download, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
-import type { PageSpec, TemplateRecord, TemplateVersion } from "../../types/domain";
+import type { ApiDocument, PageSpec, TemplateRecord, TemplateVersion } from "../../types/domain";
 import { TemplateLibraryToolbar } from "./TemplateLibraryToolbar";
 import { usePinnedTemplates } from "./usePinnedTemplates";
 import { parsePageSpecJson } from "../pages/parsePageSpec";
 import { useLanguage } from "../../i18n/LanguageProvider";
+import { bindingSummaryFor, type BindingReconciliation } from "./templateBinding";
+import { TemplateBindingPanel } from "./TemplateBindingPanel";
+
+export type TemplateBindingProps = {
+  request: {
+    template: TemplateRecord;
+    page: PageSpec;
+    reconciliation: BindingReconciliation;
+  } | null;
+  selections: Record<string, string>;
+  onSelect: (key: string, documentId: string) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+};
 
 type Props = {
   templates: TemplateRecord[];
   versions: TemplateVersion[];
   selectedTemplateId: string;
-  onOpen: (page: PageSpec) => void;
-  onUse: (template: TemplateRecord) => void;
+  documents: readonly ApiDocument[];
+  projectId: string;
+  binding: TemplateBindingProps;
+  onUse: (template: TemplateRecord, page: PageSpec) => void;
   onShowVersions: (id: string) => void;
   onRestore: (version: number) => void;
   onInvalidTemplate: () => void;
@@ -25,7 +41,9 @@ export function TemplateLibrary({
   templates,
   versions,
   selectedTemplateId,
-  onOpen,
+  documents,
+  projectId,
+  binding,
   onUse,
   onShowVersions,
   onRestore,
@@ -40,6 +58,18 @@ export function TemplateLibrary({
   const { language } = useLanguage();
   const zh = language === "zh";
   const { pinned, togglePinned } = usePinnedTemplates();
+  const bindingStates = useMemo(() => {
+    const result: Record<string, string> = {};
+    for (const template of templates) {
+      const page = parsePageSpecJson(template.payload);
+      result[template.id] = page
+        ? bindingSummaryFor({ template, page, documents, projectId }).label
+        : zh
+          ? "模板内容无效"
+          : "Invalid template";
+    }
+    return result;
+  }, [templates, documents, projectId, zh]);
   const visibleTemplates = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return [...templates]
@@ -84,16 +114,18 @@ export function TemplateLibrary({
               className="template-chip"
               onClick={() => {
                 const page = parsePageSpecJson(template.payload);
-                if (page) {
-                  onOpen(page);
-                  onUse(template);
-                } else {
-                  onInvalidTemplate();
-                }
+                if (page) onUse(template, page);
+                else onInvalidTemplate();
               }}
             >
               <strong>{template.name}</strong>
               <span>v{template.version}</span>
+              <span
+                className="template-binding-state"
+                data-binding-summary={bindingStates[template.id]}
+              >
+                {bindingStates[template.id]}
+              </span>
             </button>
             <button
               className="version-btn pin-button"
@@ -138,6 +170,18 @@ export function TemplateLibrary({
             </button>
           ))}
         </div>
+      )}
+      {binding.request && (
+        <TemplateBindingPanel
+          key={binding.request.template.id}
+          title={binding.request.template.name}
+          reconciliation={binding.request.reconciliation}
+          selections={binding.selections}
+          zh={zh}
+          onSelect={binding.onSelect}
+          onConfirm={binding.onConfirm}
+          onCancel={binding.onCancel}
+        />
       )}
     </section>
   );

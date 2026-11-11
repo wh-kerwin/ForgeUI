@@ -63,6 +63,12 @@ import {
   runtimeOperations,
 } from "../pages/pageOperations";
 import { createApiFallbackPage } from "./apiFallbackPage";
+import {
+  applyTemplateBindings,
+  reconcileTemplateBindings,
+  verifyTemplateBindings,
+} from "../templates/templateBinding";
+import type { TemplateBindingProps } from "../templates/TemplateLibrary";
 
 function promptDiagnosticIssues(request: ReturnType<typeof buildModelRequest>): PageIssue[] {
   return request.prompt_diagnostics.flatMap(({ code, message }) => {
@@ -144,6 +150,8 @@ export function Workbench() {
   const [showEditor, setShowEditor] = useState(false);
   const [editorModel, setEditorModel] = useState<ModelConfig | undefined>();
   const [refine, dispatchRefine] = useReducer(refineReducer, initialRefineState);
+  const [bindingRequest, setBindingRequest] = useState<TemplateBindingProps["request"]>(null);
+  const [bindingSelections, setBindingSelections] = useState<Record<string, string>>({});
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [streamingPage, setStreamingPage] = useState<PageSpec | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -173,6 +181,7 @@ export function Workbench() {
     projectId: workspace.activeProjectId,
     onNotice: setNotice,
     requestScope: workspace.requestScope,
+    getDocuments: () => workspace.documents,
   });
   const generationScope = workspace.requestScope;
   const generationCleanup = useRef<(() => void) | null>(null);
@@ -283,8 +292,11 @@ export function Workbench() {
     generated.setPage(null);
     setSelectedTemplateId("");
     setActivePageDocumentIds([]);
-    // Pending previews, undo snapshots and issues belong to the old project.
+    // Pending previews, undo snapshots, issues and binding requests belong to
+    // the old project; never carry a binding confirmation across projects.
     dispatchRefine({ type: "project-changed" });
+    setBindingRequest(null);
+    setBindingSelections({});
   }, [workspace.activeProjectId]);
 
   function updatePromptTemplates(templates: PromptTemplate[]) {
@@ -304,13 +316,48 @@ export function Workbench() {
     return page || undefined;
   }
 
-  function useTemplate(template: TemplateRecord) {
-    const page = parseTemplate(template);
-    if (!page) return;
-    replacePage(page);
-    setActivePageDocumentIds(pageApiDocumentIds(page, template.apiDocumentIds));
+  /** A template is never loaded until its bindings are confirmed for this project. */
+  function useTemplate(template: TemplateRecord, page: PageSpec) {
+    const reconciliation = reconcileTemplateBindings({
+      template,
+      page,
+      documents: workspace.documents,
+      projectId: workspace.activeProjectId,
+    });
+    if (!reconciliation.canApply) {
+      setBindingRequest({ template, page, reconciliation });
+      setBindingSelections(reconciliation.selections);
+      setNotice("模板绑定需要确认后才可使用");
+      return;
+    }
+    applyBoundTemplate(template, page, reconciliation.selections);
+  }
+
+  function applyBoundTemplate(
+    template: TemplateRecord,
+    page: PageSpec,
+    selections: Record<string, string>,
+  ) {
+    const bound = applyTemplateBindings(page, selections);
+    if (!verifyTemplateBindings(bound, workspace.documents, workspace.activeProjectId)) {
+      setNotice("模板绑定未通过当前项目授权复验，未加载页面");
+      return;
+    }
+    replacePage(bound);
+    setActivePageDocumentIds([...new Set(Object.values(selections))]);
     setSelectedTemplateId(template.id);
+    setBindingRequest(null);
+    setBindingSelections({});
     navigate("generate");
+  }
+
+  function selectTemplateBinding(key: string, documentId: string) {
+    setBindingSelections((current) => {
+      const next = { ...current };
+      if (documentId) next[key] = documentId;
+      else delete next[key];
+      return next;
+    });
   }
 
   async function requestPage(
@@ -779,7 +826,20 @@ export function Workbench() {
         templates={persistence.templates}
         versions={persistence.versions}
         selectedTemplateId={persistence.versionTemplateId}
-        onOpen={replacePage}
+        documents={workspace.documents}
+        projectId={workspace.activeProjectId}
+        binding={{
+          request: bindingRequest,
+          selections: bindingSelections,
+          onSelect: selectTemplateBinding,
+          onConfirm: () =>
+            bindingRequest &&
+            applyBoundTemplate(bindingRequest.template, bindingRequest.page, bindingSelections),
+          onCancel: () => {
+            setBindingRequest(null);
+            setBindingSelections({});
+          },
+        }}
         onUse={useTemplate}
         onShowVersions={persistence.showVersions}
         onRestore={persistence.restoreVersion}

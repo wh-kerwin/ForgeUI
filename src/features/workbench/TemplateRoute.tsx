@@ -1,12 +1,14 @@
-import type { PageSpec, TemplateRecord, TemplateVersion } from "../../types/domain";
-import { TemplateLibrary } from "../templates/TemplateLibrary";
+import type { ApiDocument, PageSpec, TemplateRecord, TemplateVersion } from "../../types/domain";
+import { TemplateLibrary, type TemplateBindingProps } from "../templates/TemplateLibrary";
 
 type Props = {
   templates: TemplateRecord[];
   versions: TemplateVersion[];
   selectedTemplateId: string;
-  onOpen: (page: PageSpec) => void;
-  onUse: (template: TemplateRecord) => void;
+  documents: readonly ApiDocument[];
+  projectId: string;
+  binding: TemplateBindingProps;
+  onUse: (template: TemplateRecord, page: PageSpec) => void;
   onShowVersions: (id: string) => void;
   onRestore: (version: number) => void;
   onInvalid: () => void;
@@ -20,7 +22,9 @@ export function TemplateRoute({
   templates,
   versions,
   selectedTemplateId,
-  onOpen,
+  documents,
+  projectId,
+  binding,
   onUse,
   onShowVersions,
   onRestore,
@@ -42,7 +46,9 @@ export function TemplateRoute({
           templates={templates}
           versions={versions}
           selectedTemplateId={selectedTemplateId}
-          onOpen={onOpen}
+          documents={documents}
+          projectId={projectId}
+          binding={binding}
           onUse={onUse}
           onShowVersions={onShowVersions}
           onRestore={onRestore}

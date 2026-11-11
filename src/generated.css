@@ -700,3 +700,43 @@
 .pagination--unknown-total {
   justify-content: flex-start;
 }
+
+.template-binding {
+  margin-top: 12px;
+}
+.template-binding h4 {
+  margin: 4px 0;
+}
+.template-binding-state {
+  padding: 1px 6px;
+  border: 1px solid var(--fg-border, #344052);
+  border-radius: 999px;
+  font-size: 10px;
+  opacity: 0.85;
+}
+.binding-entry-list {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 0;
+  list-style: none;
+}
+.binding-entry-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.binding-entry-list select {
+  max-width: 260px;
+}
+.binding-confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+}
+.binding-actions {
+  display: flex;
+  gap: 8px;
+}

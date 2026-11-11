@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  ApiDocument,
   GenerationSession,
   PageSpec,
   TemplateRecord,
@@ -58,6 +59,7 @@ export function createWorkbenchPersistence(
   onNotice: (message: string) => void,
   dependencies: Partial<Dependencies> = {},
   sharedScope?: RequestScope,
+  options: { getDocuments?: () => readonly ApiDocument[] } = {},
 ) {
   const deps = { ...native, ...dependencies };
   const requestScope = sharedScope ?? createRequestScope({ projectId });
@@ -174,10 +176,30 @@ export function createWorkbenchPersistence(
       const id = store.getSnapshot().versionTemplateId;
       if (!id) return;
       await mutation(async (t) => {
+        // Restoring a version must not revive a binding to a document that was
+        // deleted, disabled or moved to another project.
+        const template = store.getSnapshot().templates.find((item) => item.id === id);
+        const documents = options.getDocuments?.() ?? [];
+        const stale = (template?.apiDocumentIds ?? []).filter(
+          (documentId) =>
+            !documents.some(
+              (document) =>
+                document.id === documentId &&
+                document.enabled &&
+                document.projectId === currentProject,
+            ),
+        );
+        if (stale.length > 0) {
+          notify(t, "模板绑定的 API 文档已失效，请先重绑定后再恢复历史版本");
+          return;
+        }
         await deps.restoreTemplateVersion(id, version);
         if (!t.valid()) return;
         await refreshTemplates(t.context);
-        notify(t, `已恢复模板版本 v${version}`);
+        notify(
+          t,
+          `已恢复模板版本 v${version}：仅结构定义，不恢复业务记录、选择或表单草稿；使用前仍需确认当前项目绑定`,
+        );
       });
     },
     async exportTemplate(id: string, name: string) {
@@ -195,7 +217,10 @@ export function createWorkbenchPersistence(
         await deps.importTemplate(document, t.context.projectId);
         if (!t.valid()) return;
         await refreshTemplates(t.context);
-        notify(t, "模板已导入当前项目，请确认 API 文档绑定后使用");
+        notify(
+          t,
+          "模板已导入：仅含页面结构，不含已加载记录、字面统计、自定义载荷或凭证；原项目文档 ID 未沿用，请在模板列表中确认绑定后使用",
+        );
       });
     },
     async removeTemplate(id: string, name: string) {
@@ -244,12 +269,23 @@ export function createWorkbenchPersistence(
   };
 }
 
-type Args = { projectId: string; onNotice: (message: string) => void; requestScope?: RequestScope };
-export function useWorkbenchPersistence({ projectId, onNotice, requestScope }: Args) {
+type Args = {
+  projectId: string;
+  onNotice: (message: string) => void;
+  requestScope?: RequestScope;
+  getDocuments?: () => readonly ApiDocument[];
+};
+export function useWorkbenchPersistence({ projectId, onNotice, requestScope, getDocuments }: Args) {
   // The coordinator owns the scope; React subscribes to its immutable snapshots.
   const [notice] = useState(() => ({ current: onNotice }));
+  const [documentsRef] = useState(() => ({ current: getDocuments }));
+  useLayoutEffect(() => {
+    documentsRef.current = getDocuments;
+  });
   const [controller] = useState(() =>
-    createWorkbenchPersistence(projectId, (message) => notice.current(message), {}, requestScope),
+    createWorkbenchPersistence(projectId, (message) => notice.current(message), {}, requestScope, {
+      getDocuments: () => documentsRef.current?.() ?? [],
+    }),
   );
   useLayoutEffect(() => {
     notice.current = onNotice;

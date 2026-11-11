@@ -451,12 +451,45 @@ fn export_template_in(db: &Connection, id: &str) -> Result<String, String> {
         return Err("v2 模板导出尚未启用：默认写入门禁未打开".into());
     }
     let payload = safe_artifact_payload(&payload)?;
+    let clean: serde_json::Value =
+        serde_json::from_str(&payload).map_err(|_| "模板页面内容无效".to_string())?;
+    // Descriptive binding intent only: document IDs are never credentials and
+    // are never written back into the definition. The importer must reconcile
+    // these operations against its own project's authorized documents.
+    let operations = clean
+        .get("operations")
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    Some(serde_json::json!({
+                        "method": item.get("method")?.as_str()?,
+                        "path": item.get("path")?.as_str()?,
+                        "operationId": item.get("operation_id")?.as_str()?
+                    }))
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let mut statement = db
+        .prepare("SELECT api_document_id FROM template_api_documents WHERE template_id=?1")
+        .map_err(|e| e.to_string())?;
+    let api_document_ids = statement
+        .query_map(params![id], |row| row.get::<_, String>(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
     Ok(serde_json::json!({
         "format": "forge-template-v1",
         "id": id,
         "name": name,
         "payload": payload,
-        "version": version
+        "version": version,
+        "bindings": {
+            "apiDocumentIds": api_document_ids,
+            "operations": operations
+        }
     })
     .to_string())
 }
@@ -499,6 +532,9 @@ fn import_template_in(
         .and_then(|item| item.as_str())
         .ok_or("模板缺少页面内容")?;
     let payload = safe_artifact_payload(payload)?;
+    // document.bindings is descriptive only: source project/document IDs are
+    // never written into the imported template. The host reconciles operations
+    // against its own authorized documents after an explicit user choice.
     // Document IDs, secret refs and base URLs were projected away; the host rebinds.
     save_template_in(
         transaction,
@@ -621,6 +657,66 @@ mod artifact_tests {
             )
             .unwrap();
         assert_clean(&imported);
+    }
+
+    #[test]
+    fn exported_bindings_are_descriptive_and_never_reimported() {
+        let mut db = memory_db();
+        db.execute(
+            "INSERT INTO api_documents(id,project_id,name,payload,created_at,updated_at) VALUES('doc-1','p1','Orders','{}','now','now')",
+            [],
+        )
+        .unwrap();
+        let payload = json!({
+            "version": 1, "title": "Orders", "description": "",
+            "filters": [], "stats": [], "columns": ["id"], "rows": [],
+            "operations": [{"operation_id":"listOrders","method":"GET","path":"/orders","role":"list"}]
+        })
+        .to_string();
+        let clean = safe_artifact_payload(&payload).unwrap();
+        {
+            let transaction = db.transaction().unwrap();
+            save_template_in(
+                &transaction,
+                "t1",
+                "p1",
+                "Orders",
+                &clean,
+                None,
+                vec!["doc-1".into()],
+            )
+            .unwrap();
+            transaction.commit().unwrap();
+        }
+        let document = export_template_in(&db, "t1").unwrap();
+        let envelope: serde_json::Value = serde_json::from_str(&document).unwrap();
+        assert_eq!(envelope["bindings"]["apiDocumentIds"][0], "doc-1");
+        assert_eq!(envelope["bindings"]["operations"][0]["path"], "/orders");
+        assert_eq!(
+            envelope["bindings"]["operations"][0]["operationId"],
+            "listOrders"
+        );
+        assert!(!document.contains("secret"));
+
+        // Importing into another project never writes the source document ID.
+        db.execute(
+            "INSERT INTO projects(id,name,created_at,updated_at) VALUES('p2','Other','now','now')",
+            [],
+        )
+        .unwrap();
+        {
+            let transaction = db.transaction().unwrap();
+            import_template_in(&transaction, &document, "p2").unwrap();
+            transaction.commit().unwrap();
+        }
+        let count: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM template_api_documents WHERE template_id='imported-t1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0);
     }
 
     #[test]

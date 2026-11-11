@@ -626,32 +626,39 @@ it("does not schedule a transient dismissal for failed generations", async () =>
 });
 
 it("stacks both overlays with accessible dismiss controls and clears only the chosen one", async () => {
-  const f = fixture();
-  const user = await mount();
-  await start(user, f);
-  await act(async () => {
-    f.listeners[0].ready.resolve(f.listeners[0].unlisten);
-  });
-  await waitFor(() => expect(f.generations).toHaveLength(1));
-  await act(async () => {
-    f.generations[0].resolve(result("Stacked page"));
-  });
-  await waitFor(() => expect(f.saves).toHaveLength(1));
-  await act(async () => {
-    f.saves[0].resolve();
-  });
-  await waitFor(() => expect(screen.getByText("校验通过，页面已采用")).toBeTruthy());
-  fireEvent.change(screen.getByRole("textbox", { name: "页面描述" }), { target: { value: "" } });
-  await user.click(screen.getByRole("button", { name: "生成页面" }));
-  const notice = await screen.findByText("请先描述你想生成的业务页面");
-  const stack = document.querySelector(".toast-stack");
-  expect(stack).toBeTruthy();
-  expect(stack?.querySelector('[aria-label="页面生成诊断"]')).toBeTruthy();
-  expect(notice.closest(".toast-stack")).toBe(stack);
-  expect(screen.getAllByRole("button", { name: /关闭(生成诊断|提示)/ })).toHaveLength(2);
-  await user.click(screen.getByRole("button", { name: "关闭提示" }));
-  expect(screen.queryByText("请先描述你想生成的业务页面")).toBeNull();
-  expect(screen.getByLabelText("页面生成诊断")).toBeTruthy();
-  await user.click(screen.getByRole("button", { name: "关闭生成诊断" }));
-  expect(screen.queryByLabelText("页面生成诊断")).toBeNull();
+  // Hold the 8s success timer: a slow CI run must not auto-dismiss one of the
+  // two overlays while the test is still asserting independent dismissal.
+  const { restore } = trackTransientTimers();
+  try {
+    const f = fixture();
+    const user = await mount();
+    await start(user, f);
+    await act(async () => {
+      f.listeners[0].ready.resolve(f.listeners[0].unlisten);
+    });
+    await waitFor(() => expect(f.generations).toHaveLength(1));
+    await act(async () => {
+      f.generations[0].resolve(result("Stacked page"));
+    });
+    await waitFor(() => expect(f.saves).toHaveLength(1));
+    await act(async () => {
+      f.saves[0].resolve();
+    });
+    await waitFor(() => expect(screen.getByText("校验通过，页面已采用")).toBeTruthy());
+    fireEvent.change(screen.getByRole("textbox", { name: "页面描述" }), { target: { value: "" } });
+    await user.click(screen.getByRole("button", { name: "生成页面" }));
+    const notice = await screen.findByText("请先描述你想生成的业务页面");
+    const stack = document.querySelector(".toast-stack");
+    expect(stack).toBeTruthy();
+    expect(stack?.querySelector('[aria-label="页面生成诊断"]')).toBeTruthy();
+    expect(notice.closest(".toast-stack")).toBe(stack);
+    expect(screen.getAllByRole("button", { name: /关闭(生成诊断|提示)/ })).toHaveLength(2);
+    await user.click(screen.getByRole("button", { name: "关闭提示" }));
+    expect(screen.queryByText("请先描述你想生成的业务页面")).toBeNull();
+    expect(screen.getByLabelText("页面生成诊断")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "关闭生成诊断" }));
+    expect(screen.queryByLabelText("页面生成诊断")).toBeNull();
+  } finally {
+    restore();
+  }
 });
