@@ -1,5 +1,7 @@
 # 页面生成优化方案 v2（B 端 + C 端场景）
 
+> 历史报告，结论不随本次交付改写。当前实施状态见 [B 端执行记录](b2b-execution-log.md) 与 [B 端验收报告](b2b-acceptance-report.md)。
+
 **文档版本**：v2.0
 **创建日期**：2026-08-25
 **关联文档**：[OPTIMIZATION.md](../OPTIMIZATION.md)、[PLAN.md](../PLAN.md)

@@ -1,5 +1,7 @@
 # 动态页面生成系统优化复核
 
+> 历史复核报告，结论不随本次交付改写。当前实施状态见 [B 端执行记录](b2b-execution-log.md) 与 [B 端验收报告](b2b-acceptance-report.md)。
+
 **日期**：2026-09-04  
 **范围**：`PageSpec` 生成、流式预览、受控渲染、真实业务 API 查询与数据映射  
 **关联材料**：[既有优化方案](../OPTIMIZATION.md)、[B2C 页面生成优化](./b2c-page-generation-optimization.md)
@@ -32,19 +34,19 @@ Prompt + 已授权 OpenAPI 上下文
 
 ## 对 Claude 建议的复核
 
-| 建议 | 当前状态 | 复核意见 |
-| --- | --- | --- |
-| `GeneratedPage` 拆分与 memo | 已部分完成 | `PageHeader`、`FilterBar`、`StatsPanel`、`MutationPanel`、`DataTableView` 已拆出；`GeneratedPage` 仍是编排层。先做 profiler 基线，再选择性 memo，不能仅因 props 对象大而包装 `React.memo`。 |
-| 流式解析节流 | 尚未实现 | 应做，但不要丢弃最终片段。采用合帧/100ms 合并，将最新 `Partial<PageSpec>` 一次提交给 React。 |
-| 抽 API 服务层 | 已有等价分层 | `workbenchStore` 已有 `resolveApiDocument`、`resolveRequest`、`request`、`buildApiRequest`。当前优先提取可复用请求执行器或 QueryClient，不宜新建与 store 并行的 `ApiService`。 |
-| Zod/TypeBox 校验 | 不建议优先引入 | `parsePageSpec` 已为页面 DSL 做严格运行时校验，并有增强场景测试。引入第二套 schema 会增加维护面；只有需要共享 JSON Schema 或显著简化 Rust/TS 双端定义时再评估。 |
-| 查询缓存与分页预取 | 未实现 | 值得做，但必须先定义鉴权、写操作、模板/文档切换后的失效规则；简单 `Map + TTL` 容易展示过期或越权数据。 |
-| 数据映射 worker | 暂不需要 | 当前映射最多处理 100 行、50 列，主线程成本有限。真正问题是静默截断，而不是 CPU；先把容量限制和服务端分页表达清楚。 |
-| 统一错误处理 | 已实现 | `toUserMessage` 已统一 Tauri、模型和本地解析错误。可补错误分类/重试策略，不需要另建 `UserFacingError` 才能开始。 |
-| 流式快照回退 | 部分已有 | 解析器会安全提取字段，最终以 Rust 返回的规范化结果为准。更有价值的是记录“最后成功预览”并控制更新频率。 |
-| 骨架屏 | 已实现 | 流式时有状态提示、禁用 fieldset 与表格 skeleton。应补组件测试和无障碍状态验证。 |
-| 多视图 DSL | 已实现 | 支持 `list`、`chart`、`kanban`、`tabs`、`split`，不是仅有列表页。 |
-| Schema 表单 | 已实现 | `MutationPanel`、`FieldRenderer`、`formValidation` 已使用接口字段 Schema；JSON 输入仅作为降级能力保留。 |
+| 建议                        | 当前状态       | 复核意见                                                                                                                                                                                    |
+| --------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GeneratedPage` 拆分与 memo | 已部分完成     | `PageHeader`、`FilterBar`、`StatsPanel`、`MutationPanel`、`DataTableView` 已拆出；`GeneratedPage` 仍是编排层。先做 profiler 基线，再选择性 memo，不能仅因 props 对象大而包装 `React.memo`。 |
+| 流式解析节流                | 尚未实现       | 应做，但不要丢弃最终片段。采用合帧/100ms 合并，将最新 `Partial<PageSpec>` 一次提交给 React。                                                                                                |
+| 抽 API 服务层               | 已有等价分层   | `workbenchStore` 已有 `resolveApiDocument`、`resolveRequest`、`request`、`buildApiRequest`。当前优先提取可复用请求执行器或 QueryClient，不宜新建与 store 并行的 `ApiService`。              |
+| Zod/TypeBox 校验            | 不建议优先引入 | `parsePageSpec` 已为页面 DSL 做严格运行时校验，并有增强场景测试。引入第二套 schema 会增加维护面；只有需要共享 JSON Schema 或显著简化 Rust/TS 双端定义时再评估。                             |
+| 查询缓存与分页预取          | 未实现         | 值得做，但必须先定义鉴权、写操作、模板/文档切换后的失效规则；简单 `Map + TTL` 容易展示过期或越权数据。                                                                                      |
+| 数据映射 worker             | 暂不需要       | 当前映射最多处理 100 行、50 列，主线程成本有限。真正问题是静默截断，而不是 CPU；先把容量限制和服务端分页表达清楚。                                                                          |
+| 统一错误处理                | 已实现         | `toUserMessage` 已统一 Tauri、模型和本地解析错误。可补错误分类/重试策略，不需要另建 `UserFacingError` 才能开始。                                                                            |
+| 流式快照回退                | 部分已有       | 解析器会安全提取字段，最终以 Rust 返回的规范化结果为准。更有价值的是记录“最后成功预览”并控制更新频率。                                                                                      |
+| 骨架屏                      | 已实现         | 流式时有状态提示、禁用 fieldset 与表格 skeleton。应补组件测试和无障碍状态验证。                                                                                                             |
+| 多视图 DSL                  | 已实现         | 支持 `list`、`chart`、`kanban`、`tabs`、`split`，不是仅有列表页。                                                                                                                           |
+| Schema 表单                 | 已实现         | `MutationPanel`、`FieldRenderer`、`formValidation` 已使用接口字段 Schema；JSON 输入仅作为降级能力保留。                                                                                     |
 
 ## 优先级与实施建议
 

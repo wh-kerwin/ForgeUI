@@ -1,0 +1,248 @@
+{
+  "cases": [
+    {
+      "id": "permission-unauthorized-operation",
+      "category": "permission",
+      "description": "An operation outside the authorized set is refused before execution.",
+      "input": {
+        "prompt": "生成带删除的订单页",
+        "scene": "crud",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" },
+            {
+              "operation_id": "deleteOrder",
+              "method": "DELETE",
+              "path": "/orders/{id}",
+              "role": "delete"
+            }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": {
+        "contractAccepted": true,
+        "bindingAccepted": false,
+        "writesDisabled": true,
+        "outcome": "unbound"
+      }
+    },
+    {
+      "id": "permission-authorization-revoked",
+      "category": "authorization-revoked",
+      "description": "Revoking an authorization disables writes and refuses execution.",
+      "input": {
+        "prompt": "授权被撤销后继续编辑",
+        "scene": "crud",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "authorizationRevoked": true,
+        "records": [{ "id": "1" }],
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": { "bindingAccepted": false, "writesDisabled": true, "outcome": "unbound" }
+    },
+    {
+      "id": "permission-cross-document-same-name",
+      "category": "cross-document",
+      "description": "A same-name operation on a different path is never auto-substituted.",
+      "input": {
+        "prompt": "跨文档复用同名 operation",
+        "scene": "query",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "templateDocumentIds": ["old-doc"],
+        "documents": [
+          {
+            "id": "new-doc",
+            "projectId": "p1",
+            "name": "Other",
+            "enabled": true,
+            "spec": {
+              "title": "",
+              "version": "",
+              "spec_version": "",
+              "operation_count": 1,
+              "operations": ["GET /v2/orders · listOrders"],
+              "api_base_url": "",
+              "discovered_url": ""
+            },
+            "auth": {},
+            "createdAt": "",
+            "updatedAt": ""
+          }
+        ],
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": { "bindingState": "mismatch", "bindingAccepted": false, "outcome": "unbound" }
+    },
+    {
+      "id": "bad-output-invalid-definition",
+      "category": "bad-output",
+      "description": "A malformed model output is rejected by the contract layer.",
+      "input": {
+        "prompt": "输出一个坏定义",
+        "scene": "query",
+        "definition": null,
+        "authorizedOperations": [],
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": { "contractAccepted": false, "outcome": "rejected" }
+    },
+    {
+      "id": "bad-output-out-of-scope-request",
+      "category": "bad-output",
+      "description": "An out-of-scope request is correctly refused rather than answered with another resource.",
+      "input": {
+        "prompt": "导出客户表的手机号，但只授权了订单",
+        "scene": "query",
+        "definition": {
+          "title": "Customers",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["phone"],
+          "rows": [],
+          "operations": [
+            {
+              "operation_id": "listCustomers",
+              "method": "GET",
+              "path": "/customers",
+              "role": "list"
+            }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": { "contractAccepted": true, "bindingAccepted": false, "outcome": "unbound" }
+    },
+    {
+      "id": "lifecycle-cancel-slow-body",
+      "category": "cancellation",
+      "description": "Cancelling a slow request never commits a late response.",
+      "input": {
+        "prompt": "取消慢响应",
+        "scene": "query",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "canceled": true,
+        "body": [{ "id": "1" }],
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": { "queryStatus": "cancelled", "recordCount": 0, "outcome": "skipped" }
+    },
+    {
+      "id": "lifecycle-project-switch-discards",
+      "category": "project-switch",
+      "description": "Switching projects discards pending previews and does not save them.",
+      "input": {
+        "prompt": "切项目时丢弃旧修改",
+        "scene": "query",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "projectChanged": true,
+        "records": [{ "id": "1" }],
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": { "recordCount": 0, "refinementSaved": false, "outcome": "skipped" }
+    },
+    {
+      "id": "template-rebind-after-import",
+      "category": "template-rebind",
+      "description": "An imported template must be explicitly rebound before it can execute.",
+      "input": {
+        "prompt": "导入模板后重绑定",
+        "scene": "query",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "templateDocumentIds": [],
+        "documents": [
+          {
+            "id": "new-doc",
+            "projectId": "p1",
+            "name": "Orders",
+            "enabled": true,
+            "spec": {
+              "title": "",
+              "version": "",
+              "spec_version": "",
+              "operation_count": 1,
+              "operations": ["GET /orders · listOrders"],
+              "api_base_url": "",
+              "discovered_url": ""
+            },
+            "auth": {},
+            "createdAt": "",
+            "updatedAt": ""
+          }
+        ],
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": { "bindingState": "needs-rebind", "bindingAccepted": false, "outcome": "unbound" }
+    }
+  ]
+}

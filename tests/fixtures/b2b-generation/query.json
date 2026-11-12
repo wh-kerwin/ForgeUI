@@ -1,0 +1,218 @@
+{
+  "cases": [
+    {
+      "id": "query-root-array",
+      "category": "query",
+      "description": "Root-array response is mapped by an explicit empty items pointer.",
+      "input": {
+        "prompt": "列出全部订单",
+        "scene": "query",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id", "amount"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "binding": {
+          "operationKey": "GET /orders · listOrders",
+          "itemsPointer": "",
+          "rowKeyPointer": "/id",
+          "fieldPointers": ["/id", "/amount"],
+          "confirmed": true
+        },
+        "body": [
+          { "id": "1", "amount": 10 },
+          { "id": "2", "amount": 20 }
+        ],
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": {
+        "contractAccepted": true,
+        "bindingAccepted": true,
+        "mappingStatus": "mapped",
+        "recordCount": 2,
+        "queryStatus": "success",
+        "writesDisabled": false,
+        "outcome": "success"
+      }
+    },
+    {
+      "id": "query-paginated-envelope",
+      "category": "envelope",
+      "description": "Paginated envelope reads total only from an explicit pointer.",
+      "input": {
+        "prompt": "分页查看订单",
+        "scene": "query",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "binding": {
+          "operationKey": "GET /orders · listOrders",
+          "itemsPointer": "/data/items",
+          "totalPointer": "/data/total",
+          "rowKeyPointer": "/id",
+          "fieldPointers": ["/id"],
+          "confirmed": true
+        },
+        "body": { "data": { "items": [{ "id": "1" }, { "id": "2" }], "total": 87 } },
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": {
+        "contractAccepted": true,
+        "bindingAccepted": true,
+        "mappingStatus": "mapped",
+        "recordCount": 2,
+        "total": 87,
+        "outcome": "success"
+      }
+    },
+    {
+      "id": "query-filter-declared",
+      "category": "query",
+      "description": "Declared query parameters propagate to the stats/query request.",
+      "input": {
+        "prompt": "只看进行中的订单",
+        "scene": "query",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": ["status"],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "filters": { "status": "open" },
+        "declaredQueryParameters": ["status"]
+      },
+      "expected": {
+        "contractAccepted": true,
+        "bindingAccepted": true,
+        "parametersSent": { "status": "open" },
+        "parametersSkipped": [],
+        "outcome": "success"
+      }
+    },
+    {
+      "id": "query-filter-undeclared-skipped",
+      "category": "query",
+      "description": "Undeclared query parameters are reported, never guessed and sent.",
+      "input": {
+        "prompt": "按负责人的名字猜一个参数",
+        "scene": "query",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": ["status"],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "filters": { "status": "open", "guessedOwner": "alice" },
+        "declaredQueryParameters": ["status"]
+      },
+      "expected": {
+        "parametersSent": { "status": "open" },
+        "parametersSkipped": ["guessedOwner"],
+        "outcome": "success"
+      }
+    },
+    {
+      "id": "query-server-sort-no-local-resort",
+      "category": "query",
+      "description": "Server-sorted records keep their order in runtime state.",
+      "input": {
+        "prompt": "按金额降序（服务端排序）",
+        "scene": "query",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id", "amount"],
+          "rows": [],
+          "operations": [
+            {
+              "operation_id": "listOrders",
+              "method": "GET",
+              "path": "/orders",
+              "role": "list",
+              "sortParam": "sort"
+            }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "records": [
+          { "id": "3", "amount": 30 },
+          { "id": "1", "amount": 10 }
+        ],
+        "filters": {},
+        "declaredQueryParameters": ["sort"]
+      },
+      "expected": {
+        "contractAccepted": true,
+        "bindingAccepted": true,
+        "recordCount": 2,
+        "firstRecordId": "3",
+        "queryStatus": "success",
+        "outcome": "success"
+      }
+    },
+    {
+      "id": "query-total-not-inferred",
+      "category": "query",
+      "description": "Without a total pointer the runtime never infers a total from the page size.",
+      "input": {
+        "prompt": "不提供总数的列表",
+        "scene": "query",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "binding": {
+          "operationKey": "GET /orders · listOrders",
+          "itemsPointer": "",
+          "rowKeyPointer": "/id",
+          "fieldPointers": ["/id"],
+          "confirmed": true
+        },
+        "body": [{ "id": "1" }, { "id": "2" }, { "id": "3" }],
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": { "recordCount": 3, "total": null, "outcome": "success" }
+    }
+  ]
+}

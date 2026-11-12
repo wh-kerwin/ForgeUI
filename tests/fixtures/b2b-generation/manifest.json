@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "description": "Offline B2B generation scenarios. Each case fixes its input and structural expected behaviour; no prompt keyword matching is used.",
+  "files": [
+    "query.json",
+    "crud.json",
+    "report-dashboard.json",
+    "envelope-identity.json",
+    "permission-lifecycle.json"
+  ],
+  "minimumCases": 24,
+  "requiredCategories": [
+    "query",
+    "crud",
+    "report",
+    "dashboard",
+    "envelope",
+    "identity",
+    "empty",
+    "permission",
+    "authorization-revoked",
+    "cross-document",
+    "no-stats-endpoint",
+    "bad-output",
+    "cancellation",
+    "project-switch",
+    "template-rebind"
+  ],
+  "layers": ["contract", "binding", "execution"]
+}

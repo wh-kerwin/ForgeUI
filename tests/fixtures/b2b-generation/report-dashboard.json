@@ -1,0 +1,230 @@
+{
+  "cases": [
+    {
+      "id": "report-current-page-aggregate",
+      "category": "report",
+      "description": "A current-page sum is explicitly scoped and truncated when the page is cut.",
+      "input": {
+        "prompt": "统计当前页金额",
+        "scene": "report",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id", "amount"],
+          "rows": [],
+          "metrics": [
+            {
+              "key": "pageSum",
+              "label": "Page sum",
+              "scope": "currentPage",
+              "aggregation": "sum",
+              "fieldKey": "amount"
+            }
+          ]
+        },
+        "records": [
+          { "id": "1", "amount": 20 },
+          { "id": "2", "amount": 30 }
+        ],
+        "truncated": true,
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": {
+        "contractAccepted": true,
+        "bindingAccepted": true,
+        "metricStates": ["success"],
+        "metricValues": ["50"],
+        "metricTruncated": [true],
+        "outcome": "success"
+      }
+    },
+    {
+      "id": "report-server-aggregate-bound",
+      "category": "report",
+      "description": "A bound statistics endpoint yields a real server aggregate.",
+      "input": {
+        "prompt": "全库营收",
+        "scene": "report",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            {
+              "operation_id": "orderStats",
+              "method": "GET",
+              "path": "/orders/stats",
+              "role": "stat"
+            }
+          ],
+          "metrics": [
+            {
+              "key": "total",
+              "label": "Total",
+              "scope": "serverAggregate",
+              "operationRef": "orderStats",
+              "valuePointer": "/total"
+            }
+          ]
+        },
+        "authorizedOperations": ["GET /orders/stats · orderStats"],
+        "metricResponses": { "orderStats": { "status": "success", "body": { "total": 1280 } } },
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": {
+        "contractAccepted": true,
+        "bindingAccepted": true,
+        "metricStates": ["success"],
+        "metricValues": ["1280"],
+        "outcome": "success"
+      }
+    },
+    {
+      "id": "report-metric-unbound",
+      "category": "no-stats-endpoint",
+      "description": "Without a stats endpoint the metric is unbound, never a fabricated total.",
+      "input": {
+        "prompt": "没有统计端点时显示全库营收",
+        "scene": "report",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id", "amount"],
+          "rows": [],
+          "metrics": [
+            {
+              "key": "total",
+              "label": "Total",
+              "scope": "serverAggregate",
+              "valuePointer": "/total"
+            }
+          ]
+        },
+        "records": [{ "id": "1", "amount": 20 }],
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": { "metricStates": ["unbound"], "metricValues": [""], "outcome": "success" }
+    },
+    {
+      "id": "report-metric-error-not-zero",
+      "category": "report",
+      "description": "A failed metric keeps an error region and other metrics still render.",
+      "input": {
+        "prompt": "部分统计失败",
+        "scene": "report",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id", "amount"],
+          "rows": [],
+          "operations": [
+            {
+              "operation_id": "orderStats",
+              "method": "GET",
+              "path": "/orders/stats",
+              "role": "stat"
+            }
+          ],
+          "metrics": [
+            {
+              "key": "pageSum",
+              "label": "Page sum",
+              "scope": "currentPage",
+              "aggregation": "sum",
+              "fieldKey": "amount"
+            },
+            {
+              "key": "total",
+              "label": "Total",
+              "scope": "serverAggregate",
+              "operationRef": "orderStats",
+              "valuePointer": "/total"
+            }
+          ]
+        },
+        "authorizedOperations": ["GET /orders/stats · orderStats"],
+        "records": [{ "id": "1", "amount": 7 }],
+        "metricResponses": { "orderStats": { "status": "error", "message": "统计端点超时" } },
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": {
+        "metricStates": ["success", "error"],
+        "metricValues": ["7", ""],
+        "outcome": "success"
+      }
+    },
+    {
+      "id": "dashboard-capability-gap",
+      "category": "dashboard",
+      "description": "A dashboard without a stat operation is refused before model invocation.",
+      "input": {
+        "prompt": "生成营收看板",
+        "scene": "dashboard",
+        "definition": {
+          "title": "Board",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "capabilityGap": true,
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": { "contractAccepted": true, "capabilityRejected": true, "outcome": "rejected" }
+    },
+    {
+      "id": "dashboard-definition-sample-not-live",
+      "category": "dashboard",
+      "description": "Definition sample rows are never presented as live aggregates.",
+      "input": {
+        "prompt": "预览看板",
+        "scene": "dashboard",
+        "definition": {
+          "title": "Board",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id", "amount"],
+          "rows": [["1", "999"]],
+          "metrics": [
+            {
+              "key": "pageSum",
+              "label": "Page sum",
+              "scope": "currentPage",
+              "aggregation": "sum",
+              "fieldKey": "amount"
+            }
+          ]
+        },
+        "definitionSample": true,
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": {
+        "contractAccepted": true,
+        "metricStates": ["pending"],
+        "metricValues": ["—"],
+        "outcome": "success"
+      }
+    }
+  ]
+}

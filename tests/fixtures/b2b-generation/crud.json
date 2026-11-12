@@ -1,0 +1,213 @@
+{
+  "cases": [
+    {
+      "id": "crud-create-success",
+      "category": "crud",
+      "description": "A successful create refreshes the original query.",
+      "input": {
+        "prompt": "生成可新增订单的页面",
+        "scene": "crud",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" },
+            { "operation_id": "createOrder", "method": "POST", "path": "/orders", "role": "create" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders", "POST /orders · createOrder"],
+        "writeOutcome": "success",
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": {
+        "contractAccepted": true,
+        "bindingAccepted": true,
+        "writeOutcome": "success",
+        "refreshSent": true,
+        "outcome": "success"
+      }
+    },
+    {
+      "id": "crud-edit-failed-keeps-input",
+      "category": "crud",
+      "description": "A failed edit keeps the form input and does not refresh.",
+      "input": {
+        "prompt": "编辑订单名称",
+        "scene": "crud",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" },
+            {
+              "operation_id": "updateOrder",
+              "method": "PATCH",
+              "path": "/orders/{id}",
+              "role": "update"
+            }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders", "PATCH /orders/{id} · updateOrder"],
+        "writeOutcome": "error",
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": {
+        "writeOutcome": "error",
+        "refreshSent": false,
+        "formKept": true,
+        "outcome": "error"
+      }
+    },
+    {
+      "id": "crud-delete-last-row-steps-back",
+      "category": "crud",
+      "description": "Deleting the last row of the last page steps back one page.",
+      "input": {
+        "prompt": "删除最后一页最后一条",
+        "scene": "crud",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" },
+            {
+              "operation_id": "deleteOrder",
+              "method": "DELETE",
+              "path": "/orders/{id}",
+              "role": "delete"
+            }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders", "DELETE /orders/{id} · deleteOrder"],
+        "writeOutcome": "success",
+        "pageNumber": 3,
+        "pageRowCount": 1,
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": {
+        "writeOutcome": "success",
+        "pageAfterDelete": 2,
+        "refreshSent": true,
+        "outcome": "success"
+      }
+    },
+    {
+      "id": "crud-double-click-submits-once",
+      "category": "crud",
+      "description": "A second click while a write is in flight never submits twice.",
+      "input": {
+        "prompt": "快速双击保存",
+        "scene": "crud",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" },
+            {
+              "operation_id": "updateOrder",
+              "method": "PATCH",
+              "path": "/orders/{id}",
+              "role": "update"
+            }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders", "PATCH /orders/{id} · updateOrder"],
+        "writeOutcome": "success",
+        "doubleClick": true,
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": { "submissionCount": 1, "writeOutcome": "success", "outcome": "success" }
+    },
+    {
+      "id": "crud-unknown-outcome-no-retry",
+      "category": "crud",
+      "description": "An unknown write result keeps the form open and never retries or refreshes.",
+      "input": {
+        "prompt": "结果待核对的写入",
+        "scene": "crud",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" },
+            {
+              "operation_id": "updateOrder",
+              "method": "PATCH",
+              "path": "/orders/{id}",
+              "role": "update"
+            }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders", "PATCH /orders/{id} · updateOrder"],
+        "writeOutcome": "unknown",
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": {
+        "writeOutcome": "unknown",
+        "refreshSent": false,
+        "formKept": true,
+        "outcome": "error"
+      }
+    },
+    {
+      "id": "crud-hidden-readonly-not-serialized",
+      "category": "crud",
+      "description": "Hidden and readonly fields are never serialized into a write body.",
+      "input": {
+        "prompt": "隐藏列与只读字段不提交",
+        "scene": "crud",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id", "name"],
+          "columnMeta": [
+            {
+              "name": "name",
+              "type": "string",
+              "visibleWhen": { "field": "id", "equals": "__never__" }
+            },
+            { "name": "id", "type": "string", "constraints": { "readonly": true } }
+          ],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" },
+            { "operation_id": "createOrder", "method": "POST", "path": "/orders", "role": "create" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders", "POST /orders · createOrder"],
+        "formValues": { "id": "1", "name": "hidden", "unknown": "leak" },
+        "writeOutcome": "success",
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": { "serializedFieldCount": 0, "writeOutcome": "success", "outcome": "success" }
+    }
+  ]
+}

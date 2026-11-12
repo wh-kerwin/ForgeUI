@@ -31,6 +31,8 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npm test
+      - run: npm run test:ui
+      - run: npm run evaluate
       - run: npm audit --audit-level=high
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib

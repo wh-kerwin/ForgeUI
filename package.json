@@ -13,6 +13,7 @@
     "test:ui": "vitest run --config vitest.config.ts",
     "contract:generate": "node scripts/generate-page-contract.mjs",
     "contract:check": "node scripts/generate-page-contract.mjs --check",
+    "evaluate": "node scripts/evaluate-business-generation.mjs",
     "tauri:build": "tauri build",
     "validate:updater": "node scripts/validate-updater-config.mjs",
     "preview": "vite preview",

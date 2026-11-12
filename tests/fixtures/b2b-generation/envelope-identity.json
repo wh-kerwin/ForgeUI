@@ -1,0 +1,199 @@
+{
+  "cases": [
+    {
+      "id": "envelope-nested-id",
+      "category": "envelope",
+      "description": "Nested record IDs are resolved by an explicit rowKeyPointer.",
+      "input": {
+        "prompt": "嵌套 ID 的订单",
+        "scene": "query",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "binding": {
+          "operationKey": "GET /orders · listOrders",
+          "itemsPointer": "/data/items",
+          "rowKeyPointer": "/meta/id",
+          "fieldPointers": ["/meta/id"],
+          "confirmed": true
+        },
+        "body": { "data": { "items": [{ "meta": { "id": "a" } }, { "meta": { "id": "b" } }] } },
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": {
+        "recordCount": 2,
+        "identityCount": 2,
+        "queryStatus": "success",
+        "outcome": "success"
+      }
+    },
+    {
+      "id": "envelope-empty-array",
+      "category": "empty",
+      "description": "An empty array is a distinct empty state, not an error or a zero.",
+      "input": {
+        "prompt": "没有数据的订单列表",
+        "scene": "query",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "binding": {
+          "operationKey": "GET /orders · listOrders",
+          "itemsPointer": "",
+          "rowKeyPointer": "/id",
+          "fieldPointers": ["/id"],
+          "confirmed": true
+        },
+        "body": [],
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": {
+        "mappingStatus": "empty",
+        "recordCount": 0,
+        "queryStatus": "empty",
+        "outcome": "empty"
+      }
+    },
+    {
+      "id": "envelope-unconfirmed-binding",
+      "category": "empty",
+      "description": "An unconfirmed response mapping never loads records.",
+      "input": {
+        "prompt": "未确认映射的响应",
+        "scene": "query",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "binding": {
+          "operationKey": "GET /orders · listOrders",
+          "itemsPointer": "",
+          "rowKeyPointer": "/id",
+          "fieldPointers": ["/id"],
+          "confirmed": false
+        },
+        "body": [{ "id": "1" }],
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": { "mappingStatus": "unconfirmed", "recordCount": 0, "outcome": "unbound" }
+    },
+    {
+      "id": "identity-string-vs-number",
+      "category": "identity",
+      "description": "String '001' and number 1 remain distinct typed record identities.",
+      "input": {
+        "prompt": "区分字符串与数字 ID",
+        "scene": "query",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "records": [{ "id": "001" }, { "id": 1 }],
+        "rowKeyPointer": "/id",
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": {
+        "recordCount": 2,
+        "identityCount": 2,
+        "distinctIdentities": 2,
+        "outcome": "success"
+      }
+    },
+    {
+      "id": "identity-missing-id-disables-row-writes",
+      "category": "identity",
+      "description": "A missing record ID produces an identity diagnostic and disables row writes.",
+      "input": {
+        "prompt": "缺少 ID 的记录",
+        "scene": "query",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "records": [{ "name": "no-id" }],
+        "rowKeyPointer": "/id",
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": { "recordCount": 1, "rowWritesDisabled": true, "outcome": "success" }
+    },
+    {
+      "id": "envelope-invalid-items-pointer",
+      "category": "bad-output",
+      "description": "A response whose items pointer does not resolve to an array is an explicit error.",
+      "input": {
+        "prompt": "错误的响应映射",
+        "scene": "query",
+        "definition": {
+          "title": "Orders",
+          "description": "",
+          "filters": [],
+          "stats": [],
+          "columns": ["id"],
+          "rows": [],
+          "operations": [
+            { "operation_id": "listOrders", "method": "GET", "path": "/orders", "role": "list" }
+          ]
+        },
+        "authorizedOperations": ["GET /orders · listOrders"],
+        "binding": {
+          "operationKey": "GET /orders · listOrders",
+          "itemsPointer": "/missing",
+          "rowKeyPointer": "/id",
+          "fieldPointers": ["/id"],
+          "confirmed": true
+        },
+        "body": { "other": 1 },
+        "filters": {},
+        "declaredQueryParameters": []
+      },
+      "expected": { "mappingStatus": "invalid", "recordCount": 0, "outcome": "error" }
+    }
+  ]
+}

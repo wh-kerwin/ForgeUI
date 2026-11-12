@@ -8,7 +8,7 @@
 
 简体中文 | [English](README.en.md)
 
-[产品需求](docs/PRD.md) · [设计说明](docs/DESIGN.md) · [实现计划](docs/PLAN.md) · [发布说明](docs/release.md)
+[产品需求](docs/PRD.md) · [设计说明](docs/DESIGN.md) · [实现计划](docs/PLAN.md) · [发布说明](docs/release.md) · [B 端验收报告](docs/optimization/b2b-acceptance-report.md) · [执行记录](docs/optimization/b2b-execution-log.md)
 
 [![持续集成](https://github.com/wh-kerwin/ForgeUI/actions/workflows/ci.yml/badge.svg)](https://github.com/wh-kerwin/ForgeUI/actions/workflows/ci.yml)
 [![桌面安装包构建](https://github.com/wh-kerwin/ForgeUI/actions/workflows/package.yml/badge.svg)](https://github.com/wh-kerwin/ForgeUI/actions/workflows/package.yml)
@@ -63,8 +63,9 @@ Swagger / OpenAPI ──┐
 - **定义与数据分离**：查询结果只进入运行时状态，不写回 `PageSpec`。模板保存的是纯页面定义，记录、选择和诊断不会进入模板或生成历史。
 - **明确的记录身份**：记录 ID 按原始类型区分，例如 `string:001` 与 `number:1` 不冲突；缺失或重复 ID 会显示诊断并禁用对应行的写入与批量操作。
 - **状态语义**：区分待加载、加载中、成功、空结果、错误和已取消；查询失败时保留旧数据但明确标记「已过期」并禁用写入，接口未提供总数时不猜测总数。
-- **展示范围**：统计卡片标注数据范围，未加载时不显示数字，当前页聚合不会冒充全量统计；格式异常只影响对应图表区域并给出诊断。
-- 当前默认仍使用 v1 `PageSpec` 生成与保存。v2 契约、显式响应映射与运行时分离已具备，默认写入要等持久化投影、导入导出再验证与迁移入口闭合后才会启用。
+- **展示范围**：统计卡片标注「仅当前页」或「服务端聚合」；未绑定统计端点显示未绑定，部分统计失败保留独立错误区而不吞成 0，截断结果明确标记。
+- **局部修改与模板**：修改页面先预览语义 diff 再应用/放弃，保留一份可撤销上版本；模板加载、导入与版本恢复都显示绑定状态，失效或跨项目文档必须显式重绑定。
+- 当前默认仍使用 v1 `PageSpec` 生成与保存。v2 契约、显式响应映射、结构 allowlist 投影、持久化再验证、迁移预览与跨项目重绑定已具备；但 **v2 runtime 与写入入口尚未接入**，默认写入按计划保持关闭，统计端点的实际 HTTP 拉取也待该接入闭合。真实模型 live 评测与本地桌面端到端 smoke 均未运行，详见 [验收报告](docs/optimization/b2b-acceptance-report.md)。
 
 ## 从 API 到页面
 
