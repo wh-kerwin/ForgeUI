@@ -177,6 +177,18 @@ const PAGE_SHAPE: Record<string, Rule> = {
       ),
     }),
   ),
+  metrics: array(
+    20,
+    object({
+      key: text(64),
+      label: text(120),
+      scope: enumText(["currentPage", "serverAggregate"]),
+      aggregation: enumText(["count", "sum", "avg", "min", "max"]),
+      fieldKey: text(64),
+      operationRef: text(120),
+      valuePointer: text(128),
+    }),
+  ),
   views: array(MAX_PROJECTION_ARRAY, { kind: "view" }),
   interaction: object({
     create: enumText(["modal", "drawer", "inline", "redirect"]),

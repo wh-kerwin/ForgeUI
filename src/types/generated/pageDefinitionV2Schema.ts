@@ -98,12 +98,67 @@ export const pageDefinitionV2Schema = {
       "items": {
         "$ref": "#/$defs/view"
       }
+    },
+    "metrics": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "$ref": "#/$defs/metric"
+      }
     }
   },
   "$defs": {
     "pointer": {
       "type": "string",
       "pattern": "^(?:/(?:[^~/]|~0|~1)*)*$"
+    },
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "label",
+        "scope"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "scope": {
+          "enum": [
+            "currentPage",
+            "serverAggregate"
+          ]
+        },
+        "aggregation": {
+          "enum": [
+            "count",
+            "sum",
+            "avg",
+            "min",
+            "max"
+          ]
+        },
+        "fieldKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "operationRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "valuePointer": {
+          "$ref": "#/$defs/pointer"
+        }
+      }
     },
     "dataSource": {
       "type": "object",

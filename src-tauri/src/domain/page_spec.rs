@@ -34,6 +34,9 @@ pub struct PageSpec {
     pub theme: Option<String>,
     #[serde(rename = "styleTokens", default)]
     pub style_tokens: Option<std::collections::HashMap<String, serde_json::Value>>,
+    /// Named metric bindings; kept as validated JSON so v1/v2 shapes stay aligned.
+    #[serde(rename = "metrics", default, skip_serializing_if = "Vec::is_empty")]
+    pub metrics: Vec<serde_json::Value>,
 }
 
 /// Safe diagnostics: never include model payloads, record values or credentials.
@@ -424,6 +427,9 @@ pub fn validate(spec: &PageSpec) -> Result<(), String> {
     {
         return Err("PageSpec operation 绑定无效".into());
     }
+    if !valid_metrics(spec) {
+        return Err("PageSpec 统计指标绑定无效".into());
+    }
     if spec.batch_actions.len() > 10
         || spec.batch_actions.iter().any(|action| {
             !matches!(action.method.as_str(), "POST" | "DELETE")
@@ -468,6 +474,82 @@ fn valid_style_tokens(tokens: &std::collections::HashMap<String, serde_json::Val
 fn valid_hex_color(value: &str) -> bool {
     let digits = value.strip_prefix('#').unwrap_or_default();
     matches!(digits.len(), 3 | 4 | 6 | 8) && digits.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+/// A v1 metric is either a bounded current-page aggregate or an explicitly
+/// bound statistics operation. The two scopes are never mixed, and a missing
+/// binding is rejected instead of falling back to loaded rows.
+fn valid_metrics(spec: &PageSpec) -> bool {
+    if spec.metrics.len() > 20 {
+        return false;
+    }
+    let mut keys = std::collections::HashSet::new();
+    for metric in &spec.metrics {
+        let Some(object) = metric.as_object() else {
+            return false;
+        };
+        let key = object
+            .get("key")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        let label = object
+            .get("label")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        if key.is_empty()
+            || key.len() > 64
+            || label.is_empty()
+            || label.len() > 120
+            || !keys.insert(key)
+        {
+            return false;
+        }
+        let has = |name: &str| object.contains_key(name);
+        match object.get("scope").and_then(|value| value.as_str()) {
+            Some("currentPage") => {
+                if has("operationRef") || has("valuePointer") {
+                    return false;
+                }
+                let aggregation = object.get("aggregation").and_then(|value| value.as_str());
+                if !matches!(aggregation, Some("count" | "sum" | "avg" | "min" | "max")) {
+                    return false;
+                }
+                if aggregation != Some("count") {
+                    let field = object
+                        .get("fieldKey")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("");
+                    if !spec.columns.iter().any(|column| column == field) {
+                        return false;
+                    }
+                }
+            }
+            Some("serverAggregate") => {
+                if has("aggregation") || has("fieldKey") {
+                    return false;
+                }
+                let reference = object
+                    .get("operationRef")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("");
+                let pointer = object
+                    .get("valuePointer")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("");
+                if reference.is_empty() || pointer.is_empty() || pointer.len() > 256 {
+                    return false;
+                }
+                if !spec.operations.iter().any(|operation| {
+                    operation.operation_id == reference
+                        && matches!(operation.role.as_str(), "stat" | "stats" | "read")
+                }) {
+                    return false;
+                }
+            }
+            _ => return false,
+        }
+    }
+    true
 }
 
 pub(crate) fn valid_field_schema(fields: &[FieldSchema]) -> bool {
@@ -689,6 +771,7 @@ mod tests {
             batch_actions: vec![],
             theme: None,
             style_tokens: None,
+            metrics: vec![],
         };
         assert!(validate(&spec).is_err());
     }
@@ -715,6 +798,7 @@ mod tests {
             batch_actions: vec![],
             theme: None,
             style_tokens: None,
+            metrics: vec![],
         };
         assert!(validate(&spec).is_ok());
     }

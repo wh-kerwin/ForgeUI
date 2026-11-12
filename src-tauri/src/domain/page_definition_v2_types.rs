@@ -26,6 +26,8 @@ pub struct PageDefinitionV2 {
     pub filters: Vec<Filter>,
     pub operations: Vec<Operation>,
     pub views: Vec<View>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub metrics: Vec<Metric>,
 }
 
 // Private serde representation. It is reached only after validate_raw succeeds.
@@ -45,6 +47,8 @@ struct DefinitionWire {
     filters: Vec<Filter>,
     operations: Vec<Operation>,
     views: Vec<View>,
+    #[serde(default)]
+    metrics: Vec<Metric>,
 }
 
 impl<'de> Deserialize<'de> for PageDefinitionV2 {
@@ -80,7 +84,43 @@ pub(super) fn decode_validated(
         filters: wire.filters,
         operations: wire.operations,
         views: wire.views,
+        metrics: wire.metrics,
     })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MetricScope {
+    CurrentPage,
+    ServerAggregate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MetricAggregation {
+    Count,
+    Sum,
+    Avg,
+    Min,
+    Max,
+}
+
+/// Named metric binding. Domain validation enforces which combination of
+/// aggregation/fieldKey or operationRef/valuePointer is legal for its scope.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Metric {
+    pub key: String,
+    pub label: String,
+    pub scope: MetricScope,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aggregation: Option<MetricAggregation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub operation_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value_pointer: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -38,6 +38,7 @@ import type { QueryMeta } from "../../store/workbenchStore";
 import { recordId } from "./recordIdentity";
 import type { FieldErrors, MutationOutcome } from "./mutationOutcome";
 import type { PageRuntimeState, RuntimeControls } from "./runtime/pageRuntimeState";
+import type { MetricResponse } from "./metrics/metricScope";
 import {
   runtimeFromV1Definition,
   selectBatchIds,
@@ -91,6 +92,7 @@ export function GeneratedPage({
   mutationStatus,
   mutationFieldErrors,
   runtime,
+  metricResponses,
   onSelectionKeysChange,
   onRuntimeControls,
   modelId,
@@ -122,6 +124,8 @@ export function GeneratedPage({
   mutationStatus?: "idle" | "submitting" | "success" | "error" | "unknown";
   mutationFieldErrors?: FieldErrors;
   runtime?: PageRuntimeState;
+  /** Statistics endpoint responses keyed by operationRef; supplied by the host. */
+  metricResponses?: Readonly<Record<string, MetricResponse>>;
   onSelectionKeysChange?: (keys: string[]) => void;
   onRuntimeControls?: (controls: RuntimeControls) => void;
   modelId?: string;
@@ -165,7 +169,10 @@ export function GeneratedPage({
     () => selectDisplayRows(resolvedRuntime, page),
     [resolvedRuntime, page],
   );
-  const displayStats = useMemo(() => selectStats(resolvedRuntime, page), [resolvedRuntime, page]);
+  const displayStats = useMemo(
+    () => selectStats(resolvedRuntime, page, metricResponses),
+    [resolvedRuntime, page, metricResponses],
+  );
   const rowIdentities = useMemo(() => selectRowIdentities(resolvedRuntime), [resolvedRuntime]);
   const diagnostics = useMemo(
     () => selectRuntimeDiagnostics(resolvedRuntime, page),

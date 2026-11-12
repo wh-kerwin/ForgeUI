@@ -1,0 +1,51 @@
+{
+  "version": 2,
+  "title": "Orders",
+  "description": "Order list",
+  "dataSources": {
+    "primary": {
+      "operationRef": "orders.list",
+      "itemsPointer": "/data/items",
+      "totalPointer": "/data/total",
+      "rowKeyPointer": "/id"
+    }
+  },
+  "fields": [
+    { "key": "orderId", "label": "Order ID", "valuePointer": "/id", "type": "string" },
+    { "key": "amount", "label": "Amount", "valuePointer": "/amount", "type": "money" }
+  ],
+  "filters": [],
+  "operations": [
+    {
+      "key": "orders.list",
+      "apiDocumentId": "orders-doc",
+      "operation_id": "listOrders",
+      "method": "GET",
+      "path": "/orders",
+      "role": "list"
+    }
+  ],
+  "views": [
+    {
+      "key": "ordersTable",
+      "type": "list",
+      "dataSourceRef": "primary",
+      "fieldKeys": ["orderId", "amount"]
+    }
+  ],
+  "metrics": [
+    {
+      "key": "pageCount",
+      "label": "Orders on this page",
+      "scope": "currentPage",
+      "aggregation": "count"
+    },
+    {
+      "key": "pageAmount",
+      "label": "Amount on this page",
+      "scope": "currentPage",
+      "aggregation": "sum",
+      "fieldKey": "amount"
+    }
+  ]
+}

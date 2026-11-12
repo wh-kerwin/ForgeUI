@@ -531,6 +531,40 @@
       "id": "all-compatible-constraints",
       "file": "all-compatible-constraints.json",
       "accepted": true
+    },
+    {
+      "id": "metrics-current-page",
+      "file": "metrics-current-page.json",
+      "accepted": true
+    },
+    {
+      "id": "metrics-server-aggregate",
+      "file": "metrics-server-aggregate.json",
+      "accepted": true
+    },
+    {
+      "id": "metrics-unbound",
+      "file": "metrics-unbound.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_METRIC_UNBOUND",
+      "issuePath": "/metrics/0"
+    },
+    {
+      "id": "metrics-scope-mixed",
+      "file": "metrics-scope-mixed.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_METRIC_SCOPE_MIXED",
+      "issuePath": "/metrics/0/operationRef"
+    },
+    {
+      "id": "metrics-bad-operation",
+      "file": "metrics-bad-operation.json",
+      "accepted": false,
+      "schemaAccepted": true,
+      "issueCode": "PAGE_V2_METRIC_OPERATION_REFERENCE_INVALID",
+      "issuePath": "/metrics/0/operationRef"
     }
   ]
 }

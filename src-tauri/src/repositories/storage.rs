@@ -768,6 +768,30 @@ mod artifact_tests {
     }
 
     #[test]
+    fn named_metrics_survive_persistence_but_unbound_scopes_are_rejected() {
+        let payload = json!({
+            "version": 1, "title": "Orders", "description": "",
+            "filters": [], "stats": [], "columns": ["amount"], "rows": [],
+            "operations": [{"operation_id":"orderStats","method":"GET","path":"/stats","role":"stat"}],
+            "metrics": [
+                {"key":"pageCount","label":"Page count","scope":"currentPage","aggregation":"count"},
+                {"key":"total","label":"Total","scope":"serverAggregate",
+                 "operationRef":"orderStats","valuePointer":"/total"}
+            ]
+        })
+        .to_string();
+        let clean = safe_artifact_payload(&payload).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&clean).unwrap();
+        assert_eq!(value["metrics"][0]["scope"], "currentPage");
+        assert_eq!(value["metrics"][1]["operationRef"], "orderStats");
+        let unbound = payload.replace(
+            "\"operationRef\":\"orderStats\"",
+            "\"operationRef\":\"missing\"",
+        );
+        assert!(safe_artifact_payload(&unbound).is_err());
+    }
+
+    #[test]
     fn structural_constraints_survive_persistence_but_oversized_patterns_are_rejected() {
         let payload = json!({
             "version": 1, "title": "Orders", "description": "",

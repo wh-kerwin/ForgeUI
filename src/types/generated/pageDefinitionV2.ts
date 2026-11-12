@@ -865,6 +865,142 @@ export interface ForgeUIPageDefinitionV2 {
     | [View, View, View, View, View, View, View, View]
     | [View, View, View, View, View, View, View, View, View]
     | [View, View, View, View, View, View, View, View, View, View];
+  /**
+   * @maxItems 20
+   */
+  metrics?:
+    | []
+    | [Metric]
+    | [Metric, Metric]
+    | [Metric, Metric, Metric]
+    | [Metric, Metric, Metric, Metric]
+    | [Metric, Metric, Metric, Metric, Metric]
+    | [Metric, Metric, Metric, Metric, Metric, Metric]
+    | [Metric, Metric, Metric, Metric, Metric, Metric, Metric]
+    | [Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric]
+    | [Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric]
+    | [Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric]
+    | [Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric]
+    | [Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric]
+    | [Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric]
+    | [Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric, Metric]
+    | [
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+      ]
+    | [
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+      ]
+    | [
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+      ]
+    | [
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+      ]
+    | [
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+      ]
+    | [
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+        Metric,
+      ];
 }
 export interface StyleTokens {
   primary?: Color;
@@ -982,4 +1118,13 @@ export interface Batch {
 export interface Sort {
   fieldKey: string;
   order: "asc" | "desc";
+}
+export interface Metric {
+  key: string;
+  label: string;
+  scope: "currentPage" | "serverAggregate";
+  aggregation?: "count" | "sum" | "avg" | "min" | "max";
+  fieldKey?: string;
+  operationRef?: string;
+  valuePointer?: Pointer;
 }

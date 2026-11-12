@@ -1,5 +1,6 @@
 import type { ColumnMeta, PageSpec, RecordKey } from "../../../types/domain";
 import { recordId } from "../recordIdentity";
+import { resolveMetrics, type MetricResponse, type MetricState } from "../metrics/metricScope";
 import {
   createPageRuntimeState,
   dedupeDiagnostics,
@@ -23,9 +24,12 @@ export type CompatQueryMeta = {
 export type DisplayStat = {
   label: string;
   value: string;
-  scope: "unloaded" | "currentPage" | "definition";
+  scope: "unloaded" | "currentPage" | "definition" | "serverAggregate";
   note: string;
   invalid?: boolean;
+  /** Per-metric terminal state; a failed metric never becomes a zero. */
+  state?: MetricState;
+  truncated?: boolean;
 };
 
 function v1RecordKeys(page: PageSpec): (RecordKey | null)[] {
@@ -150,7 +154,37 @@ export function selectPaginationTotal(runtime: PageRuntimeState): number | undef
   return runtime.total;
 }
 
-export function selectStats(runtime: PageRuntimeState, definition: PageSpec): DisplayStat[] {
+export function selectStats(
+  runtime: PageRuntimeState,
+  definition: PageSpec,
+  metricResponses: Readonly<Record<string, MetricResponse>> = {},
+): DisplayStat[] {
+  if (definition.metrics?.length) {
+    // v1 adapter records are definition samples, never a loaded business page.
+    if (runtime.source === "definition")
+      return definition.metrics.map((metric) => ({
+        label: metric.label,
+        value: "—",
+        scope: metric.scope,
+        note: "定义示例，非实时数据",
+        state: "pending" as const,
+      }));
+    return resolveMetrics({
+      metrics: definition.metrics,
+      records: runtime.records,
+      fieldKeys: definition.columns,
+      responses: metricResponses,
+      truncated: runtime.truncated.rows,
+    }).map((result) => ({
+      label: result.label,
+      value: result.state === "success" ? result.value : "—",
+      scope: result.scope,
+      note: result.note,
+      state: result.state,
+      ...(result.truncated ? { truncated: true } : {}),
+      ...(result.state === "invalid" || result.state === "error" ? { invalid: true } : {}),
+    }));
+  }
   if (runtime.source === "definition") {
     return definition.stats.map((stat) => {
       const cleaned = stat.value.replace(/[^0-9.-]/g, "");

@@ -111,7 +111,13 @@ export function previewV1Migration(
     (action) => action.payloadBuilder?.customPayload !== undefined,
   ).length;
   if (rows > 0) issues.push({ code: "MIGRATION_ROWS_DROPPED", message: "已丢弃加载的业务行" });
-  if (stats > 0) issues.push({ code: "MIGRATION_STATS_DROPPED", message: "已丢弃字面统计值" });
+  if (stats > 0) {
+    issues.push({ code: "MIGRATION_STATS_DROPPED", message: "已丢弃字面统计值" });
+    issues.push({
+      code: "MIGRATION_METRICS_UNBOUND",
+      message: "字面统计不会自动升级为全库指标；请显式绑定统计端点后再另存 v2",
+    });
+  }
   if (customPayloads > 0)
     issues.push({ code: "MIGRATION_CUSTOM_PAYLOAD_DROPPED", message: "已丢弃自定义批量载荷" });
 

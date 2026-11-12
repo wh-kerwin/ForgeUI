@@ -405,10 +405,120 @@ fn validate_domain(value: &Value) -> Result<(), Vec<PageIssue>> {
             &mut issues,
         );
     }
+    validate_metrics(value, &field_keys, &mut issues);
     if issues.is_empty() {
         Ok(())
     } else {
         Err(issues)
+    }
+}
+
+/// Named metrics are either a bounded current-page aggregate or an explicitly
+/// bound statistics endpoint. The two scopes are never mixed, and a missing
+/// binding is an error rather than an implicit fallback to loaded rows.
+fn validate_metrics(value: &Value, field_keys: &HashSet<&str>, issues: &mut Vec<PageIssue>) {
+    let Some(metrics) = value["metrics"].as_array() else {
+        return;
+    };
+    let operations = value["operations"]
+        .as_array()
+        .expect("schema validated operations");
+    let mut seen = HashSet::new();
+    for (index, metric) in metrics.iter().enumerate() {
+        let path = format!("/metrics/{index}");
+        if !seen.insert(metric["key"].as_str().unwrap_or("")) {
+            issues.push(PageIssue::error(
+                "PAGE_V2_DUPLICATE_METRIC_KEY",
+                &format!("{path}/key"),
+                "reference",
+                "统计指标 key 必须唯一",
+            ));
+        }
+        let mixed = |issues: &mut Vec<PageIssue>, field: &str| {
+            issues.push(PageIssue::error(
+                "PAGE_V2_METRIC_SCOPE_MIXED",
+                &format!("{path}/{field}"),
+                "reference",
+                "当前页聚合与服务端统计绑定不能混用",
+            ));
+        };
+        match metric["scope"].as_str() {
+            Some("currentPage") => {
+                match metric["aggregation"].as_str() {
+                    None => issues.push(PageIssue::error(
+                        "PAGE_V2_METRIC_AGGREGATION_MISSING",
+                        &format!("{path}/aggregation"),
+                        "reference",
+                        "当前页聚合必须声明聚合方式",
+                    )),
+                    Some("count") => {}
+                    Some(_) => {
+                        if !metric["fieldKey"]
+                            .as_str()
+                            .is_some_and(|field| field_keys.contains(field))
+                        {
+                            issues.push(PageIssue::error(
+                                "PAGE_V2_METRIC_FIELD_INVALID",
+                                &format!("{path}/fieldKey"),
+                                "reference",
+                                "聚合字段必须引用已定义字段",
+                            ));
+                        }
+                    }
+                }
+                if metric.get("operationRef").is_some() {
+                    mixed(issues, "operationRef");
+                }
+                if metric.get("valuePointer").is_some() {
+                    mixed(issues, "valuePointer");
+                }
+            }
+            Some("serverAggregate") => {
+                let reference = metric["operationRef"].as_str();
+                if reference.is_none() || metric["valuePointer"].as_str().is_none() {
+                    issues.push(PageIssue::error(
+                        "PAGE_V2_METRIC_UNBOUND",
+                        &path,
+                        "binding",
+                        "全量统计必须绑定统计操作与取值指针",
+                    ));
+                }
+                if let Some(reference) = reference {
+                    match operations
+                        .iter()
+                        .find(|operation| operation["key"] == reference)
+                    {
+                        None => issues.push(PageIssue::error(
+                            "PAGE_V2_METRIC_OPERATION_REFERENCE_INVALID",
+                            &format!("{path}/operationRef"),
+                            "reference",
+                            "统计指标必须引用已定义操作",
+                        )),
+                        Some(operation)
+                            if !matches!(
+                                operation["role"].as_str(),
+                                Some("stat" | "stats" | "read")
+                            ) =>
+                        {
+                            issues.push(PageIssue::error(
+                                "PAGE_V2_METRIC_OPERATION_ROLE_INVALID",
+                                &format!("{path}/operationRef"),
+                                "reference",
+                                "统计指标必须引用统计类操作",
+                            ));
+                        }
+                        _ => {}
+                    }
+                }
+                if metric.get("aggregation").is_some() {
+                    mixed(issues, "aggregation");
+                }
+                if metric.get("fieldKey").is_some() {
+                    mixed(issues, "fieldKey");
+                }
+            }
+            _ => {}
+        }
     }
 }
 

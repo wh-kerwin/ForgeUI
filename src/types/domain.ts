@@ -45,6 +45,7 @@ export type PageSpec = {
   columnMeta?: ColumnMeta[];
   rows: string[][];
   operations?: OperationBinding[];
+  metrics?: MetricDefinition[];
   views?: PageView[];
   interaction?: Partial<Record<"create" | "update" | "delete" | "detail", InteractionMode>>;
   batchActions?: BatchAction[];
@@ -84,6 +85,17 @@ export type ColumnMeta = {
   searchMode?: "exact" | "fuzzy" | "range";
   width?: string;
   visible?: boolean;
+};
+
+/** Named metric binding: either a bounded current-page aggregate or a real stats endpoint. */
+export type MetricDefinition = {
+  key: string;
+  label: string;
+  scope: "currentPage" | "serverAggregate";
+  aggregation?: "count" | "sum" | "avg" | "min" | "max";
+  fieldKey?: string;
+  operationRef?: string;
+  valuePointer?: JsonPointer;
 };
 
 export type BatchAction = {

@@ -91,6 +91,97 @@ function inputIssue(value: unknown): PageIssue | undefined {
   }
 }
 
+/** Named metrics: a bounded page aggregate or an explicitly bound stats endpoint, never both. */
+function metricIssues(definition: ForgeUIPageDefinitionV2): PageIssue[] {
+  const issues: PageIssue[] = [];
+  const metrics = definition.metrics ?? [];
+  const fieldKeys = new Set(definition.fields.map((field) => field.key));
+  const seen = new Set<string>();
+  metrics.forEach((metric, index) => {
+    const path = `/metrics/${index}`;
+    if (seen.has(metric.key))
+      issues.push(
+        pageIssue(
+          "PAGE_V2_DUPLICATE_METRIC_KEY",
+          `${path}/key`,
+          "reference",
+          "统计指标 key 必须唯一",
+        ),
+      );
+    seen.add(metric.key);
+    const mixed = (field: string) =>
+      issues.push(
+        pageIssue(
+          "PAGE_V2_METRIC_SCOPE_MIXED",
+          `${path}/${field}`,
+          "reference",
+          "当前页聚合与服务端统计绑定不能混用",
+        ),
+      );
+    if (metric.scope === "currentPage") {
+      if (!metric.aggregation)
+        issues.push(
+          pageIssue(
+            "PAGE_V2_METRIC_AGGREGATION_MISSING",
+            `${path}/aggregation`,
+            "reference",
+            "当前页聚合必须声明聚合方式",
+          ),
+        );
+      else if (
+        metric.aggregation !== "count" &&
+        (!metric.fieldKey || !fieldKeys.has(metric.fieldKey))
+      )
+        issues.push(
+          pageIssue(
+            "PAGE_V2_METRIC_FIELD_INVALID",
+            `${path}/fieldKey`,
+            "reference",
+            "聚合字段必须引用已定义字段",
+          ),
+        );
+      if (metric.operationRef !== undefined) mixed("operationRef");
+      if (metric.valuePointer !== undefined) mixed("valuePointer");
+    } else {
+      if (!metric.operationRef || !metric.valuePointer)
+        issues.push(
+          pageIssue(
+            "PAGE_V2_METRIC_UNBOUND",
+            path,
+            "binding",
+            "全量统计必须绑定统计操作与取值指针",
+          ),
+        );
+      if (metric.operationRef !== undefined) {
+        const operation = definition.operations.find(
+          (candidate) => candidate.key === metric.operationRef,
+        );
+        if (!operation)
+          issues.push(
+            pageIssue(
+              "PAGE_V2_METRIC_OPERATION_REFERENCE_INVALID",
+              `${path}/operationRef`,
+              "reference",
+              "统计指标必须引用已定义操作",
+            ),
+          );
+        else if (!["stat", "stats", "read"].includes(operation.role))
+          issues.push(
+            pageIssue(
+              "PAGE_V2_METRIC_OPERATION_ROLE_INVALID",
+              `${path}/operationRef`,
+              "reference",
+              "统计指标必须引用统计类操作",
+            ),
+          );
+      }
+      if (metric.aggregation !== undefined) mixed("aggregation");
+      if (metric.fieldKey !== undefined) mixed("fieldKey");
+    }
+  });
+  return issues;
+}
+
 function referenceIssues(definition: ForgeUIPageDefinitionV2): PageIssue[] {
   const issues: PageIssue[] = [];
   const fields = definition.fields;
@@ -492,7 +583,7 @@ export function validateV2PageDefinition(value: unknown): PageDefinitionValidati
     };
   }
   const definition = value as ForgeUIPageDefinitionV2;
-  const issues = referenceIssues(definition);
+  const issues = [...referenceIssues(definition), ...metricIssues(definition)];
   return { definition: issues.length === 0 ? definition : null, issues };
 }
 
