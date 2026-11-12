@@ -1,6 +1,9 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { expect, it } from "vitest";
 import { DataBindingPanel } from "../../src/features/pages/DataBindingPanel";
+import { LanguageProvider } from "../../src/i18n/LanguageProvider";
+import { LanguageToggle } from "../../src/i18n/LanguageToggle";
 import type { ApiDocument, ResponseBinding } from "../../src/types/domain";
 
 // No mock of responseMapping here: this file verifies the panel against the
@@ -100,4 +103,37 @@ it("treats an empty total pointer as unresolved instead of reporting a bogus tot
   const preview = screen.getByLabelText("本地样本预览");
   expect(preview.textContent).toContain("总数：未提供");
   expect(preview.textContent).not.toContain("response.total_invalid");
+});
+
+it("switches every panel label with the language toggle and back", async () => {
+  const user = userEvent.setup();
+  render(
+    <LanguageProvider>
+      <LanguageToggle />
+      <DataBindingPanel
+        documents={[apiDocument]}
+        binding={binding}
+        onChange={() => {}}
+        sample={sample}
+      />
+    </LanguageProvider>,
+  );
+  expect(screen.getByRole("heading", { name: "数据绑定" })).toBeTruthy();
+  expect(screen.getByRole("textbox", { name: "items 指针" })).toBeTruthy();
+  expect(screen.getByText("已确认绑定")).toBeTruthy();
+  expect(screen.getByLabelText("本地样本预览")).toBeTruthy();
+
+  await user.click(screen.getByRole("button", { name: "Switch to English" }));
+  expect(screen.getByLabelText("Data binding")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Data binding" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Confirm binding" })).toBeTruthy();
+  expect(screen.getByRole("textbox", { name: "items pointer" })).toBeTruthy();
+  expect(screen.getByText("Binding confirmed")).toBeTruthy();
+  expect(screen.getByLabelText("Local sample preview").textContent).toContain("Status: mapped");
+  expect(screen.queryByText("已确认绑定")).toBeNull();
+  expect(screen.queryByText(/本地样本/)).toBeNull();
+
+  await user.click(screen.getByRole("button", { name: "切换为中文" }));
+  expect(screen.getByRole("heading", { name: "数据绑定" })).toBeTruthy();
+  expect(screen.getByLabelText("本地样本预览")).toBeTruthy();
 });

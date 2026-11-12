@@ -1132,3 +1132,82 @@ select:focus-visible {
     width: 100%;
   }
 }
+
+/* The data binding panel is rendered outside .generated-page, so its native
+   controls need explicit dark-theme styling instead of the browser's white. */
+.data-binding-panel {
+  margin-top: var(--space-3);
+}
+.data-binding-panel .binding-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+.data-binding-panel .binding-row > .muted,
+.data-binding-panel legend,
+.data-binding-panel > .muted {
+  color: #8e9bad;
+  font-size: 11px;
+}
+.data-binding-panel input[type="text"] {
+  width: 100%;
+  min-height: var(--control-h);
+  padding: 8px 10px;
+  border: 1px solid var(--border-control, #2d3949);
+  border-radius: var(--control-radius, 8px);
+  background: var(--surface-control, #101720);
+  color: #e5ebf4;
+  font: 12px var(--font-mono);
+  outline: none;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.data-binding-panel input[type="text"]::placeholder {
+  color: #6b7889;
+}
+.data-binding-panel input[type="text"]:focus {
+  border-color: var(--focus-ring, #d5fa61);
+  box-shadow: 0 0 0 2px rgba(213, 250, 97, 0.14);
+}
+.data-binding-panel .binding-origins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: var(--space-3);
+  color: #8e9bad;
+  font-size: 11px;
+}
+.data-binding-panel .binding-origins .muted {
+  color: inherit;
+}
+.data-binding-panel fieldset {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border: 1px solid var(--border-control, #2d3949);
+  border-radius: var(--control-radius, 8px);
+  background: rgba(16, 23, 32, 0.55);
+}
+.data-binding-panel legend {
+  padding: 0 6px;
+  background: #10151d;
+}
+.data-binding-panel fieldset > .muted {
+  color: #9aa8b9;
+  font-size: 12px;
+}
+.data-binding-panel .operation-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  color: #c3cddb;
+  font-size: 12px;
+}
+.data-binding-panel input[type="checkbox"] {
+  accent-color: #9ed565;
+}
+.data-binding-panel > .muted {
+  margin: 0 0 var(--space-2);
+}

@@ -1,12 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { LanguageContext, type Language } from "./languageContext";
 
-export type Language = "zh" | "en";
-type LanguageContextValue = {
-  language: Language;
-  setLanguage: (language: Language) => void;
-  toggleLanguage: () => void;
-};
-const LanguageContext = createContext<LanguageContextValue | null>(null);
+export type { Language, LanguageContextValue } from "./languageContext";
+
 const STORAGE_KEY = "forge-ui:language";
 
 export function LanguageProvider({ children }: { children: ReactNode }) {

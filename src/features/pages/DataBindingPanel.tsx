@@ -8,6 +8,7 @@ import type {
   ResponseSchemaSummary,
 } from "../../types/domain";
 import { mapResponse } from "./data/responseMapping";
+import { useOptionalLanguage } from "../../i18n/languageContext";
 
 type Props = {
   documents: readonly ApiDocument[];
@@ -44,12 +45,6 @@ const EMPTY_BINDING: ResponseBinding = {
   confirmed: false,
 };
 
-const rowStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 4,
-  marginBottom: 10,
-};
 const previewStyle: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
@@ -103,16 +98,23 @@ function bindingFromOption(option: ListOption): ResponseBinding {
 function originTag(
   origin: PointerOrigin | undefined,
   suggested: string | null | undefined,
+  zh: boolean,
 ): string {
   const hasSuggestion = typeof suggested === "string" && suggested.length > 0;
-  return origin === "schema" && hasSuggestion ? "来自 OpenAPI 响应 Schema" : "待确认映射";
+  if (origin === "schema" && hasSuggestion)
+    return zh ? "来自 OpenAPI 响应 Schema" : "From OpenAPI response schema";
+  return zh ? "待确认映射" : "Mapping unconfirmed";
 }
 
 /**
  * Derive display-only scalars from a locally mapped response. Record contents,
  * row keys and issue messages are intentionally never read or surfaced.
  */
-function computePreview(sample: unknown, binding: ResponseBinding): PreviewView | null {
+function computePreview(
+  sample: unknown,
+  binding: ResponseBinding,
+  zh: boolean,
+): PreviewView | null {
   if (sample === undefined) return null;
   try {
     const mapped = mapResponse(sample, binding);
@@ -123,7 +125,8 @@ function computePreview(sample: unknown, binding: ResponseBinding): PreviewView 
     return {
       status: mapped.status,
       recordCount: mapped.records?.length ?? 0,
-      totalText: typeof mapped.total === "number" ? String(mapped.total) : "未提供",
+      totalText:
+        typeof mapped.total === "number" ? String(mapped.total) : zh ? "未提供" : "Not provided",
       writable: Boolean(mapped.writable),
       issueCounts: [...counts].map(([code, count]) => ({ code, count })),
       rowsTruncated: Boolean(mapped.truncated?.rows),
@@ -145,34 +148,55 @@ function OriginLine({
   origin: PointerOrigin | undefined;
   suggested: string | null | undefined;
 }) {
+  const zh = useOptionalLanguage() === "zh";
   return (
-    <span className="muted" style={{ marginRight: 12 }}>
-      {label}：<span>{originTag(origin, suggested)}</span>
+    <span className="muted">
+      {label}
+      {zh ? "：" : ": "}
+      <span>{originTag(origin, suggested, zh)}</span>
     </span>
   );
 }
 
 function PreviewBlock({ preview }: { preview: PreviewView }) {
+  const zh = useOptionalLanguage() === "zh";
   return (
-    <div style={previewStyle} aria-label="本地样本预览">
-      <span>映射状态：{preview.status}</span>
-      <span>记录数：{preview.recordCount}</span>
+    <div style={previewStyle} aria-label={zh ? "本地样本预览" : "Local sample preview"}>
       <span>
-        总数：<span>{preview.totalText}</span>
+        {zh ? "映射状态：" : "Status: "}
+        {preview.status}
       </span>
-      <span>{preview.writable ? "写入可用" : "写入已禁用"}</span>
       <span>
-        诊断：
+        {zh ? "记录数：" : "Records: "}
+        {preview.recordCount}
+      </span>
+      <span>
+        {zh ? "总数：" : "Total: "}
+        <span>{preview.totalText}</span>
+      </span>
+      <span>
+        {preview.writable
+          ? zh
+            ? "写入可用"
+            : "Writes enabled"
+          : zh
+            ? "写入已禁用"
+            : "Writes disabled"}
+      </span>
+      <span>
+        {zh ? "诊断：" : "Diagnostics: "}
         {preview.issueCounts.length === 0
-          ? "无"
+          ? zh
+            ? "无"
+            : "None"
           : preview.issueCounts.map((item) => (
               <span key={item.code} style={{ marginRight: 8 }}>
                 {`${item.code} × ${item.count}`}
               </span>
             ))}
       </span>
-      {preview.rowsTruncated ? <span>行已截断</span> : null}
-      {preview.fieldsTruncated ? <span>字段已截断</span> : null}
+      {preview.rowsTruncated ? <span>{zh ? "行已截断" : "Rows truncated"}</span> : null}
+      {preview.fieldsTruncated ? <span>{zh ? "字段已截断" : "Fields truncated"}</span> : null}
     </div>
   );
 }
@@ -182,6 +206,40 @@ function PreviewBlock({ preview }: { preview: PreviewView }) {
  * IPC/network requests, and keeps the local sample strictly client-side.
  */
 export function DataBindingPanel({ documents, binding, onChange, sample }: Props) {
+  const zh = useOptionalLanguage() === "zh";
+  const t = zh
+    ? {
+        section: "数据绑定",
+        listOperation: "列表 operation",
+        selectOperation: "选择 list operation",
+        items: "items 指针",
+        total: "total 指针",
+        rowKey: "rowKey 指针",
+        schemaIssues: "响应 Schema 诊断：",
+        fields: "绑定字段",
+        noFields: "暂无建议字段",
+        fieldLabel: "字段",
+        confirmed: "已确认绑定",
+        previewOnly: "仅预览，写入已禁用",
+        confirm: "确认绑定",
+        sampleNote: "本地样本仅用于预览，不会发送给模型",
+      }
+    : {
+        section: "Data binding",
+        listOperation: "List operation",
+        selectOperation: "Select list operation",
+        items: "items pointer",
+        total: "total pointer",
+        rowKey: "rowKey pointer",
+        schemaIssues: "Response schema diagnostics: ",
+        fields: "Bound fields",
+        noFields: "No suggested fields",
+        fieldLabel: "Field",
+        confirmed: "Binding confirmed",
+        previewOnly: "Preview only, writes disabled",
+        confirm: "Confirm binding",
+        sampleNote: "Local samples are preview-only and never sent to the model",
+      };
   const options = buildOptions(documents);
   const current = binding ?? EMPTY_BINDING;
   const currentValue = binding
@@ -190,7 +248,7 @@ export function DataBindingPanel({ documents, binding, onChange, sample }: Props
   const selected = options.find((option) => option.value === currentValue) ?? null;
   const summary = selected?.summary;
   const fields = summary?.fields ?? [];
-  const preview = computePreview(sample, current);
+  const preview = computePreview(sample, current, zh);
   // Schema diagnostics are static structural facts. Aggregate repeated codes so
   // the same issue never accumulates on screen (see the UI feedback convention).
   const schemaIssueCounts = new Map<string, number>();
@@ -214,37 +272,37 @@ export function DataBindingPanel({ documents, binding, onChange, sample }: Props
     });
 
   return (
-    <section className="panel" aria-label="数据绑定" style={{ marginTop: 12 }}>
+    <section className="panel data-binding-panel" aria-label={t.section}>
       <div className="panel-head">
         <div>
           <span className="eyebrow">DATA BINDING</span>
-          <h3>数据绑定</h3>
+          <h3>{t.section}</h3>
         </div>
       </div>
 
-      <div style={rowStyle}>
-        <span className="muted">列表 operation</span>
+      <div className="binding-row">
+        <span className="muted">{t.listOperation}</span>
         <SelectField
           value={currentValue}
           options={options}
           onChange={onSelectOperation}
-          ariaLabel="选择 list operation"
+          ariaLabel={t.selectOperation}
         />
       </div>
 
-      <div style={{ marginBottom: 8 }}>
+      <div className="binding-origins">
         <OriginLine
-          label="items 指针"
+          label={t.items}
           origin={summary?.itemsPointerOrigin}
           suggested={summary?.itemsPointer}
         />
         <OriginLine
-          label="total 指针"
+          label={t.total}
           origin={summary?.totalPointerOrigin}
           suggested={summary?.totalPointer}
         />
         <OriginLine
-          label="rowKey 指针"
+          label={t.rowKey}
           origin={summary?.rowKeyPointerOrigin}
           suggested={summary?.rowKeyPointer}
         />
@@ -252,7 +310,7 @@ export function DataBindingPanel({ documents, binding, onChange, sample }: Props
 
       {schemaIssueCounts.size > 0 ? (
         <div className="muted" style={{ marginBottom: 8 }}>
-          响应 Schema 诊断：
+          {t.schemaIssues}
           {[...schemaIssueCounts].map(([code, count]) => (
             <code key={code} style={{ marginRight: 6 }}>
               {count > 1 ? `${code} × ${count}` : code}
@@ -261,44 +319,44 @@ export function DataBindingPanel({ documents, binding, onChange, sample }: Props
         </div>
       ) : null}
 
-      <label style={rowStyle}>
-        <span className="muted">items 指针</span>
+      <label className="binding-row">
+        <span className="muted">{t.items}</span>
         <input
           type="text"
-          aria-label="items 指针"
+          aria-label={t.items}
           value={current.itemsPointer}
           onChange={(event) => patch({ itemsPointer: event.target.value })}
         />
       </label>
-      <label style={rowStyle}>
-        <span className="muted">total 指针</span>
+      <label className="binding-row">
+        <span className="muted">{t.total}</span>
         <input
           type="text"
-          aria-label="total 指针"
+          aria-label={t.total}
           value={current.totalPointer ?? ""}
           onChange={(event) => patch({ totalPointer: event.target.value || undefined })}
         />
       </label>
-      <label style={rowStyle}>
-        <span className="muted">rowKey 指针</span>
+      <label className="binding-row">
+        <span className="muted">{t.rowKey}</span>
         <input
           type="text"
-          aria-label="rowKey 指针"
+          aria-label={t.rowKey}
           value={current.rowKeyPointer}
           onChange={(event) => patch({ rowKeyPointer: event.target.value })}
         />
       </label>
 
-      <fieldset style={{ marginBottom: 10 }}>
-        <legend className="muted">绑定字段</legend>
+      <fieldset className="binding-fields">
+        <legend className="muted">{t.fields}</legend>
         {fields.length === 0 ? (
-          <span className="muted">暂无建议字段</span>
+          <span className="muted">{t.noFields}</span>
         ) : (
           fields.map((field) => (
             <label className="operation-option" key={field.pointer}>
               <input
                 type="checkbox"
-                aria-label={`字段 ${field.name} ${field.pointer}`}
+                aria-label={`${t.fieldLabel} ${field.name} ${field.pointer}`}
                 checked={current.fieldPointers.includes(field.pointer)}
                 onChange={(event) => toggleField(field.pointer, event.target.checked)}
               />
@@ -310,22 +368,20 @@ export function DataBindingPanel({ documents, binding, onChange, sample }: Props
         )}
       </fieldset>
 
-      <p className="muted">
-        {current.confirmed ? "已确认绑定" : "仅预览，写入已禁用"}
-      </p>
+      <p className="muted">{current.confirmed ? t.confirmed : t.previewOnly}</p>
       <button
         type="button"
         className="primary"
-        aria-label="确认绑定"
+        aria-label={t.confirm}
         onClick={() => onChange({ ...current, confirmed: true })}
       >
-        确认绑定
+        {t.confirm}
       </button>
 
       {preview ? (
         <>
           <p className="muted" style={{ marginTop: 12 }}>
-            本地样本仅用于预览，不会发送给模型
+            {t.sampleNote}
           </p>
           <PreviewBlock preview={preview} />
         </>

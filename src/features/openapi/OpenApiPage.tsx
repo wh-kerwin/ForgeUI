@@ -186,7 +186,9 @@ export function OpenApiPage({
         ) : null}
         <DataBindingPanel documents={documents} binding={binding} onChange={setBinding} />
         <p className="muted">
-          绑定仅用于当前会话预览；本地样本预览入口与持久化在后续任务接入
+          {zh
+            ? "绑定仅用于当前会话预览；本地样本预览入口与持久化在后续任务接入"
+            : "Binding is preview-only for this session; sample preview and persistence will be wired in a later task."}
         </p>
         <button className="add-row" onClick={onImport}>
           <Plus size={15} /> {zh ? "添加 Swagger / OpenAPI 地址" : "Add a Swagger / OpenAPI URL"}
